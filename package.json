@@ -1,48 +1,7 @@
 {
+  "private": true,
+  "type": "module",
   "name": "concarneau",
-  "main": "server.js",
-  "dependencies": {
-    "bcrypt-nodejs": "latest",
-    "body-parser": "^1.17.2",
-    "bufferutil": "^4.0.3",
-    "compression": "^1.7.0",
-    "connect-flash": "^0.1.1",
-    "connect-mongo": "^3.2.0",
-    "cookie": "^0.3.1",
-    "cookie-parser": "^1.4.3",
-    "ejs": "^3.1.8",
-    "express": "^4.15.4",
-    "express-session": "^1.15.5",
-    "flatted": "^2.0.2",
-    "helmet": "^3.8.1",
-    "mongoose": "^6.7.3",
-    "moniker": "^0.1.2",
-    "newrelic": "^6.11.0",
-    "nodemailer": "^6.8.0",
-    "nodemailer-smtp-transport": "^2.7.4",
-    "passport": "^0.6.0",
-    "passport-facebook": "^2.1.1",
-    "passport-google-oauth": "^1.0.0",
-    "passport-local": "^1.0.0",
-    "passport-twitter": "^1.0.4",
-    "pm2": "^5.2.2",
-    "raven": "^0.12.3",
-    "tunnel": "^0.0.4",
-    "twit": "^2.2.9",
-    "utf-8-validate": "^5.0.4",
-    "ws": "^7.4.4",
-    "xoauth2": "^1.2.0",
-    "yargs": "^1.3.3"
-  },
-  "devDependencies": {
-    "eslint": "^3.19.0"
-  },
-  "scripts": {
-    "lint": "eslint app",
-    "start": "node server.js",
-    "pm2": "pm2 start processes.json --no-daemon",
-    "pm2-staging": "pm2 start processes-staging.json --no-daemon"
-  },
   "description": "Multiplayer web game using the same rules as Carcassone. Currently supports the base game and the Inns and Cathedrals expansion.",
   "version": "1.0.0",
   "repository": {
@@ -54,5 +13,21 @@
   "bugs": {
     "url": "https://github.com/btouellette/concarneau/issues"
   },
-  "homepage": "https://github.com/btouellette/concarneau#readme"
+  "homepage": "https://github.com/btouellette/concarneau#readme",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:unit": "vitest run",
+    "test": "npm run test:unit",
+    "verify": "node scripts/verify-deploy.js"
+  },
+  "dependencies": {
+    "d3": "^7",
+    "peerjs": "^1.5"
+  },
+  "devDependencies": {
+    "vite": "^5",
+    "vitest": "^1"
+  }
 }

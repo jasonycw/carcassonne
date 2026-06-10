@@ -21,3 +21,9 @@ env.*.list
 
 data/
 .c9/
+
+# Build output
+dist/
+
+# OpenCode session state
+.sisyphus/
