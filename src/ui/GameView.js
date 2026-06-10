@@ -10,19 +10,17 @@
  * @module GameView
  */
 
-import * as d3 from 'd3';
 import {
   initializeBoard, draw, clearBoard, getActiveTileGroups,
-  setMeeplePlacementMode, meeplePlacementMode,
 } from '../rendering/GameBoard.js';
 import {
-  renderActiveTile, resetActiveTile, updateMeeplePlacements,
+  renderActiveTile, resetActiveTile,
   setSelectedPlacement, getCurrentRotation,
-  onTilePlaced, onMeeplePlaced, onRotationChanged,
+  onTilePlaced, onRotationChanged,
 } from '../rendering/ActiveTile.js';
 import { placeTile, drawTile } from '../game/GameLogic.js';
-import { ALL_TILES as TILE_DATA } from '../game/TileData.js';
-import { MessageType } from '../network/Protocol.js';
+import { GameHost } from '../network/GameHost.js';
+import { GameClient } from '../network/GameClient.js';
 
 // ---------------------------------------------------------------------------
 // HTML template
@@ -152,18 +150,12 @@ export class GameView {
 
     onMeeplePlaced((meepleData) => {
       if (this.gamestate.activeTile) {
-        const at = this.gamestate.activeTile;
-        const result = placeTile(this.gamestate, null, null, null, meepleData);
-        // The actual tile placement with meeple.
-        // meeple is handled inside placeTile directly via the move validation
+        // Meeple is handled inside placeTile directly via the move validation
       }
     });
 
-    onRotationChanged((rotation) => {
-      const hud = this.dom.hud;
-      if (hud) {
-        // Rotation is tracked internally by ActiveTile.
-      }
+    onRotationChanged(() => {
+      // Rotation is tracked internally by ActiveTile.
     });
 
     // Draw initial board state.
@@ -173,13 +165,50 @@ export class GameView {
       this._showActiveTileIfNeeded();
     }
 
-    // Set up P2P listeners.
+    // Wire up P2P orchestration layer.
+    this.gameHost = null;
+    this.gameClient = null;
+
     if (this.peerManager && !this.isLocalGame) {
-      this._setupPeerListeners();
+      if (this.isHost) {
+        this.gameHost = new GameHost(this.peerManager, this.gamestate);
+        this.gameHost.on('state-changed', () => {
+          this._renderBoard();
+          this._updateTurnIndicator();
+          this._showActiveTileIfNeeded();
+        });
+        this.gameHost.on('game-over', () => {
+          this._showGameOver();
+        });
+        this.gameHost.on('chat-message', (payload) => {
+          this._addChatMessage(payload.username, payload.message);
+        });
+      } else {
+        this.gameClient = new GameClient(this.peerManager, this.gamestate);
+        this.gameClient.on('state-update', () => {
+          this._renderBoard();
+          this._updateTurnIndicator();
+          this._showActiveTileIfNeeded();
+        });
+        this.gameClient.on('game-over', () => {
+          this._showGameOver();
+        });
+        this.gameClient.on('chat-message', (payload) => {
+          this._addChatMessage(payload.username, payload.message);
+        });
+      }
     }
   }
 
   destroy() {
+    if (this.gameHost) {
+      this.gameHost.destroy();
+      this.gameHost = null;
+    }
+    if (this.gameClient) {
+      this.gameClient.destroy();
+      this.gameClient = null;
+    }
     clearBoard();
     if (this.dom) {
       this.dom.container.innerHTML = '';
@@ -212,14 +241,26 @@ export class GameView {
 
     this.dom.skip.addEventListener('click', () => {
       if (this.gamestate && this.gamestate.activeTile) {
-        // Discard tile and skip.
+        if (this.gameClient) {
+          // P2P client: send skip-turn to host.
+          this.gameClient.skipTurn();
+          resetActiveTile(this.dom.svg, true);
+          this.dom.hud.style.display = 'none';
+          return;
+        }
+
+        // Host or solo: discard tile and skip locally.
         this.gamestate.activeTile = null;
-        this._syncState();
         resetActiveTile(this.dom.svg, true);
         this.dom.hud.style.display = 'none';
         drawTile(this.gamestate);
         this._renderBoard();
         this._showActiveTileIfNeeded();
+
+        // Broadcast state to peers.
+        if (this.gameHost) {
+          this.gameHost.broadcastState();
+        }
       }
     });
 
@@ -283,29 +324,37 @@ export class GameView {
     if (this.dom) this.dom.hud.style.display = 'flex';
   }
 
-  // ── Tile placement (local) ───────────────────────────────────────────
+  // ── Tile placement ──────────────────────────────────────────────────
 
   _handleTilePlacement(x, y, rotation, meeple) {
+    if (this.gameClient) {
+      // P2P client: send move to host (host validates + broadcasts back)
+      this.gameClient.placeTile(x, y, rotation, meeple);
+      // Show a brief "waiting for host" state
+      if (this.dom) this.dom.hud.style.display = 'none';
+      resetActiveTile(this.dom.svg, true);
+      return;
+    }
+
+    // Host or solo mode: validate locally.
     const result = placeTile(this.gamestate, x, y, rotation, meeple);
 
     if (result.success) {
       resetActiveTile(this.dom.svg, false);
       if (this.dom) this.dom.hud.style.display = 'none';
 
-      // Re-render and check for next tile.
       this._renderBoard();
       this._updateTurnIndicator();
-
-      // Show the new active tile.
       this._showActiveTileIfNeeded();
 
-      // Check game over.
       if (this.gamestate.finished) {
         this._showGameOver();
       }
 
-      // Sync to P2P clients.
-      this._syncState();
+      // Broadcast state to connected peers (if P2P host).
+      if (this.gameHost) {
+        this.gameHost.broadcastState();
+      }
     }
   }
 
@@ -320,117 +369,7 @@ export class GameView {
     }
   }
 
-  // ── P2P sync ─────────────────────────────────────────────────────────
-
-  _setupPeerListeners() {
-    if (!this.peerManager) return;
-
-    if (this.isHost) {
-      // Host: listen for client move requests.
-      this.peerManager.on('message', (message) => {
-        if (message.type === MessageType.PLACE_TILE && this.isHost) {
-          const { x, y, rotation, meeple } = message.payload;
-          const result = placeTile(this.gamestate, x, y, rotation, meeple);
-          if (result.success) {
-            this._renderBoard();
-            this._updateTurnIndicator();
-            this._syncState();
-          }
-          this.peerManager.send(
-            this.peerManager.connections[0],
-            { type: MessageType.MOVE_RESULT, payload: result },
-          );
-        }
-      });
-    } else {
-      // Client: listen for state syncs from host.
-      this.peerManager.on('msg:game_state_sync', (payload) => {
-        this._applyRemoteState(payload.state);
-      });
-
-      this.peerManager.on('msg:game_over', (payload) => {
-        this._applyRemoteState(payload.state);
-        this._showGameOver();
-      });
-    }
-  }
-
-  _syncState() {
-    if (this.isHost && this.peerManager && !this.isLocalGame) {
-      this.peerManager.broadcastState(this.gamestate);
-    }
-  }
-
-  _applyRemoteState(sanitized) {
-    // Apply sanitized state to local gamestate.
-    // This is a simplified merge — full state replace for clients.
-    if (!this.gamestate) return;
-
-    this.gamestate.players = sanitized.players;
-    this.gamestate.currentPlayerIndex = sanitized.currentPlayerIndex;
-    this.gamestate.step = sanitized.step;
-    this.gamestate.finished = sanitized.finished;
-    this.gamestate.messages = sanitized.messages || [];
-
-    // Map placed tiles back (tileId → tile object).
-    this.gamestate.placedTiles = (sanitized.placedTiles || []).map((pt) => {
-      const tileDef = TILE_DATA.find((t) => t.id === pt.tileId) || {};
-      return {
-        tile: tileDef,
-        rotation: pt.rotation,
-        x: pt.x,
-        y: pt.y,
-        playerIndex: pt.playerIndex,
-        meeples: (pt.meeples || []).map((m) => ({
-          playerIndex: m.playerIndex,
-          placement: m.placement,
-          meepleType: m.meepleType,
-          scored: m.scored,
-        })),
-        tower: pt.towerHeight != null ? { height: pt.towerHeight } : undefined,
-        features: { cities: [], roads: [], farms: [], cloister: null },
-        northTileIndex: undefined,
-        southTileIndex: undefined,
-        eastTileIndex: undefined,
-        westTileIndex: undefined,
-      };
-    });
-
-    // Rebuild adjacency indices.
-    for (let i = 0; i < this.gamestate.placedTiles.length; i++) {
-      const pt = this.gamestate.placedTiles[i];
-      for (let j = 0; j < this.gamestate.placedTiles.length; j++) {
-        if (i === j) continue;
-        const ot = this.gamestate.placedTiles[j];
-        if (ot.x === pt.x && ot.y === pt.y - 1) { pt.northTileIndex = j; }
-        if (ot.x === pt.x && ot.y === pt.y + 1) { pt.southTileIndex = j; }
-        if (ot.y === pt.y && ot.x === pt.x - 1) { pt.westTileIndex = j; }
-        if (ot.y === pt.y && ot.x === pt.x + 1) { pt.eastTileIndex = j; }
-      }
-    }
-
-    // Rebuild active tile.
-    if (sanitized.activeTile) {
-      const tileDef = TILE_DATA.find((t) => t.id === sanitized.activeTile.tileId) || {};
-      this.gamestate.activeTile = {
-        tile: tileDef,
-        validPlacements: sanitized.activeTile.validPlacements || [],
-      };
-    } else {
-      this.gamestate.activeTile = null;
-    }
-
-    this._renderBoard();
-    this._updateTurnIndicator();
-
-    // Show active tile if it's our turn.
-    if (this.gamestate.players[this.playerIndex]?.active) {
-      this._showActiveTileIfNeeded();
-    } else {
-      resetActiveTile(this.dom.svg, false);
-      if (this.dom) this.dom.hud.style.display = 'none';
-    }
-  }
+  // ── P2P sync (delegated to GameHost / GameClient) ──────────────────────
 
   // ── Chat ─────────────────────────────────────────────────────────────
 
@@ -441,15 +380,10 @@ export class GameView {
     this._addChatMessage(username, text);
     this.dom.chatInput.value = '';
 
-    if (this.peerManager && !this.isLocalGame) {
-      if (this.isHost) {
-        this.peerManager.broadcast({
-          type: MessageType.CHAT_MESSAGE,
-          payload: { username, message: text, timestamp: Date.now() },
-        });
-      } else {
-        this.peerManager.sendChat(text);
-      }
+    if (this.gameHost) {
+      this.gameHost.broadcastChat(username, text);
+    } else if (this.gameClient) {
+      this.gameClient.sendChat(text);
     }
   }
 
