@@ -22,6 +22,9 @@ import { placeTile, drawTile } from '../game/GameLogic.js';
 import { GameHost } from '../network/GameHost.js';
 import { GameClient } from '../network/GameClient.js';
 import { removeGame } from '../network/StateSync.js';
+import { renderScoreboard } from '../rendering/ScoreBoard.js';
+import { ChatPanel } from './ChatPanel.js';
+import { SettingsPanelUI, initSettings } from './SettingsPanel.js';
 
 // ---------------------------------------------------------------------------
 // HTML template
@@ -74,22 +77,11 @@ const GAME_HTML = `
       ">Skip</button>
     </div>
 
-    <!-- Chat panel (toggle) -->
-    <div id="game-chat" style="
-      position: absolute; bottom: 70px; right: 12px; width: 260px;
-      background: rgba(26,26,46,0.92); border-radius: 8px;
-      border: 1px solid #333; color: #ddd; font-size: 0.8rem;
-      font-family: 'Segoe UI', sans-serif; display: none;
-    ">
-      <div id="chat-messages" style="height: 150px; overflow-y: auto; padding: 8px;"></div>
-      <div style="display: flex; border-top: 1px solid #333;">
-        <input id="chat-input" type="text" placeholder="Chat..."
-          style="flex:1; padding: 6px 8px; border: none; background: transparent; color: #eee;" />
-        <button id="chat-send" style="
-          padding: 6px 12px; border: none; background: #4fc3f7; color: #111; cursor: pointer;
-        ">Send</button>
-      </div>
-    </div>
+    <!-- Scoreboard (rendered by ScoreBoard.js) -->
+    <div id="game-scoreboard" style="
+      position: absolute; top: 40px; left: 12px; right: 12px; z-index: 15;
+      pointer-events: none;
+    "></div>
   </div>
 </div>
 `;
@@ -119,6 +111,10 @@ export class GameView {
     this._callbacks = {};
     this._pendingPlacement = null;
     this._currentTileImage = null;
+    this.chatPanel = null;
+    this.settingsPanel = null;
+    this.gameHost = null;
+    this.gameClient = null;
   }
 
   mount(container) {
@@ -128,15 +124,12 @@ export class GameView {
       svg: container.querySelector('#game-svg'),
       turnIndicator: container.querySelector('#game-turn-indicator'),
       menuBtn: container.querySelector('#game-menu-btn'),
+      scoreboard: container.querySelector('#game-scoreboard'),
       hud: container.querySelector('#game-hud'),
       rotateLeft: container.querySelector('#hud-rotate-left'),
       rotateRight: container.querySelector('#hud-rotate-right'),
       confirm: container.querySelector('#hud-confirm'),
       skip: container.querySelector('#hud-skip'),
-      chat: container.querySelector('#game-chat'),
-      chatMessages: container.querySelector('#chat-messages'),
-      chatInput: container.querySelector('#chat-input'),
-      chatSend: container.querySelector('#chat-send'),
     };
 
     this._bindEvents();
@@ -149,15 +142,21 @@ export class GameView {
       this._handleTilePlacement(x, y, rotation, meeple);
     });
 
-    onMeeplePlaced((meepleData) => {
-      if (this.gamestate.activeTile) {
-        // Meeple is handled inside placeTile directly via the move validation
-      }
-    });
-
     onRotationChanged(() => {
       // Rotation is tracked internally by ActiveTile.
     });
+
+    // Mount ChatPanel.
+    this.chatPanel = new ChatPanel(this.dom.container);
+    this.chatPanel.mount();
+    this.chatPanel.on('send', (text) => {
+      this._onChatSend(text);
+    });
+
+    // Mount SettingsPanel.
+    this.settingsPanel = new SettingsPanelUI(this.dom.container);
+    this.settingsPanel.mount();
+    initSettings();
 
     // Draw initial board state.
     if (this.gamestate) {
@@ -167,9 +166,6 @@ export class GameView {
     }
 
     // Wire up P2P orchestration layer.
-    this.gameHost = null;
-    this.gameClient = null;
-
     if (this.peerManager && !this.isLocalGame) {
       if (this.isHost) {
         this.gameHost = new GameHost(this.peerManager, this.gamestate);
@@ -182,7 +178,7 @@ export class GameView {
           this._showGameOver();
         });
         this.gameHost.on('chat-message', (payload) => {
-          this._addChatMessage(payload.username, payload.message);
+          this.chatPanel.addMessage(payload.username, payload.message);
         });
       } else {
         this.gameClient = new GameClient(this.peerManager, this.gamestate);
@@ -195,7 +191,7 @@ export class GameView {
           this._showGameOver();
         });
         this.gameClient.on('chat-message', (payload) => {
-          this._addChatMessage(payload.username, payload.message);
+          this.chatPanel.addMessage(payload.username, payload.message);
         });
       }
     }
@@ -209,6 +205,14 @@ export class GameView {
     if (this.gameClient) {
       this.gameClient.destroy();
       this.gameClient = null;
+    }
+    if (this.chatPanel) {
+      this.chatPanel.destroy();
+      this.chatPanel = null;
+    }
+    if (this.settingsPanel) {
+      this.settingsPanel.destroy();
+      this.settingsPanel = null;
     }
     clearBoard();
     if (this.dom) {
@@ -266,15 +270,16 @@ export class GameView {
     });
 
     this.dom.menuBtn.addEventListener('click', () => {
-      this.dom.chat.style.display =
-        this.dom.chat.style.display === 'none' ? 'block' : 'none';
+      // Toggle chat panel on click; settings accessible via keyboard shortcut.
+      this.chatPanel.toggle();
     });
 
-    this.dom.chatSend.addEventListener('click', () => {
-      this._sendChat();
-    });
-    this.dom.chatInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') this._sendChat();
+    // Ctrl+Shift+S opens settings.
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        this.settingsPanel.show();
+      }
     });
   }
 
@@ -288,7 +293,7 @@ export class GameView {
         this._pendingPlacement = { x, y, rotation };
         this._showActiveTileAt(x, y, rotation);
       },
-      onZoom: (transform) => {
+      onZoom: () => {
         // ActiveTile repositioning handled by transform.
       },
     });
@@ -300,6 +305,15 @@ export class GameView {
       this.dom.turnIndicator.textContent = p
         ? `${p.user.username}'s turn`
         : '';
+    }
+    // Update scoreboard.
+    if (this.dom && this.dom.scoreboard && this.gamestate) {
+      renderScoreboard(
+        this.dom.scoreboard,
+        this.gamestate,
+        this.gamestate.currentPlayerIndex,
+        this.gamestate.finished,
+      );
     }
   }
 
@@ -374,26 +388,15 @@ export class GameView {
 
   // ── Chat ─────────────────────────────────────────────────────────────
 
-  _sendChat() {
-    const text = this.dom.chatInput.value.trim();
-    if (!text) return;
+  _onChatSend(text) {
     const username = this.config.localPlayers?.[this.playerIndex]?.user?.username || 'Player';
-    this._addChatMessage(username, text);
-    this.dom.chatInput.value = '';
+    this.chatPanel.addMessage(username, text);
 
     if (this.gameHost) {
       this.gameHost.broadcastChat(username, text);
     } else if (this.gameClient) {
       this.gameClient.sendChat(text);
     }
-  }
-
-  _addChatMessage(username, text) {
-    const el = document.createElement('div');
-    el.innerHTML = `<strong>${username}:</strong> ${text}`;
-    el.style.margin = '2px 0';
-    this.dom.chatMessages.appendChild(el);
-    this.dom.chatMessages.scrollTop = this.dom.chatMessages.scrollHeight;
   }
 
   // ── Game over ────────────────────────────────────────────────────────
