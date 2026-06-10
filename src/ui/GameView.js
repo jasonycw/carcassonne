@@ -21,6 +21,7 @@ import {
 import { placeTile, drawTile } from '../game/GameLogic.js';
 import { GameHost } from '../network/GameHost.js';
 import { GameClient } from '../network/GameClient.js';
+import { removeGame } from '../network/StateSync.js';
 
 // ---------------------------------------------------------------------------
 // HTML template
@@ -398,6 +399,9 @@ export class GameView {
   // ── Game over ────────────────────────────────────────────────────────
 
   _showGameOver() {
+    // Clear saved state — game is done.
+    removeGame();
+
     setTimeout(() => {
       const winner = this.gamestate.players.reduce((best, p) =>
         p.points > best.points ? p : best,

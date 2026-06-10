@@ -23,6 +23,7 @@ import {
 } from '../network/Protocol.js';
 import { createGameState, initializeNewGame } from '../game/GameLogic.js';
 import { ALL_TILES as TILE_DATA } from '../game/TileData.js';
+import { hasRecoverableGame, getSavedGameInfo, loadGame, removeGame } from '../network/StateSync.js';
 
 // ---------------------------------------------------------------------------
 // HTML templates (simple innerHTML — no build step needed)
@@ -39,6 +40,9 @@ const LOBBY_HTML = `
     <h1 style="text-align:center; margin-bottom: 24px; font-size: 2.2rem;">
       🏰 Carcassonne
     </h1>
+
+    <!-- Resume game banner (shown when recoverable state exists) -->
+    <div id="resume-banner" style="display: none; margin-bottom: 16px; padding: 12px; border-radius: 8px; background: #2e7d32; color: #fff; text-align: center; font-size: 0.85rem;"></div>
 
     <!-- Room code display (shown when hosting) -->
     <div id="room-display" style="display: none; text-align: center; margin-bottom: 20px;">
@@ -144,9 +148,13 @@ export class LobbyView extends EventEmitter {
       playerList: this.container.querySelector('#player-list'),
       startBtn: this.container.querySelector('#start-game-btn'),
       status: this.container.querySelector('#lobby-status'),
+      resumeBanner: this.container.querySelector('#resume-banner'),
       expansionChecks: this.container.querySelectorAll('#lobby-forms input[type="checkbox"]'),
     };
     this._bindEvents();
+
+    // Check for recoverable game.
+    this._checkRecoverableGame();
 
     // Auto-fill name from localStorage.
     const saved = localStorage.getItem('carcassonne_player_name');
@@ -181,9 +189,65 @@ export class LobbyView extends EventEmitter {
     });
   }
 
+  /** Check if a recoverable game exists and show a resume banner. */
+  _checkRecoverableGame() {
+    if (!hasRecoverableGame() || !this.dom.resumeBanner) return;
+
+    const info = getSavedGameInfo();
+    if (!info) return;
+
+    const elapsed = Math.floor((Date.now() - info.savedAt) / 60000);
+    const timeStr = elapsed < 60
+      ? `${elapsed} min ago`
+      : `${Math.floor(elapsed / 60)}h ${elapsed % 60}m ago`;
+
+    this.dom.resumeBanner.innerHTML = `
+      <strong>Game in progress:</strong> ${info.name} (${info.players} players, saved ${timeStr})
+      <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: center;">
+        <button id="resume-game-btn" style="
+          padding: 6px 20px; border-radius: 6px; border: none;
+          background: #66bb6a; color: #111; font-weight: bold; cursor: pointer;
+        ">Resume Game</button>
+        <button id="discard-game-btn" style="
+          padding: 6px 20px; border-radius: 6px; border: 1px solid #e57373;
+          background: transparent; color: #e57373; cursor: pointer;
+        ">Discard</button>
+      </div>
+    `;
+    this.dom.resumeBanner.style.display = 'block';
+
+    this.dom.resumeBanner.querySelector('#resume-game-btn').addEventListener('click', () => {
+      this._resumeGame();
+    });
+    this.dom.resumeBanner.querySelector('#discard-game-btn').addEventListener('click', () => {
+      removeGame();
+      this.dom.resumeBanner.style.display = 'none';
+    });
+  }
+
+  /** Resume a saved game by loading state and transitioning to the game view. */
+  _resumeGame() {
+    const state = loadGame();
+    if (!state) {
+      this._setStatus('No saved game found');
+      return;
+    }
+
+    this.destroy();
+    this.emit('start-game', {
+      isHost: true,
+      peerManager: null,
+      isLocalGame: true,
+      localState: state,
+      playerIndex: 0,
+      localPlayers: state.players,
+    });
+  }
+
   // ── Create Game ──────────────────────────────────────────────────────
 
   async _createGame() {
+    removeGame(); // Clear any previous saved game
     const name = this.dom.playerName.value.trim() || 'Host';
     localStorage.setItem('carcassonne_player_name', name);
 
@@ -254,6 +318,7 @@ export class LobbyView extends EventEmitter {
   }
 
   async _joinGame() {
+    removeGame(); // Clear any previous saved game
     const name = this.dom.playerName.value.trim() || 'Player';
     const code = this.dom.roomCodeInput.value.trim().toUpperCase();
     if (code.length < 4) {

@@ -20,6 +20,7 @@ import {
   skipMeeple as glSkipMeeple,
   skipTurn as glSkipTurn,
 } from '../game/GameLogic.js';
+import { saveGame } from './StateSync.js';
 
 export class GameHost extends EventEmitter {
   /**
@@ -133,6 +134,7 @@ export class GameHost extends EventEmitter {
   /** Broadcast the current game state to all connected peers. */
   broadcastState() {
     this.hostPeerManager.broadcastState(this.gamestate);
+    saveGame(this.gamestate);
     this.emit('state-changed', this.gamestate);
   }
 
