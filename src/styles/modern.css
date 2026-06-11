@@ -1,0 +1,219 @@
+/**
+ * modern.css — Modern layout overrides for Carcassonne P2P SPA.
+ *
+ * Uses CSS custom properties for theming, CSS Grid for layout,
+ * and Flexbox for component alignment.
+ *
+ * Works alongside game.css (legacy D3/SVG styles). This file only
+ * overrides the structural layout and theming.
+ */
+
+/* ------------------------------------------------------------------ */
+/*  CSS Custom Properties (theming)                                    */
+/* ------------------------------------------------------------------ */
+
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-surface: rgba(26, 26, 46, 0.92);
+  --text-primary: #eee;
+  --text-secondary: #aaa;
+  --border-color: #333;
+  --accent: #4fc3f7;
+  --accent-success: #66bb6a;
+  --accent-danger: #e57373;
+  --font-family: 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', monospace;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --transition: 0.2s ease;
+}
+
+/* Light mode (overrides dark by default) */
+[data-theme="light"] {
+  --bg-primary: #f5f5f5;
+  --bg-secondary: #ffffff;
+  --bg-surface: rgba(255, 255, 255, 0.95);
+  --text-primary: #222;
+  --text-secondary: #666;
+  --border-color: #ddd;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Base reset (minimal — game.css handles most)                       */
+/* ------------------------------------------------------------------ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: var(--font-family);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Game container layout (CSS Grid)                                   */
+/* ------------------------------------------------------------------ */
+
+#game-container {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 1fr;
+  background: var(--bg-primary);
+}
+
+/* Top bar uses flexbox */
+#game-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border-color);
+  z-index: 10;
+}
+
+/* Board area fills remaining space */
+#game-board-area {
+  position: relative;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/*  HUD buttons                                                        */
+/* ------------------------------------------------------------------ */
+
+#game-hud {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 20;
+}
+
+.hud-btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--accent);
+  background: var(--bg-secondary);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background var(--transition), opacity var(--transition);
+}
+
+.hud-btn:hover {
+  opacity: 0.85;
+}
+
+#hud-confirm {
+  border: none;
+  background: var(--accent-success);
+  color: #111;
+  font-weight: bold;
+}
+
+#hud-skip {
+  border: 1px solid var(--accent-danger);
+  background: transparent;
+  color: var(--accent-danger);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Scoreboard                                                         */
+/* ------------------------------------------------------------------ */
+
+#game-scoreboard {
+  position: absolute;
+  top: 40px;
+  left: 12px;
+  right: 12px;
+  z-index: 15;
+  pointer-events: none;
+}
+
+.sb-player {
+  transition: all var(--transition);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Buttons / inputs — shared                                          */
+/* ------------------------------------------------------------------ */
+
+button {
+  font-family: var(--font-family);
+}
+
+input, select, textarea {
+  font-family: var(--font-family);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Scrollbar styling                                                  */
+/* ------------------------------------------------------------------ */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Responsive                                                         */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 600px) {
+  #game-hud {
+    bottom: 8px;
+    gap: 4px;
+  }
+
+  .hud-btn {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+
+  #game-scoreboard {
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 1200px) {
+  .hud-btn {
+    padding: 10px 20px;
+    font-size: 0.95rem;
+  }
+}

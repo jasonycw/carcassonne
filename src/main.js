@@ -6,12 +6,17 @@
  */
 
 import './styles/game.css';
+import './styles/modern.css';
 import { register, navigate, start } from './ui/Router.js';
 import { LobbyView } from './ui/LobbyView.js';
 import { GameView } from './ui/GameView.js';
+import { initSettings } from './ui/SettingsPanel.js';
 
 // Root container — created by index.html.
 const app = document.getElementById('app');
+
+// Apply saved settings (dark mode, etc.) on startup.
+initSettings();
 
 // ── Route handlers ────────────────────────────────────────────────────
 
