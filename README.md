@@ -1,82 +1,118 @@
-# Concarneau
+# Concarneau — Carcassonne P2P Web Game
 
-Multiplayer web game using the same rules as Carcassone. Currently supports the base game along with the Inns and Cathedrals and the Traders and Builders expansion packs.
+A browser-based Carcassonne board game with solo play and peer-to-peer multiplayer. Originally an Express/MongoDB app, now a fully static SPA powered by Vite, D3.js, and PeerJS.
 
-Running at https://www.concarneau.net
+Play solo against yourself, or create a room and share the code to play with friends over WebRTC!
 
-For a quick demo of capabilities you can start a solo game by logging in, hitting the + icon and selecting start which will start a solo game where you are laying all the tiles and pieces.
+## Screenshots
 
-## Instructions
+| Lobby | Game Board | Tiles Placed |
+|-------|------------|--------------|
+| ![Lobby](screenshots/01-lobby.png) | ![Game Board](screenshots/03-game-board.png) | ![Multiple Tiles](screenshots/05-multiple-tiles.png) |
 
-If you would like to download the code and try it for yourself:
+## Features
 
-1. Clone the repo: `git clone git@github.com:btouellette/concarneau`
-2. Install packages: `npm install`
-3. Change out the database configuration in config/database.js or set appropriate environment variables
-4. If using a local MongoDB ensure the db is launched
-5. Launch: `node server.js`
-6. Visit in your browser at: `http://localhost:8080`
+- **Solo play** — play a full game by yourself
+- **Hot-seat multiplayer** — 2–6 players on one device
+- **P2P multiplayer** — real-time WebRTC via PeerJS (room-based)
+- **Tile placement** — drag-and-drop tile positioning with rotation
+- **Meeple placement** — place meeples on cities, roads, cloisters, and fields
+- **Scoring** — automatic scoring for completed features (cities, roads, cloisters)
+- **Game recovery** — saved game state survives browser refresh
+- **Expansions** (optional):
+  - Inns & Cathedrals
+  - Traders & Builders
+  - The Tower
+- **Responsive SVG board** — pan & zoom with mouse wheel
+- **Scoreboard** — live player scores with meeple pool
 
-The actual server is Dockerized and sits behind an nginx reverse proxy which handles Let's Encrypt cert issuance and routing traffic to a staging server for testing
+## Quick Start
 
-```
-# DNSMasq (or your personal preference of resolver) needs to be set up and running on :53
-# ~/src/concarneau should be updated to the absolute path of where you have the repo checked out
-
-docker run -d --name nginx-proxy \
-    -p 80:80 -p 443:443 --network nginx-proxy \
-    --volume vhost:/etc/nginx/vhost.d \
-    --volume html:/usr/share/nginx/html \
-    --volume /etc/lets-encrypt:/etc/nginx/certs \
-    --volume ~/src/concarneau/proxy.conf:/etc/nginx/proxy.conf \
-    --volume /var/run/docker.sock:/tmp/docker.sock:ro \
-    --env "RESOLVERS=127.0.0.1" \
-    --restart always \
-    nginxproxy/nginx-proxy
-
-docker run --detach \
-    --name nginx-proxy-acme \
-    --volumes-from nginx-proxy \
-    --volume /var/run/docker.sock:/var/run/docker.sock:ro \
-    --volume acme:/etc/acme.sh \
-    --env "DEFAULT_EMAIL=btouellette@gmail.com" \
-    --restart always \
-    nginxproxy/acme-companion
-
-docker build -f Dockerfile-staging -t concarneau-staging .
-docker run -d --restart always --env-file ./env.staging.list \
-    --name concarneau-staging -h staging.concarneau.net \
-    --net nginx-proxy -p 8081:8081 \
-    concarneau-staging
-docker build -t concarneau .
-docker run -d --restart always --env-file ./env.production.list \
-    --name concarneau -h concarneau.net \
-    --net nginx-proxy -p 8082:8082 \
-    concarneau
+```bash
+git clone <repo-url>
+cd concarneau
+npm install
+npm run dev        # → http://localhost:5173/carcassonne/
 ```
 
-To set up authentication via OAuth:
+Open the URL, enter your name, select "Solo" (or more players), and click **Create Game**. The room code will appear — for a solo game just click **Start Game**.
 
-1. Set up Facebook/Google/Twitter applications 
-2. Add auth keys in config/auth.js or set appropriate environment variables
-3. Facebook app settings:
- * Settings -> Basic -> Add Platform -> Website: Site Url
-    * http://localhost:8080/
- * Settings -> Advanced -> Security -> Valid OAuth redirect URIs
-    * http://localhost:8080/auth/facebook/callback
-4. Google app settings:
- * APIs & auth -> Credentials -> Redirect URIs
-    * http://localhost:8080/auth/google/callback 
- * APIs & auth -> Credentials -> Javascript Origins
-    * http://localhost:8080
-5. Twitter app settings
- * Settings -> Application Details -> Callback URL
-    * http://127.0.0.1:8080/auth/twitter/callback
+## Scripts
 
-## Data Retention & Deletion
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Vite dev server (hot-reload) |
+| `npm run build` | Production build to `dist/` |
+| `npm run preview` | Preview the production build |
+| `npm test` | Run all tests (unit + E2E) |
+| `npm run test:unit` | Run unit tests only (Vitest) |
+| `npm run test:e2e` | Run E2E tests only (Playwright) |
+| `npm run deploy` | Build + verify production output |
 
-Game data is saved until any player in the game removes the game from the UI via the trash can icon at which point all game data and messages are deleted permanently
+## Running E2E Tests
 
-The only user data retained is what is necessary for the functioning of the app, see: https://github.com/btouellette/concarneau/blob/main/app/models/user.js
+E2E tests use Playwright with Chromium. The test runner auto-starts the Vite dev server.
 
-Games and messages may be manually removed yourself as above and if user account deletion is desired you may email btouellette@gmail.com to have your user account removed
+```bash
+npx playwright install chromium   # one-time setup
+npm run test:e2e
+```
+
+Tests cover:
+- **Solo game** — create room, start game, board renders
+- **P2P multiplayer** — hot-seat 2-player turn cycling
+- **Persistence** — game state survives page reload
+
+## Project Structure
+
+```
+src/
+├── main.js                 # App entry point + router
+├── game/
+│   ├── GameLogic.js        # Game state machine (tile placement, scoring)
+│   ├── TileData.js         # All tile definitions
+│   └── FeatureTracker.js   # Connected feature tracking
+├── rendering/
+│   ├── GameBoard.js        # D3 SVG board renderer (tiles, placements, scoreboard)
+│   ├── ActiveTile.js       # Floating active tile & meeple placement UI
+│   └── ScoreBoard.js       # HTML scoreboard component
+├── network/
+│   ├── PeerManager.js      # PeerJS P2P networking (host + client)
+│   ├── GameHost.js         # Host-side game orchestration
+│   ├── GameClient.js       # Client-side game sync
+│   ├── StateSync.js        # localStorage persistence
+│   └── Protocol.js         # Message types & helpers
+├── ui/
+│   ├── LobbyView.js        # Create / join game lobby
+│   ├── GameView.js         # Main game screen (orchestrates rendering + logic)
+│   ├── Router.js           # Hash-based SPA router
+│   ├── ChatPanel.js        # In-game chat
+│   └── SettingsPanel.js    # Settings UI
+├── utils/
+│   └── EventEmitter.js     # Simple event emitter
+└── styles/
+    ├── game.css            # Game-specific styles
+    └── modern.css          # Global styles
+```
+
+## GitHub Pages Deployment
+
+This project is configured for GitHub Pages at the `/carcassonne/` sub-path.
+
+1. Push to the `main` branch
+2. In your repo settings → Pages → set source to GitHub Actions
+3. The included `.github/workflows/deploy.yml` workflow builds and deploys automatically
+
+The deployed site will be available at `https://<org>.github.io/carcassonne/`.
+
+## Technical Stack
+
+- **Build**: [Vite](https://vitejs.dev/) — fast dev server + optimized builds
+- **Rendering**: [D3.js v7](https://d3js.org/) — SVG zoom/pan, data joins, transitions
+- **Networking**: [PeerJS](https://peerjs.com/) — WebRTC P2P via cloud signaling server
+- **Tests**: [Vitest](https://vitest.dev/) (unit) + [Playwright](https://playwright.dev/) (E2E)
+- **CI**: GitHub Actions — test, build, deploy
+
+## License
+
+Original project by [btouellette](https://github.com/btouellette/concarneau). Migrated to static SPA.
