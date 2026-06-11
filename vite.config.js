@@ -8,4 +8,8 @@ export default defineConfig({
   server: {
     open: true,
   },
+  test: {
+    include: ['tests/unit/**/*.test.js'],
+    exclude: ['tests/e2e/**'],
+  },
 });

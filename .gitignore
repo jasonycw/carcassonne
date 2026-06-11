@@ -27,3 +27,8 @@ dist/
 
 # OpenCode session state
 .sisyphus/
+
+# Test artifacts
+test-results/
+playwright-report/
+.antigravitycli/

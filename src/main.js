@@ -11,6 +11,7 @@ import { register, navigate, start } from './ui/Router.js';
 import { LobbyView } from './ui/LobbyView.js';
 import { GameView } from './ui/GameView.js';
 import { initSettings } from './ui/SettingsPanel.js';
+import { loadGame } from './network/StateSync.js';
 
 // Root container — created by index.html.
 const app = document.getElementById('app');
@@ -35,13 +36,21 @@ register('/', (params) => {
 
 // Game view.
 register('/game', (params) => {
+  // If no localState was passed (e.g. page reload), try to recover from
+  // localStorage, otherwise redirect to lobby where the resume banner lives.
+  const localState = params.localState || loadGame();
+  if (!localState) {
+    navigate('/');
+    return null;
+  }
+
   const config = {
     isHost: params.isHost !== undefined ? params.isHost : true,
     isLocalGame: params.isLocalGame !== undefined ? params.isLocalGame : true,
     peerManager: params.peerManager || null,
-    localState: params.localState || null,
+    localState,
     playerIndex: params.playerIndex || 0,
-    localPlayers: params.localPlayers || [],
+    localPlayers: params.localPlayers || localState.players,
   };
 
   const view = new GameView(config);

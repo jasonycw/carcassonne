@@ -244,7 +244,8 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('fill', 'white')
     .attr('stroke', 'black')
     .attr('stroke-width', 2)
-    .attr('opacity', 0.75);
+    .attr('opacity', 0.75)
+    .attr('pointer-events', 'none');
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,48 @@
+# Test & Validate
+#
+# Runs on every push / pull request to ensure the project builds,
+# unit tests pass, and E2E tests pass.
+
+name: Test
+
+on:
+  push:
+    branches-ignore: [main]   # main runs deploy.yml which includes tests
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Verify deploy readiness
+        run: npm run verify

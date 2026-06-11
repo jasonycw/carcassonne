@@ -19,8 +19,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:unit": "vitest run",
-    "test": "npm run test:unit",
-    "verify": "node scripts/verify-deploy.js"
+    "test:e2e": "playwright test",
+    "test": "npm run test:unit && npm run test:e2e",
+    "verify": "node scripts/verify-deploy.js",
+    "deploy": "npm run build && npm run verify"
   },
   "dependencies": {
     "d3": "^7",
@@ -28,6 +30,7 @@
   },
   "devDependencies": {
     "vite": "^5",
-    "vitest": "^1"
+    "vitest": "^1",
+    "@playwright/test": "^1.40"
   }
 }

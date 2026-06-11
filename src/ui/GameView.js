@@ -18,10 +18,10 @@ import {
   setSelectedPlacement, getCurrentRotation,
   onTilePlaced, onRotationChanged,
 } from '../rendering/ActiveTile.js';
-import { placeTile, drawTile } from '../game/GameLogic.js';
+import { placeTile, skipTurn } from '../game/GameLogic.js';
 import { GameHost } from '../network/GameHost.js';
 import { GameClient } from '../network/GameClient.js';
-import { removeGame } from '../network/StateSync.js';
+import { saveGame, removeGame } from '../network/StateSync.js';
 import { renderScoreboard } from '../rendering/ScoreBoard.js';
 import { ChatPanel } from './ChatPanel.js';
 import { SettingsPanelUI, initSettings } from './SettingsPanel.js';
@@ -163,6 +163,9 @@ export class GameView {
       this._renderBoard();
       this._updateTurnIndicator();
       this._showActiveTileIfNeeded();
+
+      // Persist game state on first render (enables crash recovery).
+      saveGame(this.gamestate);
     }
 
     // Wire up P2P orchestration layer.
@@ -254,13 +257,14 @@ export class GameView {
           return;
         }
 
-        // Host or solo: discard tile and skip locally.
-        this.gamestate.activeTile = null;
+        // Host or solo: advance turn + draw next tile.
         resetActiveTile(this.dom.svg, true);
         this.dom.hud.style.display = 'none';
-        drawTile(this.gamestate);
+        skipTurn(this.gamestate);
         this._renderBoard();
+        this._updateTurnIndicator();
         this._showActiveTileIfNeeded();
+        saveGame(this.gamestate);
 
         // Broadcast state to peers.
         if (this.gameHost) {
@@ -286,8 +290,10 @@ export class GameView {
   // ── Board rendering ──────────────────────────────────────────────────
 
   _renderBoard() {
-    const isActive = this.gamestate.players[this.playerIndex]?.active;
-    draw(this.gamestate, `player-${this.playerIndex}`, {
+    const player = this.gamestate.players[this.playerIndex];
+    const playerId = player?.user?._id || `player-${this.playerIndex}`;
+    const isActive = player?.active || false;
+    draw(this.gamestate, playerId, {
       onPlacementClick: (x, y, rotation) => {
         if (!isActive) return;
         this._pendingPlacement = { x, y, rotation };
@@ -361,6 +367,9 @@ export class GameView {
       this._renderBoard();
       this._updateTurnIndicator();
       this._showActiveTileIfNeeded();
+
+      // Persist game state to localStorage (for crash recovery).
+      saveGame(this.gamestate);
 
       if (this.gamestate.finished) {
         this._showGameOver();

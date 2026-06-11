@@ -383,8 +383,8 @@ export class LobbyView extends EventEmitter {
     this._setStatus('Starting game...');
 
     // Check if hot-seat solo or local multiplayer (no P2P).
-    const isLocalGame = document.getElementById('player-count') !== null;
-    if (playerCount === 1 || playerCount === parseInt(this.dom.playerCount.value, 10) && this.players.length === 0) {
+    const hasConnectedClients = this.players.some((p) => !p.isHost);
+    if (playerCount === 1 || !hasConnectedClients) {
       // Solo / hot-seat: no P2P needed.
       this._startLocalGame(name, playerCount, expansions);
     } else {
