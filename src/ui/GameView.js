@@ -358,9 +358,21 @@ export class GameView {
     // rotation / position from ActiveTile.
     const pp = this._pendingPlacement;
     if (pp) {
-      const rot = getCurrentRotation();
-      // Include any meeple the player selected on the active tile.
+      // Resolve the rotation to use: prefer currentRotation if it's valid
+      // for the selected placement, otherwise fall back to the first
+      // available rotation.  (The placement click handler passes
+      // d.rotations[0].rotation which may differ from currentRotation.)
       const selectedMove = getSelectedMove();
+      const placement = selectedMove ? selectedMove.placement : null;
+      let rot = getCurrentRotation();
+      if (placement && placement.rotations && placement.rotations.length > 0) {
+        if (!placement.rotations.some((r) => r.rotation === rot)) {
+          // currentRotation is not valid for this placement — use the
+          // default rotation from the click handler.
+          rot = pp.rotation;
+        }
+      }
+      // Include any meeple the player selected on the active tile.
       const meeple = selectedMove ? selectedMove.meeple : null;
       this._handleTilePlacement(pp.x, pp.y, rot, meeple);
       this._pendingPlacement = null;
