@@ -223,8 +223,23 @@ export function initializeBoard(svgElement, options = {}) {
   turnMarkerGroup = zoomGroup.append('g').attr('class', 'turn-markers');
   validPlacementsGroup = zoomGroup.append('g').attr('class', 'valid-placements');
 
-  // Active-tile container (inside zoomGroup so it sits in board coords).
-  activeTileGroup = zoomGroup.append('g').attr('class', 'active-tile');
+  // UI layers (outside zoomGroup, fixed on screen).
+  scoreArea = uiGroup.append('g').attr('class', 'score-area');
+  // Background rectangle placed behind the score content.
+  scoreArea.append('rect')
+    .attr('class', 'score-bg')
+    .attr('rx', 15)
+    .attr('ry', 15)
+    .attr('x', -15)
+    .attr('y', -15)
+    .attr('fill', 'white')
+    .attr('stroke', 'black')
+    .attr('stroke-width', 2)
+    .attr('opacity', 0.75)
+    .attr('pointer-events', 'none');
+
+  // Active-tile container (outside zoomGroup so it stays fixed on screen).
+  activeTileGroup = uiGroup.append('g').attr('class', 'active-tile');
   activeTileTransGroup = activeTileGroup.append('g')
     .attr('class', 'active-tile-translation')
     .attr('transform', `translate(${TILE_SIZE / 2},${TILE_SIZE / 2})`);
@@ -245,21 +260,6 @@ export function initializeBoard(svgElement, options = {}) {
   meeplePlacementsGroup = activeTileRotGroup.append('g')
     .attr('class', 'meeple-placements')
     .attr('visibility', 'hidden');
-
-  // UI layers (outside zoomGroup, fixed on screen).
-  scoreArea = uiGroup.append('g').attr('class', 'score-area');
-  // Background rectangle placed behind the score content.
-  scoreArea.append('rect')
-    .attr('class', 'score-bg')
-    .attr('rx', 15)
-    .attr('ry', 15)
-    .attr('x', -15)
-    .attr('y', -15)
-    .attr('fill', 'white')
-    .attr('stroke', 'black')
-    .attr('stroke-width', 2)
-    .attr('opacity', 0.75)
-    .attr('pointer-events', 'none');
 }
 
 // ---------------------------------------------------------------------------
@@ -521,25 +521,21 @@ export function draw(gamestate, playerId, callbacks = {}) {
     .attr('stroke', (d) => d.color);
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 4. Valid-placement highlights
+  // 4. Valid-placement highlights (placement_available.png, matching original UX)
   // ═══════════════════════════════════════════════════════════════════════
   const validPlacements = viewerIsActive && gamestate.activeTile
     ? (gamestate.activeTile.validPlacements || [])
     : [];
 
-  const placementSquares = validPlacementsGroup.selectAll('rect.tile-placement')
+  const placementImages = validPlacementsGroup.selectAll('image.tile-placement')
     .data(validPlacements);
 
-  placementSquares.join(
-    (enter) => enter.append('rect')
+  placementImages.join(
+    (enter) => enter.append('image')
       .attr('class', 'tile-placement')
       .attr('width', TILE_SIZE)
       .attr('height', TILE_SIZE)
-      .attr('fill', 'rgba(0, 200, 80, 0.35)')
-      .attr('stroke', '#00cc44')
-      .attr('stroke-width', 2)
-      .attr('rx', 4)
-      .attr('ry', 4)
+      .attr('href', img('/images/ui/placement_available.png'))
       .attr('cursor', 'pointer')
       .on('click', function (event, d) {
         // Default to the first rotation; callers can override.
@@ -553,7 +549,7 @@ export function draw(gamestate, playerId, callbacks = {}) {
     (exit) => exit.remove()
   );
 
-  placementSquares
+  placementImages
     .attr('x', (d) => svgWidth / 2 + d.x * TILE_SIZE)
     .attr('y', (d) => svgHeight / 2 + d.y * TILE_SIZE);
 

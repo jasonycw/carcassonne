@@ -16,10 +16,8 @@
 import {
   getActiveTileGroups,
   getSvgSelection,
-  zoomBehavior,
   meeplePlacementMode,
   setMeeplePlacementMode,
-  getBoardTransform,
 } from './GameBoard.js';
 import { img } from '../utils/AssetPaths.js';
 
@@ -130,17 +128,10 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
   // Show the active tile group.
   activeTileGroup.attr('visibility', null);
 
-  // Position at top-right (in board coordinates, accounting for zoom).
-  const transform = getBoardTransform();
+  // Position at top-right of the viewport (outside zoom group — simple px coords).
   const svgEl = svgElement || (getSvgSelection() ? getSvgSelection().node() : null);
-  let cornerX = 0;
-  let cornerY = 0;
-  if (svgEl) {
-    const rect = svgEl.getBoundingClientRect();
-    // Transform screen coords to board coords using inverse zoom.
-    cornerX = (rect.width - TILE_SIZE - 10) / transform.k - transform.x / transform.k;
-    cornerY = 5 / transform.k - transform.y / transform.k;
-  }
+  const cornerX = svgEl ? svgEl.getBoundingClientRect().width - TILE_SIZE - 10 : 800 - TILE_SIZE - 10;
+  const cornerY = 5;
 
   activeTileTransGroup
     .attr('transform', `translate(${cornerX + TILE_SIZE / 2},${cornerY + TILE_SIZE / 2})`);
@@ -187,7 +178,10 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
     .attr('height', MEEMPLE_NORMAL_SIZE)
     .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 2 - MEEMPLE_NORMAL_SIZE / 2)
     .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 2 - MEEMPLE_NORMAL_SIZE / 2)
-    .attr('href', img('/images/meeples/outline_standing.png'))
+    .attr('href', (d) => {
+      const suffix = d.locationType === 'farm' ? 'lying' : 'standing';
+      return img(`/images/meeples/outline_${suffix}.png`);
+    })
     .attr('visibility', 'hidden')
     .attr('cursor', 'pointer')
     .on('click', function (event, d) {
@@ -325,10 +319,12 @@ function rotateActiveTile(direction) {
       .attr('opacity', 0);
   }
 
-  // Clear any existing meeple selection.
-  selectedMove = null;
+  // Clear meeple placement but keep the selected placement.
+  if (selectedMove) {
+    selectedMove.meeple = null;
+  }
   groups.meeplePlacementsGroup.selectAll('image.placed-meeple').attr('visibility', 'hidden');
-  // Show outlines for the new rotation if there's a selected placement.
+  // Show outlines for the new rotation.
   if (selectedMove && selectedMove.placement) {
     updateMeeplePlacementsInternal();
   }
@@ -345,9 +341,8 @@ function rotateActiveTile(direction) {
 function confirmPlacement(playerState) {
   if (!onTilePlacedCallback || !activeTileData) return;
 
-  // The active tile is currently floating.  We need to know where to place it.
-  // If selectedMove.placement is set, we already have a (x, y) from clicking
-  // a valid-placement highlight; otherwise we use a heuristic or prompt.
+  // If we have a placement selected (from clicking a valid-placement highlight),
+  // place the tile immediately.  If not, show the confirm overlay (first click).
   if (selectedMove && selectedMove.placement) {
     onTilePlacedCallback(
       selectedMove.placement.x,
@@ -356,12 +351,12 @@ function confirmPlacement(playerState) {
       selectedMove.meeple || null
     );
   } else {
-    // No placement selected yet – bring the confirm button to prompt.
+    // No placement selected yet – bring the confirm button to prompt (second click).
     const groups = getActiveTileGroups();
     if (!groups) return;
     const confirmBtn = groups.activeTileRotGroup.select('.confirm-button');
     const confirmText = groups.activeTileRotGroup.select('.confirm-button-text');
-    confirmBtn.attr('visibility', null);
+    confirmBtn.attr('visibility', null).attr('pointer-events', 'auto');
     confirmText.attr('visibility', null);
     confirmBtn.transition().duration(300).attr('opacity', 1);
     confirmText.transition().duration(300).attr('opacity', 1);
@@ -373,36 +368,53 @@ function confirmPlacement(playerState) {
 // ---------------------------------------------------------------------------
 
 /**
- * Collect all possible meeple placements across all rotations from the
- * validPlacements data, deduplicated by (locationType, index).
+ * Collect all possible meeple positions from the tile data itself
+ * (roads, cities, farms, cloister), matching the original game behavior.
+ * All outlines are shown regardless of rotation — server validates.
  */
 function collectValidMeeples(tileData, placements) {
-  const seen = new Set();
   const result = [];
   if (!tileData) return result;
 
-  const tile = tileData; // bare tile definition
-
-  (placements || []).forEach((placement) => {
-    (placement.rotations || []).forEach((rot) => {
-      (rot.meeples || []).forEach((m) => {
-        const key = `${m.locationType}:${m.index}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          const offset = resolveMeepleOffset(
-            { locationType: m.locationType, index: m.index },
-            tile
-          );
-          result.push({
-            locationType: m.locationType,
-            index: m.index,
-            offset,
-            meepleType: m.meepleType,
-          });
-        }
-      });
+  // Roads
+  (tileData.roads || []).forEach((road, idx) => {
+    result.push({
+      locationType: 'road',
+      index: idx,
+      offset: road.meepleOffset || { x: 0.5, y: 0.5 },
+      meepleType: 'normal',
     });
   });
+
+  // Cities
+  (tileData.cities || []).forEach((city, idx) => {
+    result.push({
+      locationType: 'city',
+      index: idx,
+      offset: city.meepleOffset || { x: 0.5, y: 0.5 },
+      meepleType: 'normal',
+    });
+  });
+
+  // Farms
+  (tileData.farms || []).forEach((farm, idx) => {
+    result.push({
+      locationType: 'farm',
+      index: idx,
+      offset: farm.meepleOffset || { x: 0.5, y: 0.5 },
+      meepleType: 'normal',
+    });
+  });
+
+  // Cloister
+  if (tileData.cloister) {
+    result.push({
+      locationType: 'cloister',
+      index: 0,
+      offset: tileData.cloister.meepleOffset || { x: 0.5, y: 0.5 },
+      meepleType: 'normal',
+    });
+  }
 
   return result;
 }
@@ -422,15 +434,9 @@ export function resetActiveTile(svgElement, animated = false) {
   const groups = getActiveTileGroups();
   if (!groups) return;
 
-  const transform = getBoardTransform();
   const svgEl = svgElement || (getSvgSelection() ? getSvgSelection().node() : null);
-  let cornerX = 0;
-  let cornerY = 0;
-  if (svgEl) {
-    const rect = svgEl.getBoundingClientRect();
-    cornerX = (rect.width - TILE_SIZE - 10) / transform.k - transform.x / transform.k;
-    cornerY = 5 / transform.k - transform.y / transform.k;
-  }
+  const cornerX = svgEl ? svgEl.getBoundingClientRect().width - TILE_SIZE - 10 : 800 - TILE_SIZE - 10;
+  const cornerY = 5;
 
   // Hide meeple placements.
   groups.meeplePlacementsGroup
@@ -498,38 +504,23 @@ export function updateMeeplePlacements(validMeeplesIn, meepleTypeIn, svgElement)
   updateMeeplePlacementsInternal(validMeeplesIn);
 }
 
-function updateMeeplePlacementsInternal(validMeeplesIn) {
+function updateMeeplePlacementsInternal() {
   const groups = getActiveTileGroups();
   if (!groups) return;
 
   const meepleGroup = groups.meeplePlacementsGroup;
-  if (!selectedMove) {
+
+  // If no placement is selected, keep meeple group hidden.
+  if (!selectedMove || !selectedMove.placement) {
     meepleGroup.attr('visibility', 'hidden');
     return;
   }
 
-  // Determine which meeples are valid for this rotation.
-  const rotationEntry = selectedMove.placement
-    ? (selectedMove.placement.rotations || []).find(
-        (r) => r.rotation === currentRotation
-      )
-    : null;
-  const validMeeples = validMeeplesIn || (rotationEntry ? rotationEntry.meeples : []);
-  const activeType = currentMeepleType === 'large' ? 'normal' : currentMeepleType;
-
-  // Update outline visibility.
+  // Show ALL meeple outlines (matching original game — don't filter by rotation).
   meepleGroup.selectAll('image.meeple-outline')
-    .attr('visibility', (d) => {
-      const found = (validMeeples || []).some(
-        (m) =>
-          (m.meepleType === activeType) &&
-          m.locationType === d.locationType &&
-          m.index === d.index
-      );
-      return found ? null : 'hidden';
-    });
+    .attr('visibility', null);
 
-  // Update placed-meeple visibility and image.
+  // Update placed-meeple visibility.
   meepleGroup.selectAll('image.placed-meeple')
     .attr('visibility', (d) => {
       if (
@@ -537,7 +528,7 @@ function updateMeeplePlacementsInternal(validMeeplesIn) {
         selectedMove.meeple.locationType === d.locationType &&
         selectedMove.meeple.index === d.index
       ) {
-        return null; // visible
+        return null;
       }
       return 'hidden';
     });
@@ -573,8 +564,11 @@ function updatePlacedMeeple(data, playerState) {
     .attr('x', data.offset.x * TILE_SIZE - TILE_SIZE / 2 - size / 2)
     .attr('y', data.offset.y * TILE_SIZE - TILE_SIZE / 2 - size / 2)
     .attr('href', path)
-    .attr('visibility', null);
+    .attr('visibility', null)
+    .attr('pointer-events', 'none');
 }
+
+
 
 // ---------------------------------------------------------------------------
 // Accessors / setters

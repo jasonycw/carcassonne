@@ -175,6 +175,30 @@ input:focus, select:focus {
 }
 
 /* ------------------------------------------------------------------ */
+/*  SVG game element styles                                            */
+/* ------------------------------------------------------------------ */
+
+/* Meeple outlines on the active tile must receive pointer events. */
+.meeple-placements image.meeple-outline {
+  pointer-events: fill;
+}
+
+/* Active tile rotation indicator */
+.active-tile-rotation-indicator {
+  pointer-events: none;
+}
+
+/* Active tile confirm overlay */
+#confirm-button, .confirm-button {
+  pointer-events: auto;
+}
+
+/* Prevent tile-placement images from blocking board interactions */
+image.tile-placement {
+  pointer-events: auto;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Scrollbar styling                                                  */
 /* ------------------------------------------------------------------ */
 

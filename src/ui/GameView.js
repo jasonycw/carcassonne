@@ -15,10 +15,10 @@ import {
 } from '../rendering/GameBoard.js';
 import {
   renderActiveTile, resetActiveTile,
-  setSelectedPlacement, getCurrentRotation,
+  setSelectedPlacement, getCurrentRotation, getSelectedMove,
   onTilePlaced, onRotationChanged,
 } from '../rendering/ActiveTile.js';
-import { placeTile, skipTurn } from '../game/GameLogic.js';
+import { placeTile } from '../game/GameLogic.js';
 import { GameHost } from '../network/GameHost.js';
 import { GameClient } from '../network/GameClient.js';
 import { saveGame, removeGame } from '../network/StateSync.js';
@@ -71,10 +71,6 @@ const GAME_HTML = `
         padding: 8px 16px; border-radius: 8px; border: none;
         background: #66bb6a; color: #111; font-weight: bold; cursor: pointer;
       ">Place Tile</button>
-      <button class="hud-btn" id="hud-skip" style="
-        padding: 8px 16px; border-radius: 8px; border: 1px solid #e57373;
-        background: transparent; color: #e57373; cursor: pointer;
-      ">Skip</button>
     </div>
 
     <!-- Scoreboard (rendered by ScoreBoard.js) -->
@@ -247,32 +243,6 @@ export class GameView {
       this._confirmPlacement();
     });
 
-    this.dom.skip.addEventListener('click', () => {
-      if (this.gamestate && this.gamestate.activeTile) {
-        if (this.gameClient) {
-          // P2P client: send skip-turn to host.
-          this.gameClient.skipTurn();
-          resetActiveTile(this.dom.svg, true);
-          this.dom.hud.style.display = 'none';
-          return;
-        }
-
-        // Host or solo: advance turn + draw next tile.
-        resetActiveTile(this.dom.svg, true);
-        this.dom.hud.style.display = 'none';
-        skipTurn(this.gamestate);
-        this._renderBoard();
-        this._updateTurnIndicator();
-        this._showActiveTileIfNeeded();
-        saveGame(this.gamestate);
-
-        // Broadcast state to peers.
-        if (this.gameHost) {
-          this.gameHost.broadcastState();
-        }
-      }
-    });
-
     this.dom.menuBtn.addEventListener('click', () => {
       // Toggle chat panel on click; settings accessible via keyboard shortcut.
       this.chatPanel.toggle();
@@ -328,7 +298,8 @@ export class GameView {
     const isActive = this.gamestate.players[this.playerIndex]?.active;
     if (at && at.tile && at.validPlacements && isActive) {
       if (this.dom) this.dom.hud.style.display = 'flex';
-      renderActiveTile(at.tile, at.validPlacements, null, this.dom.svg);
+      const playerState = this.gamestate.players[this.playerIndex] || null;
+      renderActiveTile(at.tile, at.validPlacements, playerState, this.dom.svg);
     }
   }
 
@@ -336,7 +307,7 @@ export class GameView {
     const at = this.gamestate.activeTile;
     if (!at || !at.tile) return;
 
-    // Find the matching placement.
+    // Find the matching placement and set it.
     const placement = at.validPlacements.find((p) => p.x === x && p.y === y);
     if (placement) {
       setSelectedPlacement(placement);
@@ -388,7 +359,10 @@ export class GameView {
     const pp = this._pendingPlacement;
     if (pp) {
       const rot = getCurrentRotation();
-      this._handleTilePlacement(pp.x, pp.y, rot, null);
+      // Include any meeple the player selected on the active tile.
+      const selectedMove = getSelectedMove();
+      const meeple = selectedMove ? selectedMove.meeple : null;
+      this._handleTilePlacement(pp.x, pp.y, rot, meeple);
       this._pendingPlacement = null;
     }
   }
