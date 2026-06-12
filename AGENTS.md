@@ -1,9 +1,22 @@
 # GOAL
-To recreate the Carcassonne board game in GitHub Page with simple multiplayer support.
+To migrate the Carcassonne board game to a static GitHub Pages on https://jasonycw.github.io/carcassonne/ with simple multiplayer support, removing the requirement for user authentication and server-side hosting fees.
 
-# BACKGROUND
-Before migration at commit `962f33eed833cb2cb845e40bb5d7186e66dc6d2d`, the game was designed to need login to play. This cause extra hosting fee and security concern.
-So you decide to migrate the game to a GitHub Page standalone game so anyone can just open the page and start playing.
+# BACKGROUND & CONTEXT
+- **Baseline Functional Commit:** `962f33eed833cb2cb845e40bb5d7186e66dc6d2d`
+- **The Problem:** The baseline version requires user login, server-side persistence, or external hosting configurations that incur costs/maintenance.
+- **The Solution:** Strip out the backend entirely. Port all game mechanics, tile definitions, and structural verification into a pure, client-side JavaScript architecture that compiles into static assets served completely free of charge on GitHub Pages. Migrate to a 100% standalone frontend game client running entirely in the browser via GitHub Pages with mobile support.
+
+# TECHNICAL CONSTRAINTS
+- **Static Hosting Only:** The final build must consist solely of client-side assets (HTML, JS, CSS, images). No Express server, No Node.js runtime environment, No MongoDB/database interactions.
+- **Multiplayer Architecture:** Host-authoritative PeerJS WebRTC P2P. The room creator (Host) acts as the central authority executing game logic, validation, and scoring, while broadcasting state updates to up to 5 players. Connection orchestration must handle handshake signaling seamlessly using direct shareable room URLs (e.g., `https://jasonycw.github.io/carcassonne/?room=XXXXXX`)
+- **UI & Stack Modernization:** Completely drop Bootstrap 3 and jQuery. Implement layout changes using modern pure CSS features (Custom Properties, Grid, Flexbox) and use vanilla JS for DOM manipulations. Keep and update D3.js (v7 ES Module format) exclusively for board SVG rendering.
+- **State Persistence:** Utilize browser `localStorage` to save full game states after every move, providing seamless session recovery if players refresh their tabs.
+- **No Assets Breakage:** Relative paths or Vite `base` configuration must be strictly configured so that no absolute links break when hosted under a GitHub Pages subdirectory (e.g., `/carcassonne/`).
+
+# CODING PRINCIPLES
+- **Simplicity First:** Write the absolute minimum code necessary to satisfy the migration. Do not introduce speculative helper patterns, multi-layered configs, or unrequested generic wrappers. Keep modules lean.
+- **Surgical Changes:** Touch only the modules that dictate authentication, persistence, rendering wrapper extraction, or socket handling. Match existing core logic styles and do not arbitrarily refactor functional game logic, math algorithms, or scoring metrics.
+- **Clean Up Orphans:** When backend references, old EJS files, Mongoose schemas, or Passport flows are decoupled, completely remove their respective legacy files and dependencies inside `package.json`. Do not leave broken, unused dead code hanging.
 
 # TASKS
 - The gameplay UX must be 1 to 1 identical to before migration `962f33eed833cb2cb845e40bb5d7186e66dc6d2d`, no exception
@@ -15,7 +28,13 @@ So you decide to migrate the game to a GitHub Page standalone game so anyone can
 - README must has the latest screenshot of the game, showing the beginning, middle of the game, end of the game
 - When verify, everything must be check locally first and then also check after GitHub Page is built
 
+# VERIFICATION & DEFINITION OF DONE
+Before committing tasks or marking a feature phase complete, you must explicitly pass the following validation matrix:
+1. Build and run the application locally. Open the browser developer console and verify there are zero errors or failed network requests during a full game loop.
+2. Simulate a full game from start to finish to ensure the scoring and tile placement logic is intact.
+3. Test the built project assets locally under a simulated nested path structure matching how GitHub Pages serves repositories (e.g., `localhost:8080/carcassonne/`) to catch path resolution errors early.
+
 # COMMIT STANDARD
-- One chnage per commit, must document change clearly
-- Atomic
-- Iterative
+- **Atomic Changes:** One specific structural change or logic file translation per commit. 
+- **Iterative & Traceable:** Commits should represent a step-by-step assembly of the phases.
+- **Clean Commit History:** Document messages explicitly detailing what changed, matching exactly the lines impacted.
