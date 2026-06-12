@@ -33,11 +33,11 @@ test.describe('Game Persistence', () => {
 
     while (tilesPlaced < targetTiles) {
       // Try to click a valid placement on the SVG
-      const placement = page.locator('#game-svg .valid-placement, #game-svg [class*="placement"]').first();
+      const placement = page.locator('#game-svg rect.tile-placement').first();
       const hasPlacement = await placement.isVisible({ timeout: 1000 }).catch(() => false);
 
       if (hasPlacement) {
-        await placement.click({ timeout: 3000 });
+        await placement.click({ timeout: 3000, force: true });
         await page.waitForTimeout(200);
         const confirmBtn = page.locator('#hud-confirm');
         if (await confirmBtn.isVisible()) {

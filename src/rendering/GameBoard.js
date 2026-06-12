@@ -20,6 +20,7 @@
  */
 
 import * as d3 from 'd3';
+import { img } from '../utils/AssetPaths.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -107,9 +108,22 @@ function meepleImageSuffix(meepleType, location) {
 }
 
 /** Build the full image path for a meeple. */
-function meepleImagePath(playerIndex, meepleType, location) {
+function meepleImagePath(colorName, meepleType, location) {
   const suffix = meepleImageSuffix(meepleType, location);
-  return `/images/meeples/player_${playerIndex}_${suffix}.png`;
+  return img(`/images/meeples/${colorName}_${suffix}.png`);
+}
+
+/** Map hex color to the CSS colour name used in the sprite filenames. */
+const HEX_TO_COLOR_NAME = {
+  '#e74c3c': 'red',
+  '#3498db': 'blue',
+  '#2ecc71': 'green',
+  '#f39c12': 'yellow',
+  '#9b59b6': 'purple',
+  '#1abc9c': 'gray',
+};
+function colorNameForPlayer(player) {
+  return HEX_TO_COLOR_NAME[player.color] || player.color || 'blue';
 }
 
 /** Resolve the meepleOffset for a placed meeple from the tile's feature data. */
@@ -318,12 +332,12 @@ export function draw(gamestate, playerId, callbacks = {}) {
 
   tileImages
     .attr('transform', (d) => {
-      const x = d.x * TILE_SIZE;
-      const y = d.y * TILE_SIZE;
+      const x = svgWidth / 2 + d.x * TILE_SIZE;
+      const y = svgHeight / 2 + d.y * TILE_SIZE;
       // Rotate around the tile centre then translate.
       return `rotate(${90 * d.rotation},${x + TILE_SIZE / 2},${y + TILE_SIZE / 2}) translate(${x},${y})`;
     })
-    .attr('href', (d) => d.tile.imageURL);
+    .attr('href', (d) => img(d.tile.imageURL));
 
   // ═══════════════════════════════════════════════════════════════════════
   // 2. Placed-tile pieces (meeples + towers)
@@ -341,7 +355,7 @@ export function draw(gamestate, playerId, callbacks = {}) {
   tileGroups.exit().remove();
 
   tileGroups
-    .attr('transform', (d) => `translate(${d.x * TILE_SIZE},${d.y * TILE_SIZE})`);
+    .attr('transform', (d) => `translate(${svgWidth / 2 + d.x * TILE_SIZE},${svgHeight / 2 + d.y * TILE_SIZE})`);
 
   // ── Meeples on placed tiles ───────────────────────────────────────────
   const meepleImages = tileGroups.selectAll('image.meeple')
@@ -350,9 +364,12 @@ export function draw(gamestate, playerId, callbacks = {}) {
       return (d.meeples || []).map((m) => {
         const offset = resolveMeepleOffset(m.placement, tile);
         const pIdx = m.playerIndex;
+        const player = gamestate.players[pIdx] || {};
+        const colorHex = player.color || getPlayerColor(pIdx);
         return {
           playerIndex: pIdx,
-          color: (gamestate.players[pIdx] || {}).color || getPlayerColor(pIdx),
+          colorHex,
+          colorName: colorNameForPlayer({ color: colorHex }),
           rotation: d.rotation,
           location: m.placement.locationType,
           meepleType: m.meepleType,
@@ -373,7 +390,7 @@ export function draw(gamestate, playerId, callbacks = {}) {
     .attr('height', (d) => meepleSize(d.meepleType))
     .attr('x', (d) => d.meepleOffset.x * TILE_SIZE - meepleSize(d.meepleType) / 2)
     .attr('y', (d) => d.meepleOffset.y * TILE_SIZE - meepleSize(d.meepleType) / 2)
-    .attr('href', (d) => meepleImagePath(d.playerIndex, d.meepleType, d.location))
+    .attr('href', (d) => meepleImagePath(d.colorName, d.meepleType, d.location))
     .attr('transform', (d) =>
       `rotate(${d.rotation * -90},${d.meepleOffset.x * TILE_SIZE},${d.meepleOffset.y * TILE_SIZE})`);
 
@@ -400,7 +417,7 @@ export function draw(gamestate, playerId, callbacks = {}) {
       .attr('class', 'tower')
       .attr('width', TILE_SIZE / 3)
       .attr('height', TILE_SIZE / 3)
-      .attr('href', '/images/meeples/tower.png'),
+      .attr('href', img('/images/meeples/tower.png')),
     (update) => update,
     (exit) => exit.remove()
   );
@@ -428,7 +445,7 @@ export function draw(gamestate, playerId, callbacks = {}) {
       .attr('class', 'tower-outline')
       .attr('width', TILE_SIZE / 3)
       .attr('height', TILE_SIZE / 3)
-      .attr('href', '/images/meeples/outline_tower.png')
+      .attr('href', img('/images/meeples/outline_tower.png'))
       .attr('visibility', 'hidden')
       .on('click', function (event, d) {
         // Notify via callback.
@@ -463,7 +480,7 @@ export function draw(gamestate, playerId, callbacks = {}) {
       .attr('class', 'placed-tower')
       .attr('width', TILE_SIZE / 3)
       .attr('height', TILE_SIZE / 3)
-      .attr('href', '/images/meeples/tower.png'),
+      .attr('href', img('/images/meeples/tower.png')),
     (update) => update,
     (exit) => exit.remove()
   );
@@ -499,8 +516,8 @@ export function draw(gamestate, playerId, callbacks = {}) {
   );
 
   turnMarkers
-    .attr('x', (d) => d.x * TILE_SIZE)
-    .attr('y', (d) => d.y * TILE_SIZE)
+    .attr('x', (d) => svgWidth / 2 + d.x * TILE_SIZE)
+    .attr('y', (d) => svgHeight / 2 + d.y * TILE_SIZE)
     .attr('stroke', (d) => d.color);
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -510,16 +527,20 @@ export function draw(gamestate, playerId, callbacks = {}) {
     ? (gamestate.activeTile.validPlacements || [])
     : [];
 
-  const placementSquares = validPlacementsGroup.selectAll('image.tile-placement')
+  const placementSquares = validPlacementsGroup.selectAll('rect.tile-placement')
     .data(validPlacements);
 
   placementSquares.join(
-    (enter) => enter.append('image')
+    (enter) => enter.append('rect')
       .attr('class', 'tile-placement')
       .attr('width', TILE_SIZE)
       .attr('height', TILE_SIZE)
-      .attr('href', '/images/ui/placement_available.png')
-      .attr('opacity', 1)
+      .attr('fill', 'rgba(0, 200, 80, 0.35)')
+      .attr('stroke', '#00cc44')
+      .attr('stroke-width', 2)
+      .attr('rx', 4)
+      .attr('ry', 4)
+      .attr('cursor', 'pointer')
       .on('click', function (event, d) {
         // Default to the first rotation; callers can override.
         const rotation = (d.rotations && d.rotations.length > 0)
@@ -533,8 +554,8 @@ export function draw(gamestate, playerId, callbacks = {}) {
   );
 
   placementSquares
-    .attr('x', (d) => d.x * TILE_SIZE)
-    .attr('y', (d) => d.y * TILE_SIZE);
+    .attr('x', (d) => svgWidth / 2 + d.x * TILE_SIZE)
+    .attr('y', (d) => svgHeight / 2 + d.y * TILE_SIZE);
 
   // ═══════════════════════════════════════════════════════════════════════
   // 5. Scoreboard (fixed, outside zoom)
@@ -671,11 +692,10 @@ function drawScoreboard(container, gamestate, reorderedPlayers, callbacks) {
     const largeData = [];
     reorderedPlayers.forEach((player, i) => {
       if (player.hasLargeMeeple) {
-        const pIdx = getOriginalIndex(player);
         largeData.push({
           x: scoreBoardX,
           y: i * (TILE_SIZE / 2 - 5) + TILE_SIZE / 14,
-          url: `/images/meeples/player_${pIdx}_standing.png`,
+          url: img(`/images/meeples/${colorNameForPlayer(player)}_standing.png`),
           row: i,
         });
       }
@@ -691,11 +711,10 @@ function drawScoreboard(container, gamestate, reorderedPlayers, callbacks) {
     const pigData = [];
     reorderedPlayers.forEach((player, i) => {
       if (player.hasPigMeeple) {
-        const pIdx = getOriginalIndex(player);
         pigData.push({
           x: scoreBoardX,
           y: i * (TILE_SIZE / 2 - 5) + TILE_SIZE / 14,
-          url: `/images/meeples/player_${pIdx}_pig.png`,
+          url: img(`/images/meeples/${colorNameForPlayer(player)}_pig.png`),
           row: i,
         });
       }
@@ -711,11 +730,10 @@ function drawScoreboard(container, gamestate, reorderedPlayers, callbacks) {
     const builderData = [];
     reorderedPlayers.forEach((player, i) => {
       if (player.hasBuilderMeeple) {
-        const pIdx = getOriginalIndex(player);
         builderData.push({
           x: scoreBoardX,
           y: i * (TILE_SIZE / 2 - 5) + TILE_SIZE / 14,
-          url: `/images/meeples/player_${pIdx}_builder.png`,
+          url: img(`/images/meeples/${colorNameForPlayer(player)}_builder.png`),
           row: i,
         });
       }
@@ -734,7 +752,7 @@ function drawScoreboard(container, gamestate, reorderedPlayers, callbacks) {
         towerData.push({
           x: scoreBoardX,
           y: i * (TILE_SIZE / 2 - 5) + TILE_SIZE / 14,
-          url: '/images/meeples/tower.png',
+          url: img('/images/meeples/tower.png'),
           row: i,
           count: player.towers,
         });
@@ -753,19 +771,19 @@ function drawScoreboard(container, gamestate, reorderedPlayers, callbacks) {
     reorderedPlayers.forEach((player, i) => {
       const goods = player.goods || {};
       goodsData.push({
-        url: '/images/tokens/fabric_token.png',
+        url: img('/images/tokens/fabric_token.png'),
         score: goods.fabric || 0,
         x: scoreBoardX,
         y: i * (TILE_SIZE / 2 - 5) + TILE_SIZE / 14,
       });
       goodsData.push({
-        url: '/images/tokens/wheat_token.png',
+        url: img('/images/tokens/wheat_token.png'),
         score: goods.wheat || 0,
         x: scoreBoardX + largeSize,
         y: i * (TILE_SIZE / 2 - 5) + TILE_SIZE / 14,
       });
       goodsData.push({
-        url: '/images/tokens/wine_token.png',
+        url: img('/images/tokens/wine_token.png'),
         score: goods.wine || 0,
         x: scoreBoardX + 2 * largeSize,
         y: i * (TILE_SIZE / 2 - 5) + TILE_SIZE / 14,
@@ -873,8 +891,8 @@ function drawCrownMarkers(tileGroups, gamestate, placedTiles) {
     );
     if (hasCurrentPlayerMeeple) {
       crownData.push({
-        x: pt.x * TILE_SIZE + TILE_SIZE - 18,
-        y: pt.y * TILE_SIZE + 2,
+        x: TILE_SIZE - 18,
+        y: 2,
       });
     }
   });
@@ -889,7 +907,7 @@ function drawCrownMarkers(tileGroups, gamestate, placedTiles) {
       .attr('class', 'crown-marker')
       .attr('width', 16)
       .attr('height', 16)
-      .attr('href', '/images/crown.png')
+      .attr('href', img('/images/crown.png'))
       .attr('pointer-events', 'none'),
     (update) => update,
     (exit) => exit.remove()

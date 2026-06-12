@@ -21,6 +21,7 @@ import {
   setMeeplePlacementMode,
   getBoardTransform,
 } from './GameBoard.js';
+import { img } from '../utils/AssetPaths.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -57,10 +58,27 @@ function meepleImageSuffix(meepleType, location) {
   return location === 'farm' ? 'lying' : 'standing';
 }
 
+/** Map CSS colour names used in the sprite filenames. */
+const COLOR_NAME_MAP = {
+  '#e74c3c': 'red',
+  '#3498db': 'blue',
+  '#2ecc71': 'green',
+  '#f39c12': 'yellow',
+  '#9b59b6': 'purple',
+  '#1abc9c': 'gray',
+};
+
+function resolveColorName(hexOrName) {
+  return COLOR_NAME_MAP[hexOrName] || hexOrName || 'blue';
+}
+
 /** Build full meeple image path. */
-function meepleImagePath(playerIndex, meepleType, location) {
+function meepleImagePath(colorIdent, meepleType, location) {
   const suffix = meepleImageSuffix(meepleType, location);
-  return `/images/meeples/player_${playerIndex}_${suffix}.png`;
+  const colorName = typeof colorIdent === 'number'
+    ? resolveColorName('#3498db') // fallback for numeric indices
+    : resolveColorName(colorIdent);
+  return img(`/images/meeples/${colorName}_${suffix}.png`);
 }
 
 /** Resolve meeple offset from tile feature data. */
@@ -142,7 +160,7 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
     .attr('y', -TILE_SIZE / 2)
     .attr('width', TILE_SIZE)
     .attr('height', TILE_SIZE)
-    .attr('href', tileData.imageURL)
+    .attr('href', img(tileData.imageURL))
     .attr('opacity', 0.85);
 
   // Rotation indicator (hidden by default, shown when rotation changes).
@@ -169,7 +187,7 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
     .attr('height', MEEMPLE_NORMAL_SIZE)
     .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 2 - MEEMPLE_NORMAL_SIZE / 2)
     .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 2 - MEEMPLE_NORMAL_SIZE / 2)
-    .attr('href', '/images/meeples/outline_regular.png')
+    .attr('href', img('/images/meeples/outline_standing.png'))
     .attr('visibility', 'hidden')
     .attr('cursor', 'pointer')
     .on('click', function (event, d) {
@@ -538,10 +556,10 @@ function updatePlacedMeeple(data, playerState) {
   if (!groups) return;
 
   const meepleGroup = groups.meeplePlacementsGroup;
-  const pIdx = playerState ? playerState.index || 0 : 0;
+  const colorIdent = playerState ? playerState.color || 'blue' : 'blue';
   const type = currentMeepleType === 'large' ? 'normal' : currentMeepleType;
   const size = meepleSize(type);
-  const path = meepleImagePath(pIdx, type, data.locationType);
+  const path = meepleImagePath(colorIdent, type, data.locationType);
 
   // Remove any existing placed meeple for this location.
   meepleGroup.selectAll('image.placed-meeple')
