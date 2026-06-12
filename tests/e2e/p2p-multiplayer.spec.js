@@ -41,36 +41,23 @@ test.describe('Multiplayer Game', () => {
 
     // ── 3. Play a turn ───────────────────────────────────────────────
     let playedTurn = false;
-    let usedSkip = false;
 
     for (let i = 0; i < 20; i++) {
-      // Try to click a valid placement on the SVG
-      const placement = page.locator('#game-svg rect.tile-placement').first();
+      // Try to click a valid placement on the SVG (image elements since migration)
+      const placement = page.locator('#game-svg image.tile-placement').first();
       const hasPlacement = await placement.isVisible({ timeout: 1000 }).catch(() => false);
 
       if (hasPlacement) {
         await placement.click({ timeout: 3000, force: true });
-        await page.waitForTimeout(200);
+        await page.waitForTimeout(400);
         const confirmBtn = page.locator('#hud-confirm');
         if (await confirmBtn.isVisible()) {
           await confirmBtn.click();
           await page.waitForTimeout(500);
           playedTurn = true;
-          usedSkip = false;
           console.log('Placed tile via confirm button');
           break;
         }
-      }
-
-      // Skip if can't place
-      const skipBtn = page.locator('#hud-skip');
-      if (await skipBtn.isVisible({ timeout: 500 }).catch(() => false)) {
-        await skipBtn.click();
-        await page.waitForTimeout(500);
-        playedTurn = true;
-        usedSkip = true;
-        console.log('Skipped turn');
-        break;
       }
 
       await page.waitForTimeout(500);

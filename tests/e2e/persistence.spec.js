@@ -32,13 +32,13 @@ test.describe('Game Persistence', () => {
     const targetTiles = 3;
 
     while (tilesPlaced < targetTiles) {
-      // Try to click a valid placement on the SVG
-      const placement = page.locator('#game-svg rect.tile-placement').first();
+      // Try to click a valid placement on the SVG (image elements since migration)
+      const placement = page.locator('#game-svg image.tile-placement').first();
       const hasPlacement = await placement.isVisible({ timeout: 1000 }).catch(() => false);
 
       if (hasPlacement) {
         await placement.click({ timeout: 3000, force: true });
-        await page.waitForTimeout(200);
+        await page.waitForTimeout(400);
         const confirmBtn = page.locator('#hud-confirm');
         if (await confirmBtn.isVisible()) {
           await confirmBtn.click();
@@ -46,15 +46,6 @@ test.describe('Game Persistence', () => {
           tilesPlaced++;
           continue;
         }
-      }
-
-      // Skip if can't place
-      const skipBtn = page.locator('#hud-skip');
-      if (await skipBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await skipBtn.click();
-        await page.waitForTimeout(500);
-        tilesPlaced++;
-        continue;
       }
 
       await page.waitForTimeout(500);
