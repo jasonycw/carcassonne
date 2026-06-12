@@ -179,6 +179,14 @@ export function drawTile(gamestate) {
     gamestate.expansions,
   );
 
+  // If the drawn tile has no valid placements, auto-advance to next player
+  // (skip turn — the tile is lost from the pile just as in the original game).
+  if (validPlacements.length === 0) {
+    // Find the next active player and try drawing again.
+    advanceToNextPlayer(gamestate);
+    return drawTile(gamestate);
+  }
+
   gamestate.activeTile = {
     tile: drawnTile,
     validPlacements,
