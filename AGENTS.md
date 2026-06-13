@@ -35,6 +35,7 @@ Before committing tasks or marking a feature phase complete, you must explicitly
 3. Test the built project assets locally under a simulated nested path structure matching how GitHub Pages serves repositories (e.g., `localhost:8080/carcassonne/`) to catch path resolution errors early.
 
 # COMMIT STANDARD
+This must be followed everytime, for audit, tracking and prevent huge chunk of undocumented changes
 - **Atomic Changes:** One specific structural change or logic file translation per commit. 
 - **Iterative & Traceable:** Commits should represent a step-by-step assembly of the phases. Never one commit with multiple changes/fixes
 - **Clean Commit History:** Document messages explicitly detailing what changed, matching exactly the lines impacted.
