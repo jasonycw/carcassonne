@@ -1,30 +1,30 @@
 # Concarneau — Carcassonne P2P Web Game
 
-A browser-based Carcassonne board game with solo play and peer-to-peer multiplayer. Originally an Express/MongoDB app, now a fully static SPA powered by Vite, D3.js, and PeerJS.
+A browser-based Carcassonne board game with solo play and peer-to-peer multiplayer. Originally an Express/MongoDB/WebSocket app, now a fully static SPA hosted on GitHub Pages — no server required.
 
-Play solo against yourself, or create a room and share the code to play with friends over WebRTC!
+Play solo, hot-seat with friends on one device, or create a room and share the code to play over WebRTC!
 
 ## Screenshots
 
-| Lobby | Game Board | Tiles Placed |
-|-------|------------|--------------|
+| Lobby | Game Started | Mid-game |
+|-------|-------------|----------|
 | ![Lobby](screenshots/01-lobby.png) | ![Game Board](screenshots/03-game-board.png) | ![Multiple Tiles](screenshots/05-multiple-tiles.png) |
 
 ## Features
 
 - **Solo play** — play a full game by yourself
 - **Hot-seat multiplayer** — 2–6 players on one device
-- **P2P multiplayer** — real-time WebRTC via PeerJS (room-based)
-- **Tile placement** — drag-and-drop tile positioning with rotation
-- **Meeple placement** — place meeples on cities, roads, cloisters, and fields
-- **Scoring** — automatic scoring for completed features (cities, roads, cloisters)
-- **Game recovery** — saved game state survives browser refresh
+- **P2P multiplayer** — real-time WebRTC via PeerJS (room-based, up to 5 players)
+- **Tile placement** — click valid board positions, then click tile to rotate
+- **Meeple placement** — place meeples on cities, roads, cloisters, and fields (toggle on/off by clicking)
+- **Scoring** — automatic scoring for completed features (cities, roads, cloisters) with end-game bonus
+- **Game recovery** — saved game state survives browser refresh via localStorage
 - **Expansions** (optional):
-  - Inns & Cathedrals
-  - Traders & Builders
-  - The Tower
-- **Responsive SVG board** — pan & zoom with mouse wheel
-- **Scoreboard** — live player scores with meeple pool
+  - Inns & Cathedrals (large meeples)
+  - Traders & Builders (builder, pig, goods tokens)
+  - The Tower (tower pieces, captures)
+- **Responsive SVG board** — pan & zoom with mouse wheel / pinch
+- **Scoreboard** — live player scores, meeple counts, expansion piece indicators
 
 ## Quick Start
 
@@ -35,7 +35,9 @@ npm install
 npm run dev        # → http://localhost:5173/carcassonne/
 ```
 
-Open the URL, enter your name, select "Solo" (or more players), and click **Create Game**. The room code will appear — for a solo game just click **Start Game**.
+Open the URL, enter your name, select player count and expansions, then click **Create Game**. The room code and invite link will appear — for solo/hot-seat games just click **Start Game**. Share the invite link for P2P multiplayer.
+
+**Gameplay flow:** Click a highlighted valid placement on the board → click the floating tile to rotate → click **Place Tile** to confirm rotation → (optional) click a meeple outline to place/remove a meeple → click **Send Move** to finalize.
 
 ## Scripts
 
@@ -73,8 +75,8 @@ src/
 │   ├── TileData.js         # All tile definitions
 │   └── FeatureTracker.js   # Connected feature tracking
 ├── rendering/
-│   ├── GameBoard.js        # D3 SVG board renderer (tiles, placements, scoreboard)
-│   ├── ActiveTile.js       # Floating active tile & meeple placement UI
+│   ├── GameBoard.js        # D3 SVG board renderer (tiles, meeples, valid placements)
+│   ├── ActiveTile.js       # Floating active tile, rotation, meeple placement UI
 │   └── ScoreBoard.js       # HTML scoreboard component
 ├── network/
 │   ├── PeerManager.js      # PeerJS P2P networking (host + client)
