@@ -277,6 +277,12 @@ export class GameView {
   }
 
   _updateTurnIndicator() {
+    // In local games (solo or hot-seat), the browser controls all players.
+    // Sync the viewing player index to the current turn so controls show.
+    if (this.isLocalGame && this.gamestate) {
+      this.playerIndex = this.gamestate.currentPlayerIndex;
+    }
+
     const p = this.gamestate.players[this.gamestate.currentPlayerIndex];
     if (this.dom && this.dom.turnIndicator) {
       this.dom.turnIndicator.textContent = p
