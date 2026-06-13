@@ -2,7 +2,7 @@
 To migrate the Carcassonne board game to a static GitHub Pages on https://jasonycw.github.io/carcassonne/ with simple multiplayer support, removing the requirement for user authentication and server-side hosting fees.
 
 # BACKGROUND & CONTEXT
-- **Baseline Functional Commit:** `962f33eed833cb2cb845e40bb5d7186e66dc6d2d`
+- **Baseline Functional Commit Before migration:** `962f33eed833cb2cb845e40bb5d7186e66dc6d2d` (Not just this commit change, it is just the latest commit, must check the whole repo at that point in time)
 - **The Problem:** The baseline version requires user login, server-side persistence, or external hosting configurations that incur costs/maintenance.
 - **The Solution:** Strip out the backend entirely. Port all game mechanics, tile definitions, and structural verification into a pure, client-side JavaScript architecture that compiles into static assets served completely free of charge on GitHub Pages. Migrate to a 100% standalone frontend game client running entirely in the browser via GitHub Pages with mobile support.
 
