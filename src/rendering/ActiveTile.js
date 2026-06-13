@@ -192,16 +192,31 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
         .duration(200)
         .attr('transform', `rotate(${currentRotation * 90}) scale(${scale})`);
 
+      // Show rotation indicator briefly.
+      const indicator = activeTileRotGroup.select('text.rotation-indicator');
+      if (!indicator.empty()) {
+        indicator.attr('opacity', 1)
+          .transition().delay(500).duration(300)
+          .attr('opacity', 0);
+      }
+
       if (onRotationChangedCallback) {
         onRotationChangedCallback(currentRotation);
       }
     });
 
-  // Rotation indicator (hidden by default, shown when rotation changes).
-  const rotIndicator = activeTileRotGroup.select('.active-tile-rotation-indicator');
-  if (!rotIndicator.empty()) {
-    rotIndicator.attr('visibility', null).attr('opacity', 0);
-  }
+   // Rotation indicator text (shows current rotation: 0°, 90°, 180°, 270°).
+   activeTileRotGroup.append('text')
+    .attr('class', 'rotation-indicator')
+    .attr('x', 0)
+    .attr('y', TILE_SIZE / 2 + 5)
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '12px')
+    .attr('font-weight', 'bold')
+    .attr('fill', '#fff')
+    .attr('pointer-events', 'none')
+    .attr('opacity', 0)
+    .text(`${currentRotation * 90}°`);
 
   // ── Meeple placements group ──────────────────────────────────────────
   // Hide until a valid placement is selected.
@@ -306,11 +321,13 @@ function rotateActiveTile(direction) {
     .attr('transform', `rotate(${currentRotation * 90}) scale(${scale})`);
 
   // Flash the rotation indicator.
-  const indicator = groups.activeTileRotGroup.select('.active-tile-rotation-indicator');
+  const indicator = groups.activeTileRotGroup.select('text.rotation-indicator');
   if (!indicator.empty()) {
-    indicator.attr('opacity', 1)
+    indicator.text(`${currentRotation * 90}°`)
+      .attr('opacity', 1)
       .transition()
-      .duration(800)
+      .delay(300)
+      .duration(300)
       .attr('opacity', 0);
   }
 
