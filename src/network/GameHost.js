@@ -62,6 +62,18 @@ export class GameHost extends EventEmitter {
    * Validates via placeTile(), sends back MOVE_RESULT, broadcasts new state.
    */
   _handlePlaceTile(payload, conn) {
+    // Validate sender is the current player.
+    const playerEntry = conn ? this.hostPeerManager.connectedPlayers.find(p => p.conn === conn) : null;
+    const senderIdx = playerEntry ? playerEntry.playerIndex : this.gamestate.currentPlayerIndex;
+    if (senderIdx !== this.gamestate.currentPlayerIndex) {
+      if (conn) {
+        this.hostPeerManager.send(conn, createMessage(MessageType.MOVE_RESULT, {
+          success: false, message: 'Not your turn',
+        }));
+      }
+      return;
+    }
+
     const { x, y, rotation, meeple } = payload;
     const result = glPlaceTile(this.gamestate, x, y, rotation, meeple);
 
@@ -79,6 +91,11 @@ export class GameHost extends EventEmitter {
 
   /** Handle a PLACE_MEEPLE move from a remote client. */
   _handlePlaceMeeple(payload, conn) {
+    if (!this._validateTurn(conn)) {
+      this.hostPeerManager.send(conn, createMessage(MessageType.MOVE_RESULT, { success: false, message: 'Not your turn' }));
+      return;
+    }
+
     const { tileIndex, locationType, index, meepleType } = payload;
     const result = glPlaceMeeple(this.gamestate, tileIndex, locationType, index, meepleType);
     const success = result !== false;
@@ -94,15 +111,30 @@ export class GameHost extends EventEmitter {
 
   /** Handle a SKIP_MEEPLE from a remote client. */
   _handleSkipMeeple(conn) {
+    if (!this._validateTurn(conn)) {
+      this.hostPeerManager.send(conn, createMessage(MessageType.MOVE_RESULT, { success: false, message: 'Not your turn' }));
+      return;
+    }
     glSkipMeeple(this.gamestate);
     this.broadcastState();
   }
 
   /** Handle a SKIP_TURN from a remote client. */
   _handleSkipTurn(conn) {
+    if (!this._validateTurn(conn)) {
+      this.hostPeerManager.send(conn, createMessage(MessageType.MOVE_RESULT, { success: false, message: 'Not your turn' }));
+      return;
+    }
     glSkipTurn(this.gamestate);
     this.broadcastState();
     this._checkGameOver();
+  }
+
+  /** Validate that the sender is the current player. */
+  _validateTurn(conn) {
+    if (!conn) return true; // host player, always valid
+    const playerEntry = this.hostPeerManager.connectedPlayers.find(p => p.conn === conn);
+    return playerEntry && playerEntry.playerIndex === this.gamestate.currentPlayerIndex;
   }
 
   /** Relay a chat message from a client to all connected peers. */

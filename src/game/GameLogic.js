@@ -29,7 +29,7 @@ import { getFeatureInfo, checkAndFinalizeFeature, completeGame as scoringComplet
 // Constants
 // ---------------------------------------------------------------------------
 
-const PLAYER_COLORS = ['red', 'blue', 'green', 'purple', 'orange', 'teal'];
+const PLAYER_COLORS = ['red', 'blue', 'green', 'yellow', 'purple', 'gray'];
 const DEFAULT_MEEPLE_COUNT = 7;
 
 // ---------------------------------------------------------------------------

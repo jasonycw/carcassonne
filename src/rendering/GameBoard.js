@@ -239,7 +239,9 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('pointer-events', 'none');
 
   // Active-tile container (outside zoomGroup so it stays fixed on screen).
-  activeTileGroup = uiGroup.append('g').attr('class', 'active-tile');
+  activeTileGroup = uiGroup.append('g')
+    .attr('class', 'active-tile')
+    .attr('visibility', 'hidden');
   activeTileTransGroup = activeTileGroup.append('g')
     .attr('class', 'active-tile-translation')
     .attr('transform', `translate(${TILE_SIZE / 2},${TILE_SIZE / 2})`);
@@ -309,28 +311,23 @@ export function draw(gamestate, playerId, callbacks = {}) {
   const reorderedPlayers = reorderPlayersForView(gamestate.players, playerId);
   const viewerIsActive = reorderedPlayers.length > 0 && reorderedPlayers[0].active;
 
-2;
-
   // ═══════════════════════════════════════════════════════════════════════
   // 1. Placed-tile images
   // ═══════════════════════════════════════════════════════════════════════
   const placedTiles = gamestate.placedTiles || [];
 
-  const tileImages = placedTileImagesGroup.selectAll('image.placed-tile-image')
-    .data(placedTiles, (d, i) => `${d.x}:${d.y}:${i}`);
-
-  tileImages.join(
-    (enter) => enter.append('image')
-      .attr('class', 'placed-tile-image')
-      .attr('x', 0)
-      .attr('y', 0)
-      .attr('width', TILE_SIZE)
-      .attr('height', TILE_SIZE),
-    (update) => update,
-    (exit) => exit.remove()
-  );
-
-  tileImages
+  placedTileImagesGroup.selectAll('image.placed-tile-image')
+    .data(placedTiles, (d, i) => `${d.x}:${d.y}:${i}`)
+    .join(
+      (enter) => enter.append('image')
+        .attr('class', 'placed-tile-image')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', TILE_SIZE)
+        .attr('height', TILE_SIZE),
+      (update) => update,
+      (exit) => exit.remove()
+    )
     .attr('transform', (d) => {
       const x = svgWidth / 2 + d.x * TILE_SIZE;
       const y = svgHeight / 2 + d.y * TILE_SIZE;
@@ -342,7 +339,7 @@ export function draw(gamestate, playerId, callbacks = {}) {
   // ═══════════════════════════════════════════════════════════════════════
   // 2. Placed-tile pieces (meeples + towers)
   // ═══════════════════════════════════════════════════════════════════════
-  const tileGroups = placedTilePiecesGroup.selectAll('g.placed-tile')
+  let tileGroups = placedTilePiecesGroup.selectAll('g.placed-tile')
     .data(placedTiles, (d, i) => `${d.x}:${d.y}:${i}`);
 
   const tileGroupsEnter = tileGroups.enter().append('g')
@@ -354,11 +351,13 @@ export function draw(gamestate, playerId, callbacks = {}) {
 
   tileGroups.exit().remove();
 
+  tileGroups = tileGroups.merge(tileGroupsEnter);
+
   tileGroups
     .attr('transform', (d) => `translate(${svgWidth / 2 + d.x * TILE_SIZE},${svgHeight / 2 + d.y * TILE_SIZE})`);
 
   // ── Meeples on placed tiles ───────────────────────────────────────────
-  const meepleImages = tileGroups.selectAll('image.meeple')
+  tileGroups.selectAll('image.meeple')
     .data((d) => {
       const tile = d.tile;
       return (d.meeples || []).map((m) => {
@@ -376,16 +375,13 @@ export function draw(gamestate, playerId, callbacks = {}) {
           meepleOffset: offset,
         };
       });
-    });
-
-  meepleImages.join(
-    (enter) => enter.append('image')
-      .attr('class', 'meeple'),
-    (update) => update,
-    (exit) => exit.remove()
-  );
-
-  meepleImages
+    })
+    .join(
+      (enter) => enter.append('image')
+        .attr('class', 'meeple'),
+      (update) => update,
+      (exit) => exit.remove()
+    )
     .attr('width', (d) => meepleSize(d.meepleType))
     .attr('height', (d) => meepleSize(d.meepleType))
     .attr('x', (d) => d.meepleOffset.x * TILE_SIZE - meepleSize(d.meepleType) / 2)
@@ -398,7 +394,7 @@ export function draw(gamestate, playerId, callbacks = {}) {
   const towerVerticalSize = TILE_SIZE / 12;
 
   // Already-placed tower floors.
-  const placedTowers = tileGroups.select('g.tower-pieces').selectAll('image.tower')
+  tileGroups.select('g.tower-pieces').selectAll('image.tower')
     .data((d) => {
       if (!d.tower) return [];
       const arr = [];
@@ -410,26 +406,23 @@ export function draw(gamestate, playerId, callbacks = {}) {
         });
       }
       return arr;
-    });
-
-  placedTowers.join(
-    (enter) => enter.append('image')
-      .attr('class', 'tower')
-      .attr('width', TILE_SIZE / 3)
-      .attr('height', TILE_SIZE / 3)
-      .attr('href', img('/images/meeples/tower.png')),
-    (update) => update,
-    (exit) => exit.remove()
-  );
-
-  placedTowers
+    })
+    .join(
+      (enter) => enter.append('image')
+        .attr('class', 'tower')
+        .attr('width', TILE_SIZE / 3)
+        .attr('height', TILE_SIZE / 3)
+        .attr('href', img('/images/meeples/tower.png')),
+      (update) => update,
+      (exit) => exit.remove()
+    )
     .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 6)
     .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6 - towerVerticalSize * d.towerHeight)
     .attr('transform', (d) =>
       `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE})`);
 
   // Tower outlines (unplaced, clickable).
-  const towerOutlines = tileGroups.selectAll('image.tower-outline')
+  tileGroups.selectAll('image.tower-outline')
     .data((d, i) => {
       if (!d.tile.tower || d.tower.completed) return [];
       return [{
@@ -438,33 +431,30 @@ export function draw(gamestate, playerId, callbacks = {}) {
         tileIndex: i,
         towerHeight: d.tower.height,
       }];
-    });
-
-  towerOutlines.join(
-    (enter) => enter.append('image')
-      .attr('class', 'tower-outline')
-      .attr('width', TILE_SIZE / 3)
-      .attr('height', TILE_SIZE / 3)
-      .attr('href', img('/images/meeples/outline_tower.png'))
-      .attr('visibility', 'hidden')
-      .on('click', function (event, d) {
-        // Notify via callback.
-        if (callbacks.onTowerOutlineClick) {
-          callbacks.onTowerOutlineClick(d.tileIndex);
-        }
-      }),
-    (update) => update,
-    (exit) => exit.remove()
-  );
-
-  towerOutlines
+    })
+    .join(
+      (enter) => enter.append('image')
+        .attr('class', 'tower-outline')
+        .attr('width', TILE_SIZE / 3)
+        .attr('height', TILE_SIZE / 3)
+        .attr('href', img('/images/meeples/outline_tower.png'))
+        .attr('visibility', 'hidden')
+        .on('click', function (event, d) {
+          // Notify via callback.
+          if (callbacks.onTowerOutlineClick) {
+            callbacks.onTowerOutlineClick(d.tileIndex);
+          }
+        }),
+      (update) => update,
+      (exit) => exit.remove()
+    )
     .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 6)
     .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6 - towerVerticalSize * d.towerHeight)
     .attr('transform', (d) =>
       `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE})`);
 
   // Tower placements (overlaid on outline when selected).
-  const towerPlacements = tileGroups.selectAll('image.placed-tower')
+  tileGroups.selectAll('image.placed-tower')
     .data((d, i) => {
       if (!d.tile.tower || d.tower.completed) return [];
       return [{
@@ -473,19 +463,16 @@ export function draw(gamestate, playerId, callbacks = {}) {
         tileIndex: i,
         towerHeight: d.tower.height,
       }];
-    });
-
-  towerPlacements.join(
-    (enter) => enter.append('image')
-      .attr('class', 'placed-tower')
-      .attr('width', TILE_SIZE / 3)
-      .attr('height', TILE_SIZE / 3)
-      .attr('href', img('/images/meeples/tower.png')),
-    (update) => update,
-    (exit) => exit.remove()
-  );
-
-  towerPlacements
+    })
+    .join(
+      (enter) => enter.append('image')
+        .attr('class', 'placed-tower')
+        .attr('width', TILE_SIZE / 3)
+        .attr('height', TILE_SIZE / 3)
+        .attr('href', img('/images/meeples/tower.png')),
+      (update) => update,
+      (exit) => exit.remove()
+    )
     .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 6)
     .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6 - towerVerticalSize * d.towerHeight)
     .attr('transform', (d) =>
@@ -497,25 +484,22 @@ export function draw(gamestate, playerId, callbacks = {}) {
   // ═══════════════════════════════════════════════════════════════════════
   const markers = buildTurnMarkers(placedTiles, gamestate.players || []);
 
-  const turnMarkers = turnMarkerGroup.selectAll('rect.turn-marker')
-    .data(markers);
-
-  turnMarkers.join(
-    (enter) => enter.append('rect')
-      .attr('class', 'turn-marker')
-      .attr('fill-opacity', 0)
-      .attr('stroke-width', 4)
-      .attr('stroke-linejoin', 'round')
-      .attr('rx', 7)
-      .attr('ry', 7)
-      .attr('width', TILE_SIZE)
-      .attr('height', TILE_SIZE)
-      .attr('pointer-events', 'none'),
-    (update) => update,
-    (exit) => exit.remove()
-  );
-
-  turnMarkers
+  turnMarkerGroup.selectAll('rect.turn-marker')
+    .data(markers)
+    .join(
+      (enter) => enter.append('rect')
+        .attr('class', 'turn-marker')
+        .attr('fill-opacity', 0)
+        .attr('stroke-width', 4)
+        .attr('stroke-linejoin', 'round')
+        .attr('rx', 7)
+        .attr('ry', 7)
+        .attr('width', TILE_SIZE)
+        .attr('height', TILE_SIZE)
+        .attr('pointer-events', 'none'),
+      (update) => update,
+      (exit) => exit.remove()
+    )
     .attr('x', (d) => svgWidth / 2 + d.x * TILE_SIZE)
     .attr('y', (d) => svgHeight / 2 + d.y * TILE_SIZE)
     .attr('stroke', (d) => d.color);
@@ -527,39 +511,32 @@ export function draw(gamestate, playerId, callbacks = {}) {
     ? (gamestate.activeTile.validPlacements || [])
     : [];
 
-  const placementImages = validPlacementsGroup.selectAll('image.tile-placement')
-    .data(validPlacements);
-
-  placementImages.join(
-    (enter) => enter.append('image')
-      .attr('class', 'tile-placement')
-      .attr('width', TILE_SIZE)
-      .attr('height', TILE_SIZE)
-      .attr('href', img('/images/ui/placement_available.png'))
-      .attr('cursor', 'pointer')
-      .on('click', function (event, d) {
-        // Default to the first rotation; callers can override.
-        const rotation = (d.rotations && d.rotations.length > 0)
-          ? d.rotations[0].rotation : 0;
-        if (callbacks.onPlacementClick) {
-          callbacks.onPlacementClick(d.x, d.y, rotation);
-        }
-      }),
-    (update) => update,
-    (exit) => exit.remove()
-  );
-
-  placementImages
+  validPlacementsGroup.selectAll('image.tile-placement')
+    .data(validPlacements)
+    .join(
+      (enter) => enter.append('image')
+        .attr('class', 'tile-placement')
+        .attr('width', TILE_SIZE)
+        .attr('height', TILE_SIZE)
+        .attr('href', img('/images/ui/placement_available.png'))
+        .attr('cursor', 'pointer')
+        .on('click', function (event, d) {
+          // Default to the first rotation; callers can override.
+          const rotation = (d.rotations && d.rotations.length > 0)
+            ? d.rotations[0].rotation : 0;
+          if (callbacks.onPlacementClick) {
+            callbacks.onPlacementClick(d.x, d.y, rotation);
+          }
+        }),
+      (update) => update,
+      (exit) => exit.remove()
+    )
     .attr('x', (d) => svgWidth / 2 + d.x * TILE_SIZE)
     .attr('y', (d) => svgHeight / 2 + d.y * TILE_SIZE);
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 5. Scoreboard (fixed, outside zoom)
-  // ═══════════════════════════════════════════════════════════════════════
-  drawScoreboard(scoreArea, gamestate, reorderedPlayers, callbacks);
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // 6. Crown markers (small crown on tiles with the current player's meeple)
+  // 5. Crown markers (small crown on tiles with the current player's meeple)
+  //    Scoreboard is rendered as HTML by ScoreBoard.js via GameView.
   // ═══════════════════════════════════════════════════════════════════════
   drawCrownMarkers(tileGroups, gamestate, placedTiles);
 }
@@ -642,11 +619,12 @@ function drawScoreboard(container, gamestate, reorderedPlayers, callbacks) {
   const normalMeepleData = [];
   reorderedPlayers.forEach((player, i) => {
     const pIdx = getOriginalIndex(player);
+    const colorName = player.color || getPlayerColor(pIdx);
     for (let k = 0; k < player.remainingMeeples; k++) {
       normalMeepleData.push({
         x: 5 + k * (TILE_SIZE / 4.75),
         y: TILE_SIZE / 4 - 5 + i * (TILE_SIZE / 2 - 5),
-        url: meepleImagePath(pIdx, 'normal', 'city'), // standing in pool
+        url: meepleImagePath(colorName, 'normal', 'city'), // standing in pool
         row: i,
         playerIndex: pIdx,
       });
@@ -691,7 +669,7 @@ function drawScoreboard(container, gamestate, reorderedPlayers, callbacks) {
         largeData.push({
           x: scoreBoardX,
           y: i * (TILE_SIZE / 2 - 5) + TILE_SIZE / 14,
-          url: img(`/images/meeples/${colorNameForPlayer(player)}_standing.png`),
+          url: img(`/images/meeples/${player.color}_standing.png`),
           row: i,
         });
       }
@@ -710,7 +688,7 @@ function drawScoreboard(container, gamestate, reorderedPlayers, callbacks) {
         pigData.push({
           x: scoreBoardX,
           y: i * (TILE_SIZE / 2 - 5) + TILE_SIZE / 14,
-          url: img(`/images/meeples/${colorNameForPlayer(player)}_pig.png`),
+          url: img(`/images/meeples/${player.color}_pig.png`),
           row: i,
         });
       }
@@ -729,7 +707,7 @@ function drawScoreboard(container, gamestate, reorderedPlayers, callbacks) {
         builderData.push({
           x: scoreBoardX,
           y: i * (TILE_SIZE / 2 - 5) + TILE_SIZE / 14,
-          url: img(`/images/meeples/${colorNameForPlayer(player)}_builder.png`),
+          url: img(`/images/meeples/${player.color}_builder.png`),
           row: i,
         });
       }
@@ -895,21 +873,18 @@ function drawCrownMarkers(tileGroups, gamestate, placedTiles) {
 
   // Crown markers are drawn directly into the tileGroups container.
   // We use a separate selection for cleanliness.
-  const crowns = tileGroups.selectAll('image.crown-marker')
-    .data(crownData);
-
-  crowns.join(
-    (enter) => enter.append('image')
-      .attr('class', 'crown-marker')
-      .attr('width', 16)
-      .attr('height', 16)
-      .attr('href', img('/images/crown.png'))
-      .attr('pointer-events', 'none'),
-    (update) => update,
-    (exit) => exit.remove()
-  );
-
-  crowns
+  tileGroups.selectAll('image.crown-marker')
+    .data(crownData)
+    .join(
+      (enter) => enter.append('image')
+        .attr('class', 'crown-marker')
+        .attr('width', 16)
+        .attr('height', 16)
+        .attr('href', img('/images/crown.png'))
+        .attr('pointer-events', 'none'),
+      (update) => update,
+      (exit) => exit.remove()
+    )
     .attr('x', (d) => d.x)
     .attr('y', (d) => d.y);
 }
@@ -1004,6 +979,43 @@ export function clearBoard() {
   lastGamestate = null;
   lastPlayerId = null;
   lastCallbacks = null;
+}
+
+// ---------------------------------------------------------------------------
+// gridToScreen / screenToGrid — coordinate transformation helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert board grid coordinates (d.x, d.y) to on-screen pixel coordinates,
+ * accounting for D3 zoom/pan transform.
+ *
+ * Board position origin is at (svgWidth/2, svgHeight/2), so a tile at grid
+ * (0,0) renders at svgWidth/2, svgHeight/2 in the zoom-group coordinate
+ * space.  This function applies the zoom transform to get screen px.
+ *
+ * @param {number} gridX  Tile grid X
+ * @param {number} gridY  Tile grid Y
+ * @returns {{ x: number, y: number }} Screen pixel coordinates
+ */
+export function gridToScreen(gridX, gridY) {
+  const boardX = svgWidth / 2 + gridX * TILE_SIZE;
+  const boardY = svgHeight / 2 + gridY * TILE_SIZE;
+  if (!svgSelection) return { x: boardX, y: boardY };
+  const t = d3.zoomTransform(svgSelection.node());
+  return { x: t.applyX(boardX), y: t.applyY(boardY) };
+}
+
+/**
+ * Return the current SVG dimensions, tile size, and zoom transform
+ * so ActiveTile can compute screen positions.
+ */
+export function getBoardMetrics() {
+  return {
+    svgWidth,
+    svgHeight,
+    TILE_SIZE,
+    transform: svgSelection ? d3.zoomTransform(svgSelection.node()) : d3.zoomIdentity,
+  };
 }
 
 // ---------------------------------------------------------------------------

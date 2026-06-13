@@ -20,6 +20,7 @@ import {
 import {
   MessageType,
   joinRequest,
+  createMessage,
 } from '../network/Protocol.js';
 import { createGameState, initializeNewGame } from '../game/GameLogic.js';
 import { ALL_TILES as TILE_DATA } from '../game/TileData.js';
@@ -270,9 +271,17 @@ export class LobbyView extends EventEmitter {
       this.dom.roomCode.textContent = this.roomCode;
       this.dom.roomDisplay.style.display = 'block';
 
-      // Hide create/join forms.
-      const lobbyForms = this.container.querySelector('#lobby-forms');
-      if (lobbyForms) lobbyForms.style.display = 'none';
+      // Hide the action buttons but keep the name input visible.
+      const createBtn = this.dom.createBtn;
+      const joinBtn = this.dom.joinBtn;
+      const joinForm = this.dom.joinForm;
+      const playerCount = this.dom.playerCount;
+      const expansionContainer = this.container.querySelector('#lobby-forms div:nth-child(2)');
+      if (createBtn) createBtn.style.display = 'none';
+      if (joinBtn) joinBtn.style.display = 'none';
+      if (joinForm) joinForm.style.display = 'none';
+      if (playerCount) playerCount.style.display = 'none';
+      if (expansionContainer) expansionContainer.style.display = 'none';
 
       // Add host to player list.
       this.players = [{ name, isHost: true, playerIndex: 0 }];
@@ -294,6 +303,26 @@ export class LobbyView extends EventEmitter {
             this._updatePlayerList();
             this._setStatus(`${message.payload.playerName} joined!`);
           }
+        }
+      });
+
+      // Auto-remove player on disconnect.
+      this.peerManager.on('peer-disconnected', (conn) => {
+        const idx = this.players.findIndex(
+          (p) => !p.isHost && p.playerIndex === this.peerManager.connectedPlayers.find(cp => cp.conn === conn)?.playerIndex
+        );
+        if (idx !== -1) {
+          const removed = this.players.splice(idx, 1)[0];
+          this._updatePlayerList();
+          this._setStatus(`${removed.name} disconnected`);
+        }
+      });
+
+      // Add name change listener for host: re-render player list on input.
+      this.dom.playerName.addEventListener('input', () => {
+        if (this.players.length > 0 && this.players[0].isHost) {
+          this.players[0].name = this.dom.playerName.value.trim() || 'Host';
+          this._updatePlayerList();
         }
       });
 
@@ -334,12 +363,36 @@ export class LobbyView extends EventEmitter {
       this.peerManager = new ClientPeerManager(code);
       const result = await this.peerManager.connectToHost(name);
 
-      const lobbyForms = this.container.querySelector('#lobby-forms');
-      if (lobbyForms) lobbyForms.style.display = 'none';
-      this._setStatus(`Joined as Player ${result.playerIndex + 1}`);
+      // Hide the action buttons, keep name input visible.
+      const createBtn = this.dom.createBtn;
+      const joinBtn = this.dom.joinBtn;
+      const joinFormEl = this.dom.joinForm;
+      const playerCount = this.dom.playerCount;
+      const expansionContainer = this.container.querySelector('#lobby-forms div:nth-child(2)');
+      if (createBtn) createBtn.style.display = 'none';
+      if (joinBtn) joinBtn.style.display = 'none';
+      if (joinFormEl) joinFormEl.style.display = 'none';
+      if (playerCount) playerCount.style.display = 'none';
+      if (expansionContainer) expansionContainer.style.display = 'none';
+
+      this._setStatus('Joined! Waiting for host to start the game...');
+
+      // Add a cancel/back button for joiners.
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Leave Lobby';
+      cancelBtn.style.cssText = 'margin-top:8px; padding:8px; border-radius:6px; border:1px solid #e57373; background:transparent; color:#e57373; cursor:pointer; font-size:0.85rem;';
+      cancelBtn.addEventListener('click', () => {
+        this.destroy();
+        this.emit('navigate', 'lobby');
+        navigate('');
+      });
+      const statusContainer = this.dom.status.parentNode;
+      statusContainer.appendChild(cancelBtn);
 
       // Listen for game start.
       this.peerManager.on('msg:game_starting', (payload) => {
+        // Remove cancel button if present.
+        if (cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
         this._transitionToGame({
           isHost: false,
           peerManager: this.peerManager,
@@ -350,6 +403,26 @@ export class LobbyView extends EventEmitter {
             color: ['red', 'blue', 'green', 'purple', 'orange', 'teal'][result.playerIndex],
           }],
         });
+      });
+
+      // Listen for kick.
+      this.peerManager.on('msg:kick', (payload) => {
+        this._setStatus('You were kicked from the game.');
+        if (cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
+        setTimeout(() => {
+          this.destroy();
+          navigate('');
+        }, 2000);
+      });
+
+      // Listen for host disconnect.
+      this.peerManager.on('peer-disconnected', () => {
+        this._setStatus('Host disconnected.');
+        if (cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
+        setTimeout(() => {
+          this.destroy();
+          navigate('');
+        }, 3000);
       });
     } catch (err) {
       console.error('Failed to join:', err);
@@ -364,8 +437,26 @@ export class LobbyView extends EventEmitter {
     list.innerHTML = '';
     this.players.forEach((p) => {
       const li = document.createElement('li');
-      li.textContent = p.name + (p.isHost ? ' (Host)' : '');
-      li.style.cssText = 'padding: 8px; margin: 4px 0; background: #16213e; border-radius: 6px;';
+      li.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:8px; margin:4px 0; background:#16213e; border-radius:6px;';
+      const span = document.createElement('span');
+      span.textContent = p.name + (p.isHost ? ' (Host)' : '');
+      li.appendChild(span);
+      // Kick button for host (not on self and not on host).
+      if (this.isHost && !p.isHost) {
+        const kickBtn = document.createElement('button');
+        kickBtn.textContent = '✕';
+        kickBtn.style.cssText = 'background:transparent; border:1px solid #e57373; color:#e57373; border-radius:4px; cursor:pointer; padding:2px 6px; font-size:0.75rem;';
+        kickBtn.title = `Kick ${p.name}`;
+        kickBtn.addEventListener('click', () => {
+          if (this.peerManager && typeof this.peerManager.kickPlayer === 'function') {
+            this.peerManager.kickPlayer(p.playerIndex);
+            this.players = this.players.filter((pl) => pl.playerIndex !== p.playerIndex);
+            this._updatePlayerList();
+            this._setStatus(`Kicked ${p.name}`);
+          }
+        });
+        li.appendChild(kickBtn);
+      }
       list.appendChild(li);
     });
   }
@@ -416,9 +507,12 @@ export class LobbyView extends EventEmitter {
   _startHostedGame(playerName, playerCount, expansions) {
     const state = createGameState(expansions, playerCount, TILE_DATA);
     state.players[0].user = { username: playerName, _id: 'host-player' };
-    for (let i = 0; i < this.players.length; i++) {
-      if (i < state.players.length) {
-        state.players[i + 1].user = { username: this.players[i].name, _id: `client-${i}` };
+    let clientSlot = 1;
+    for (const p of this.players) {
+      if (p.isHost || p.playerIndex === 0) continue;
+      if (clientSlot < state.players.length) {
+        state.players[clientSlot].user = { username: p.name, _id: `client-${clientSlot}` };
+        clientSlot++;
       }
     }
 

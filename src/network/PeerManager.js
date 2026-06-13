@@ -302,6 +302,20 @@ export class HostPeerManager extends PeerManager {
     this.broadcast(createMessage(MessageType.SETTINGS_UPDATE, { key, value }));
   }
 
+  /** Kick a connected player by their player index. */
+  kickPlayer(playerIndex) {
+    const idx = this.connectedPlayers.findIndex((p) => p.playerIndex === playerIndex);
+    if (idx === -1) return;
+    const player = this.connectedPlayers[idx];
+    this.send(player.conn, createMessage(MessageType.KICK, { reason: 'Kicked by host' }));
+    player.conn.close();
+    this.connectedPlayers.splice(idx, 1);
+    this.broadcast(createMessage(MessageType.PLAYER_LEFT, {
+      playerIndex,
+      name: player.name,
+    }));
+  }
+
   /** Notify all clients that the game is starting. */
   startGame(initialState) {
     this.broadcast(createMessage(MessageType.GAME_STARTING, {

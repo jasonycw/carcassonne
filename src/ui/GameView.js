@@ -12,12 +12,15 @@
 
 import {
   initializeBoard, draw, clearBoard, getActiveTileGroups,
+  setMeeplePlacementMode, meeplePlacementMode,
 } from '../rendering/GameBoard.js';
 import {
-  renderActiveTile, resetActiveTile,
-  setSelectedPlacement, getCurrentRotation, getSelectedMove,
+  renderActiveTile, resetActiveTile, moveToBoardPosition,
+  setSelectedPlacement, setCurrentRotation, getCurrentRotation, getSelectedMove,
+  updateBoardPosition, updateMeeplePlacements,
   onTilePlaced, onRotationChanged,
 } from '../rendering/ActiveTile.js';
+import { img } from '../utils/AssetPaths.js';
 import { placeTile } from '../game/GameLogic.js';
 import { GameHost } from '../network/GameHost.js';
 import { GameClient } from '../network/GameClient.js';
@@ -44,6 +47,7 @@ const GAME_HTML = `
   ">
     <span id="game-title">Carcassonne</span>
     <span id="game-turn-indicator" style="opacity:0.7;"></span>
+    <span id="game-tile-count" style="opacity:0.6; font-size:0.8rem;"></span>
     <button id="game-menu-btn" style="
       background: none; border: 1px solid #555; color: #eee;
       padding: 4px 12px; border-radius: 4px; cursor: pointer;
@@ -57,16 +61,9 @@ const GAME_HTML = `
     <!-- Floating HUD buttons -->
     <div id="game-hud" style="
       position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
-      display: none; gap: 8px; z-index: 20;
+      display: none; gap: 8px; z-index: 20; align-items: center;
     ">
-      <button class="hud-btn" id="hud-rotate-left" style="
-        padding: 8px 16px; border-radius: 8px; border: 1px solid #4fc3f7;
-        background: #16213e; color: #4fc3f7; cursor: pointer;
-      ">↺ Rotate</button>
-      <button class="hud-btn" id="hud-rotate-right" style="
-        padding: 8px 16px; border-radius: 8px; border: 1px solid #4fc3f7;
-        background: #16213e; color: #4fc3f7; cursor: pointer;
-      ">Rotate ↻</button>
+      <div id="hud-meeple-types" style="display:flex; gap:4px; align-items:center;"></div>
       <button class="hud-btn" id="hud-confirm" style="
         padding: 8px 16px; border-radius: 8px; border: none;
         background: #66bb6a; color: #111; font-weight: bold; cursor: pointer;
@@ -119,13 +116,12 @@ export class GameView {
       container,
       svg: container.querySelector('#game-svg'),
       turnIndicator: container.querySelector('#game-turn-indicator'),
+      tileCount: container.querySelector('#game-tile-count'),
       menuBtn: container.querySelector('#game-menu-btn'),
       scoreboard: container.querySelector('#game-scoreboard'),
       hud: container.querySelector('#game-hud'),
-      rotateLeft: container.querySelector('#hud-rotate-left'),
-      rotateRight: container.querySelector('#hud-rotate-right'),
+      meepleTypes: container.querySelector('#hud-meeple-types'),
       confirm: container.querySelector('#hud-confirm'),
-      skip: container.querySelector('#hud-skip'),
     };
 
     this._bindEvents();
@@ -192,6 +188,19 @@ export class GameView {
         this.gameClient.on('chat-message', (payload) => {
           this.chatPanel.addMessage(payload.username, payload.message);
         });
+        this.gameClient.on('move-rejected', () => {
+          // Re-show the active tile so the client can try again.
+          this._renderBoard();
+          this._updateTurnIndicator();
+          this._showActiveTileIfNeeded();
+          if (this._pendingPlacement) {
+            this._showActiveTileAt(
+              this._pendingPlacement.x,
+              this._pendingPlacement.y,
+              this._pendingPlacement.rotation,
+            );
+          }
+        });
       }
     }
   }
@@ -221,23 +230,6 @@ export class GameView {
 
   _bindEvents() {
     if (!this.dom) return;
-
-    this.dom.rotateLeft.addEventListener('click', () => {
-      // Simulate scroll-wheel rotation left.
-      const wheelEvent = new WheelEvent('wheel', { deltaY: -1 });
-      const atGroups = getActiveTileGroups();
-      if (atGroups && atGroups.activeTileGroup) {
-        atGroups.activeTileGroup.node().dispatchEvent(wheelEvent);
-      }
-    });
-
-    this.dom.rotateRight.addEventListener('click', () => {
-      const wheelEvent = new WheelEvent('wheel', { deltaY: 1 });
-      const atGroups = getActiveTileGroups();
-      if (atGroups && atGroups.activeTileGroup) {
-        atGroups.activeTileGroup.node().dispatchEvent(wheelEvent);
-      }
-    });
 
     this.dom.confirm.addEventListener('click', () => {
       this._confirmPlacement();
@@ -270,7 +262,7 @@ export class GameView {
         this._showActiveTileAt(x, y, rotation);
       },
       onZoom: () => {
-        // ActiveTile repositioning handled by transform.
+        updateBoardPosition();
       },
     });
   }
@@ -281,6 +273,11 @@ export class GameView {
       this.dom.turnIndicator.textContent = p
         ? `${p.user.username}'s turn`
         : '';
+    }
+    // Update tile count.
+    if (this.dom && this.dom.tileCount && this.gamestate) {
+      const remaining = this.gamestate.unusedTiles ? this.gamestate.unusedTiles.length : 0;
+      this.dom.tileCount.textContent = `Tiles: ${remaining}`;
     }
     // Update scoreboard.
     if (this.dom && this.dom.scoreboard && this.gamestate) {
@@ -298,8 +295,12 @@ export class GameView {
     const isActive = this.gamestate.players[this.playerIndex]?.active;
     if (at && at.tile && at.validPlacements && isActive) {
       if (this.dom) this.dom.hud.style.display = 'flex';
+      this._updateHUD('default');
       const playerState = this.gamestate.players[this.playerIndex] || null;
+      this._updateMeepleTypeSelector(playerState);
       renderActiveTile(at.tile, at.validPlacements, playerState, this.dom.svg);
+    } else {
+      if (this.dom) this.dom.hud.style.display = 'none';
     }
   }
 
@@ -307,13 +308,36 @@ export class GameView {
     const at = this.gamestate.activeTile;
     if (!at || !at.tile) return;
 
-    // Find the matching placement and set it.
+    // Find the matching placement.
     const placement = at.validPlacements.find((p) => p.x === x && p.y === y);
-    if (placement) {
-      setSelectedPlacement(placement);
+    if (!placement || !placement.rotations || placement.rotations.length === 0) {
+      this._updateHUD('placement-selected');
+      return;
     }
 
+    // Rotation cycling: clicking the same placement cycles to the next valid rotation.
+    const selectedMove = getSelectedMove();
+    const currentPlacement = selectedMove ? selectedMove.placement : null;
+    const isSamePlacement = currentPlacement && currentPlacement.x === x && currentPlacement.y === y;
+
+    let targetRotation;
+    if (isSamePlacement) {
+      const currentRot = getCurrentRotation();
+      const currentIdx = placement.rotations.findIndex((r) => r.rotation === currentRot);
+      const nextIdx = (currentIdx + 1) % placement.rotations.length;
+      targetRotation = placement.rotations[nextIdx].rotation;
+    } else {
+      targetRotation = placement.rotations[0].rotation;
+    }
+
+    setCurrentRotation(targetRotation);
+    setSelectedPlacement(placement);
+
+    // Animate the active tile from corner to the board position.
+    moveToBoardPosition(x, y, targetRotation);
+
     if (this.dom) this.dom.hud.style.display = 'flex';
+    this._updateHUD('placement-selected');
   }
 
   // ── Tile placement ──────────────────────────────────────────────────
@@ -354,29 +378,83 @@ export class GameView {
   }
 
   _confirmPlacement() {
-    // Use the pending placement from a highlight click, or the current
-    // rotation / position from ActiveTile.
     const pp = this._pendingPlacement;
-    if (pp) {
-      // Resolve the rotation to use: prefer currentRotation if it's valid
-      // for the selected placement, otherwise fall back to the first
-      // available rotation.  (The placement click handler passes
-      // d.rotations[0].rotation which may differ from currentRotation.)
-      const selectedMove = getSelectedMove();
-      const placement = selectedMove ? selectedMove.placement : null;
-      let rot = getCurrentRotation();
-      if (placement && placement.rotations && placement.rotations.length > 0) {
-        if (!placement.rotations.some((r) => r.rotation === rot)) {
-          // currentRotation is not valid for this placement — use the
-          // default rotation from the click handler.
-          rot = pp.rotation;
-        }
-      }
-      // Include any meeple the player selected on the active tile.
-      const meeple = selectedMove ? selectedMove.meeple : null;
-      this._handleTilePlacement(pp.x, pp.y, rot, meeple);
-      this._pendingPlacement = null;
+    if (!pp) return;
+
+    const selectedMove = getSelectedMove();
+    const rot = getCurrentRotation();
+    const meeple = selectedMove ? selectedMove.meeple : null;
+    this._handleTilePlacement(pp.x, pp.y, rot, meeple);
+    this._pendingPlacement = null;
+  }
+
+  /** Update the HUD button state based on the current game phase. */
+  _updateHUD(phase) {
+    if (!this.dom || !this.dom.confirm) return;
+    const btn = this.dom.confirm;
+    switch (phase) {
+      case 'placement-selected':
+        btn.textContent = 'Send Move';
+        btn.style.background = '#ffa726';
+        btn.style.color = '#111';
+        btn.disabled = false;
+        break;
+      default:
+        btn.textContent = 'Place Tile';
+        btn.style.background = '#555';
+        btn.style.color = '#888';
+        btn.disabled = true;
+        break;
     }
+  }
+
+  /**
+   * Populate the meeple-type image selector in the HUD with the current
+   * player's available meeple types (normal, large, builder, pig).
+   * Clicking a meeple image changes the active placement mode.
+   */
+  _updateMeepleTypeSelector(playerState) {
+    const container = this.dom && this.dom.meepleTypes;
+    if (!container || !playerState) return;
+
+    const colorName = ({ '#e74c3c': 'red', '#3498db': 'blue', '#2ecc71': 'green',
+      '#f39c12': 'yellow', '#9b59b6': 'purple', '#1abc9c': 'gray' })[playerState.color]
+      || playerState.color || 'blue';
+
+    const types = [];
+    if (playerState.remainingMeeples > 0) types.push('normal');
+    if (playerState.hasLargeMeeple) types.push('large');
+    if (playerState.hasBuilderMeeple) types.push('builder');
+    if (playerState.hasPigMeeple) types.push('pig');
+
+    const mode = meeplePlacementMode;
+
+    container.innerHTML = types.map((type) => {
+      const suffix = type === 'normal' ? 'standing' : type;
+      const src = img(`/images/meeples/${colorName}_${suffix}.png`);
+      const active = type === mode;
+      return `<img src="${src}" data-type="${type}" class="meeple-type-btn"
+        style="width:28px; height:28px; cursor:pointer; border-radius:4px;
+               border:${active ? '2px solid #4fc3f7' : '2px solid transparent'};
+               opacity:${active ? '1' : '0.5'};
+               background:rgba(255,255,255,0.1);" />`;
+    }).join('');
+
+    container.querySelectorAll('.meeple-type-btn').forEach((imgEl) => {
+      imgEl.addEventListener('click', () => {
+        const type = imgEl.dataset.type;
+        setMeeplePlacementMode(type);
+        // Update visual highlight.
+        container.querySelectorAll('.meeple-type-btn').forEach((b) => {
+          b.style.border = '2px solid transparent';
+          b.style.opacity = '0.5';
+        });
+        imgEl.style.border = '2px solid #4fc3f7';
+        imgEl.style.opacity = '1';
+        // Refresh meeple outlines with the new type.
+        updateMeeplePlacements(null, type);
+      });
+    });
   }
 
   // ── P2P sync (delegated to GameHost / GameClient) ──────────────────────

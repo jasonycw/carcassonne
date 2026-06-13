@@ -16,9 +16,11 @@
 import {
   getActiveTileGroups,
   getSvgSelection,
+  getBoardMetrics,
   meeplePlacementMode,
   setMeeplePlacementMode,
 } from './GameBoard.js';
+import * as d3 from 'd3';
 import { img } from '../utils/AssetPaths.js';
 
 // ---------------------------------------------------------------------------
@@ -39,6 +41,12 @@ let validPlacements = [];           // valid (x, y, rotations) array
 let currentRotation = 0;            // 0-3
 let selectedMove = null;            // { placement, rotationIndex, meeple, ... }
 let currentMeepleType = 'normal';
+
+// Zoom tracking: when tile is "pinned" to a board position we update its
+// screen position on every zoom/pan so it stays aligned with the board.
+let _isPinned = false;
+let _pinnedGridX = 0;
+let _pinnedGridY = 0;
 
 let onTilePlacedCallback = null;
 let onMeeplePlacedCallback = null;
@@ -239,61 +247,6 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
       rotateActiveTile(1);
     });
 
-  // Confirm-placement overlay (click the tile to place).
-  controls.append('rect')
-    .attr('class', 'confirm-overlay')
-    .attr('x', -TILE_SIZE / 2)
-    .attr('y', -TILE_SIZE / 2)
-    .attr('width', TILE_SIZE)
-    .attr('height', TILE_SIZE)
-    .attr('fill', 'transparent')
-    .attr('cursor', 'pointer')
-    .on('click', (event) => {
-      event.stopPropagation();
-      confirmPlacement(playerState);
-    });
-
-  // Confirm/send buttons (initially hidden).
-  controls.append('rect')
-    .attr('class', 'confirm-button')
-    .attr('id', 'confirm-button')
-    .attr('x', -TILE_SIZE / 2)
-    .attr('y', -TILE_SIZE / 2)
-    .attr('width', TILE_SIZE)
-    .attr('height', TILE_SIZE)
-    .attr('fill', 'rgba(0, 200, 0, 0.3)')
-    .attr('rx', 5)
-    .attr('ry', 5)
-    .attr('visibility', 'hidden')
-    .attr('opacity', 0)
-    .attr('cursor', 'pointer')
-    .on('click', (event) => {
-      event.stopPropagation();
-      confirmPlacement(playerState);
-    });
-
-  controls.append('text')
-    .attr('class', 'confirm-button-text')
-    .attr('x', 0)
-    .attr('y', 4)
-    .attr('text-anchor', 'middle')
-    .attr('font-size', 12)
-    .attr('fill', 'white')
-    .attr('font-weight', 'bold')
-    .attr('visibility', 'hidden')
-    .attr('opacity', 0)
-    .attr('pointer-events', 'none')
-    .text('✓');
-
-  // Scroll-wheel rotation.
-  activeTileGroup.on('wheel.active-tile', (event) => {
-    event.preventDefault();
-    if (event.deltaY > 0) {
-      rotateActiveTile(1);
-    } else {
-      rotateActiveTile(-1);
-    }
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -331,35 +284,6 @@ function rotateActiveTile(direction) {
 
   if (onRotationChangedCallback) {
     onRotationChangedCallback(currentRotation);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// confirmPlacement  (internal)
-// ---------------------------------------------------------------------------
-
-function confirmPlacement(playerState) {
-  if (!onTilePlacedCallback || !activeTileData) return;
-
-  // If we have a placement selected (from clicking a valid-placement highlight),
-  // place the tile immediately.  If not, show the confirm overlay (first click).
-  if (selectedMove && selectedMove.placement) {
-    onTilePlacedCallback(
-      selectedMove.placement.x,
-      selectedMove.placement.y,
-      currentRotation,
-      selectedMove.meeple || null
-    );
-  } else {
-    // No placement selected yet – bring the confirm button to prompt (second click).
-    const groups = getActiveTileGroups();
-    if (!groups) return;
-    const confirmBtn = groups.activeTileRotGroup.select('.confirm-button');
-    const confirmText = groups.activeTileRotGroup.select('.confirm-button-text');
-    confirmBtn.attr('visibility', null).attr('pointer-events', 'auto');
-    confirmText.attr('visibility', null);
-    confirmBtn.transition().duration(300).attr('opacity', 1);
-    confirmText.transition().duration(300).attr('opacity', 1);
   }
 }
 
@@ -420,6 +344,73 @@ function collectValidMeeples(tileData, placements) {
 }
 
 // ---------------------------------------------------------------------------
+// moveToBoardPosition
+// ---------------------------------------------------------------------------
+
+/**
+ * Animate the active tile from the corner to a board grid position.
+ * Calculates screen-space coordinates from grid coords using the current
+ * D3 zoom transform.
+ *
+ * @param {number} gridX   Tile grid X coordinate
+ * @param {number} gridY   Tile grid Y coordinate
+ * @param {number} rotation  Target rotation (0-3)
+ * @returns {Promise<void>} Resolves when the animation finishes.
+ */
+export function moveToBoardPosition(gridX, gridY, rotation) {
+  const groups = getActiveTileGroups();
+  if (!groups) return Promise.resolve();
+
+  const metrics = getBoardMetrics();
+  const boardX = metrics.svgWidth / 2 + gridX * TILE_SIZE;
+  const boardY = metrics.svgHeight / 2 + gridY * TILE_SIZE;
+  const t = metrics.transform;
+  const screenX = t.applyX(boardX);
+  const screenY = t.applyY(boardY);
+
+  // Save pinned state for zoom tracking.
+  _isPinned = true;
+  _pinnedGridX = gridX;
+  _pinnedGridY = gridY;
+
+  // Ensure the tile group is visible.
+  groups.activeTileGroup.attr('visibility', null);
+
+  return new Promise((resolve) => {
+    groups.activeTileTransGroup
+      .transition()
+      .duration(TRANSITION_DURATION)
+      .attr('transform', `translate(${screenX + TILE_SIZE / 2},${screenY + TILE_SIZE / 2})`)
+      .on('end', resolve);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// updateBoardPosition
+// ---------------------------------------------------------------------------
+
+/**
+ * Recalculate the active tile's screen position from its pinned board grid
+ * coordinates.  Called on every zoom/pan event so the tile stays aligned
+ * with the board even though it lives outside the zoom group.
+ */
+export function updateBoardPosition() {
+  if (!_isPinned) return;
+  const groups = getActiveTileGroups();
+  if (!groups) return;
+
+  const metrics = getBoardMetrics();
+  const boardX = metrics.svgWidth / 2 + _pinnedGridX * TILE_SIZE;
+  const boardY = metrics.svgHeight / 2 + _pinnedGridY * TILE_SIZE;
+  const t = metrics.transform;
+  const screenX = t.applyX(boardX);
+  const screenY = t.applyY(boardY);
+
+  groups.activeTileTransGroup
+    .attr('transform', `translate(${screenX + TILE_SIZE / 2},${screenY + TILE_SIZE / 2})`);
+}
+
+// ---------------------------------------------------------------------------
 // resetActiveTile
 // ---------------------------------------------------------------------------
 
@@ -434,8 +425,11 @@ export function resetActiveTile(svgElement, animated = false) {
   const groups = getActiveTileGroups();
   if (!groups) return;
 
-  const svgEl = svgElement || (getSvgSelection() ? getSvgSelection().node() : null);
-  const cornerX = svgEl ? svgEl.getBoundingClientRect().width - TILE_SIZE - 10 : 800 - TILE_SIZE - 10;
+  _isPinned = false;
+
+  // Use getBoardMetrics for dimensions instead of DOM queries.
+  const metrics = getBoardMetrics();
+  const cornerX = metrics.svgWidth - TILE_SIZE - 10;
   const cornerY = 5;
 
   // Hide meeple placements.
@@ -457,22 +451,12 @@ export function resetActiveTile(svgElement, animated = false) {
       .transition()
       .duration(TRANSITION_DURATION)
       .attr('opacity', 0);
-    groups.activeTileRotGroup.selectAll('#confirm-button, .confirm-button')
-      .transition()
-      .duration(TRANSITION_DURATION)
-      .attr('opacity', 0);
   } else {
     groups.activeTileGroup.attr('visibility', 'hidden');
     groups.activeTileTransGroup
       .attr('transform', `translate(${cornerX + TILE_SIZE / 2},${cornerY + TILE_SIZE / 2})`);
     groups.activeTileRotGroup.attr('transform', 'rotate(0)');
-    groups.activeTileRotGroup.selectAll('#confirm-button, .confirm-button')
-      .attr('opacity', 0)
-      .attr('visibility', 'hidden');
   }
-
-  // Remove scroll-wheel handler.
-  groups.activeTileGroup.on('wheel.active-tile', null);
 
   selectedMove = null;
   activeTileData = null;

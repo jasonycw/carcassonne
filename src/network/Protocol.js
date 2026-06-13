@@ -30,6 +30,9 @@ export const MessageType = {
   PLAYER_LEFT:        'player_left',
   GAME_STARTING:      'game_starting',      // host has started the game
   SETTINGS_UPDATE:    'settings_update',    // expansion / turn timer changes
+  KICK:               'kick',               // host → client: you've been kicked
+  PLAYER_NAME_UPDATED: 'player_name_updated', // host → all: a player's name changed
+  NAME_CHANGE:        'name_change',        // client → host: I changed my name
 
   // ── Game actions (client → host) ────────────────────────────────────
   PLACE_TILE:         'place_tile',         // { x, y, rotation, meeple }

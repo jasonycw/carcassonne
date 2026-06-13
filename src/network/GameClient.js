@@ -39,6 +39,12 @@ export class GameClient extends EventEmitter {
     this.clientPeerManager.on('msg:chat_message', (payload) => {
       this.emit('chat-message', payload);
     });
+
+    this.clientPeerManager.on('msg:move_result', (payload) => {
+      if (!payload.success) {
+        this.emit('move-rejected', payload);
+      }
+    });
   }
 
   // ── Move sending ────────────────────────────────────────────────────
