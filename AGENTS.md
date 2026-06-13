@@ -33,6 +33,7 @@ Before committing tasks or marking a feature phase complete, you must explicitly
 1. Build and run the application locally. Open the browser developer console and verify there are zero errors or failed network requests during a full game loop.
 2. Simulate a full game from start to finish to ensure the scoring and tile placement logic is intact.
 3. Test the built project assets locally under a simulated nested path structure matching how GitHub Pages serves repositories (e.g., `localhost:8080/carcassonne/`) to catch path resolution errors early.
+4. MUST test the game from start to finish after it is built on GitHub Page. Must make sure `https://jasonycw.github.io/carcassonne/` meet all the requirement and UIUX matching the original game and can completely the whole game without any issue.
 
 # COMMIT STANDARD
 This must be followed everytime, for audit, tracking and prevent huge chunk of undocumented changes
