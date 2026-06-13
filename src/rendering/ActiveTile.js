@@ -214,20 +214,24 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
   // Placed-meeple group (initially empty).
   meeplePlacementsGroup.selectAll('image.placed-meeple').remove();
 
-  // ── Controls group ───────────────────────────────────────────────────
-  // Provide left/right rotation buttons via clickable overlays.
+    // ── Controls group ───────────────────────────────────────────────────
+  // Provide left/right rotation buttons via clickable overlays (40px wide strips).
   const controls = activeTileRotGroup.append('g')
     .attr('class', 'active-tile-controls');
 
-  // Left rotation button.
+  // Left rotation button (wider = easier to click).
   controls.append('rect')
     .attr('class', 'rot-left')
-    .attr('x', -TILE_SIZE / 2 - 8)
+    .attr('x', -TILE_SIZE / 2 - 20)
     .attr('y', -TILE_SIZE / 2)
-    .attr('width', 8)
+    .attr('width', 20)
     .attr('height', TILE_SIZE)
-    .attr('fill', 'transparent')
+    .attr('fill', 'rgba(79, 195, 247, 0.15)')
+    .attr('stroke', '#4fc3f7')
+    .attr('stroke-width', 1)
+    .attr('rx', 4)
     .attr('cursor', 'pointer')
+    .style('pointer-events', 'all')
     .on('click', (event) => {
       event.stopPropagation();
       rotateActiveTile(-1);
@@ -238,14 +242,41 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
     .attr('class', 'rot-right')
     .attr('x', TILE_SIZE / 2)
     .attr('y', -TILE_SIZE / 2)
-    .attr('width', 8)
+    .attr('width', 20)
     .attr('height', TILE_SIZE)
-    .attr('fill', 'transparent')
+    .attr('fill', 'rgba(79, 195, 247, 0.15)')
+    .attr('stroke', '#4fc3f7')
+    .attr('stroke-width', 1)
+    .attr('rx', 4)
     .attr('cursor', 'pointer')
+    .style('pointer-events', 'all')
     .on('click', (event) => {
       event.stopPropagation();
       rotateActiveTile(1);
     });
+
+  // Rotation arrows (◀ ▶) for visual hint.
+  controls.append('text')
+    .attr('class', 'rot-arrow rot-arrow-left')
+    .attr('x', -TILE_SIZE / 2 - 10)
+    .attr('y', 4)
+    .attr('text-anchor', 'middle')
+    .attr('fill', 'white')
+    .attr('font-size', '14px')
+    .attr('font-weight', 'bold')
+    .attr('pointer-events', 'none')
+    .text('◀');
+
+  controls.append('text')
+    .attr('class', 'rot-arrow rot-arrow-right')
+    .attr('x', TILE_SIZE / 2 + 10)
+    .attr('y', 4)
+    .attr('text-anchor', 'middle')
+    .attr('fill', 'white')
+    .attr('font-size', '14px')
+    .attr('font-weight', 'bold')
+    .attr('pointer-events', 'none')
+    .text('▶');
 
 }
 
@@ -257,11 +288,33 @@ function rotateActiveTile(direction) {
   const groups = getActiveTileGroups();
   if (!groups) return;
 
-  currentRotation = (currentRotation + direction + 4) % 4;
+  // Get valid rotations from the selected placement.
+  const placement = selectedMove ? selectedMove.placement : null;
+  let validRots = null;
+  if (placement && placement.rotations && placement.rotations.length > 0) {
+    validRots = placement.rotations.map((r) => r.rotation);
+  }
+
+  if (validRots && validRots.length > 0) {
+    // Cycle through valid rotations only.
+    const currentIdx = validRots.indexOf(currentRotation);
+    const nextIdx = (currentIdx + direction + validRots.length) % validRots.length;
+    currentRotation = validRots[nextIdx];
+    if (selectedMove) {
+      selectedMove.rotationIndex = nextIdx;
+    }
+  } else {
+    // Fallback: cycle through all 4 rotations.
+    currentRotation = (currentRotation + direction + 4) % 4;
+  }
+
+  // Update rotation transform, preserving zoom scale when pinned.
+  const metrics = getBoardMetrics();
+  const scale = _isPinned ? metrics.transform.k : 1;
   groups.activeTileRotGroup
     .transition()
     .duration(200)
-    .attr('transform', `rotate(${currentRotation * 90})`);
+    .attr('transform', `rotate(${currentRotation * 90}) scale(${scale})`);
 
   // Flash the rotation indicator.
   const indicator = groups.activeTileRotGroup.select('.active-tile-rotation-indicator');
@@ -376,11 +429,19 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
   // Ensure the tile group is visible.
   groups.activeTileGroup.attr('visibility', null);
 
+  // Scale the active tile to match the board zoom level.
+  const scale = t.k;
+
   return new Promise((resolve) => {
     groups.activeTileTransGroup
       .transition()
       .duration(TRANSITION_DURATION)
-      .attr('transform', `translate(${screenX + TILE_SIZE / 2},${screenY + TILE_SIZE / 2})`)
+      .attr('transform', `translate(${screenX + TILE_SIZE / 2},${screenY + TILE_SIZE / 2})`);
+
+    groups.activeTileRotGroup
+      .transition()
+      .duration(TRANSITION_DURATION)
+      .attr('transform', `rotate(${rotation * 90}) scale(${scale})`)
       .on('end', resolve);
   });
 }
@@ -408,6 +469,10 @@ export function updateBoardPosition() {
 
   groups.activeTileTransGroup
     .attr('transform', `translate(${screenX + TILE_SIZE / 2},${screenY + TILE_SIZE / 2})`);
+
+  // Update scale to match current zoom level.
+  groups.activeTileRotGroup
+    .attr('transform', `rotate(${currentRotation * 90}) scale(${t.k})`);
 }
 
 // ---------------------------------------------------------------------------
@@ -442,11 +507,17 @@ export function resetActiveTile(svgElement, animated = false) {
     groups.activeTileTransGroup
       .transition()
       .duration(TRANSITION_DURATION)
-      .attr('transform', `translate(${cornerX + TILE_SIZE / 2},${cornerY + TILE_SIZE / 2})`)
+      .attr('transform', `translate(${cornerX + TILE_SIZE / 2},${cornerY + TILE_SIZE / 2})`);
+
+    groups.activeTileRotGroup
+      .transition()
+      .duration(TRANSITION_DURATION)
+      .attr('transform', 'rotate(0) scale(1)')
       .on('end', () => {
         groups.activeTileGroup.attr('visibility', 'hidden');
         groups.activeTileRotGroup.attr('transform', 'rotate(0)');
       });
+
     groups.activeTileRotGroup.select('.active-tile-rotation-indicator')
       .transition()
       .duration(TRANSITION_DURATION)
@@ -455,7 +526,7 @@ export function resetActiveTile(svgElement, animated = false) {
     groups.activeTileGroup.attr('visibility', 'hidden');
     groups.activeTileTransGroup
       .attr('transform', `translate(${cornerX + TILE_SIZE / 2},${cornerY + TILE_SIZE / 2})`);
-    groups.activeTileRotGroup.attr('transform', 'rotate(0)');
+    groups.activeTileRotGroup.attr('transform', 'rotate(0) scale(1)');
   }
 
   selectedMove = null;
@@ -587,7 +658,9 @@ export function setCurrentRotation(rotation) {
   currentRotation = rotation % 4;
   const groups = getActiveTileGroups();
   if (groups) {
-    groups.activeTileRotGroup.attr('transform', `rotate(${currentRotation * 90})`);
+    const metrics = getBoardMetrics();
+    const scale = _isPinned ? metrics.transform.k : 1;
+    groups.activeTileRotGroup.attr('transform', `rotate(${currentRotation * 90}) scale(${scale})`);
   }
 }
 

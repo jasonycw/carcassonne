@@ -29,7 +29,21 @@ export function renderScoreboard(container, gamestate, currentPlayerIndex, gameO
   const hasTraders = expansions.indexOf('traders-and-builders') !== -1;
   const hasTower = expansions.indexOf('the-tower') !== -1;
 
+  // Remaining tiles count.
+  const tilesRemaining = gamestate.unusedTiles ? gamestate.unusedTiles.length : 0;
+  const tilesPlaced = gamestate.placedTiles ? gamestate.placedTiles.length : 1; // starting tile always placed
+  const totalTiles = tilesRemaining + tilesPlaced;
+
   let html = '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">';
+
+  // Remaining tiles indicator (matches original game placement).
+  html += `<div style="
+    padding:4px 10px; border-radius:6px; background:rgba(255,255,255,0.05);
+    font-size:0.82rem; color:#aaa;
+  ">
+    Tiles: <span style="font-weight:bold;color:#fff;">${tilesRemaining}</span>
+    <span style="opacity:0.5;font-size:0.75rem;">/ ${totalTiles}</span>
+  </div>`;
 
   players.forEach((player, i) => {
     const color = player.color || getPlayerColor(i);
@@ -53,8 +67,11 @@ export function renderScoreboard(container, gamestate, currentPlayerIndex, gameO
         <span style="margin-left:2px; font-weight:bold; color:${colorHex};">
           ${player.points}
         </span>
-        <span style="opacity:0.5; font-size:0.75rem;">
-          (${player.remainingMeeples != null ? player.remainingMeeples : '?'})
+        <span style="opacity:0.5; font-size:0.75rem; display:inline-flex; align-items:center; gap:2px;">
+          <img src="${img(`/images/meeples/${color}_standing.png`)}"
+               style="width:12px;height:12px;vertical-align:middle;"
+               alt="meeples" />
+          ${player.remainingMeeples != null ? player.remainingMeeples : '?'}
         </span>`;
 
     // ── Special meeple icons ────────────────────────────────────────

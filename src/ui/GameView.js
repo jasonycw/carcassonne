@@ -294,11 +294,16 @@ export class GameView {
     const at = this.gamestate.activeTile;
     const isActive = this.gamestate.players[this.playerIndex]?.active;
     if (at && at.tile && at.validPlacements && isActive) {
-      if (this.dom) this.dom.hud.style.display = 'flex';
-      this._updateHUD('default');
+      if (this.dom) {
+        this.dom.hud.style.display = 'flex';
+        // Show meeple type selector only when it's the viewer's turn
+        this.dom.meepleTypes.style.display = 'flex';
+      }
       const playerState = this.gamestate.players[this.playerIndex] || null;
       this._updateMeepleTypeSelector(playerState);
       renderActiveTile(at.tile, at.validPlacements, playerState, this.dom.svg);
+      // Default to "Place Tile" disabled until a board position is clicked
+      this._updateHUD('default');
     } else {
       if (this.dom) this.dom.hud.style.display = 'none';
     }
@@ -311,6 +316,14 @@ export class GameView {
     // Find the matching placement.
     const placement = at.validPlacements.find((p) => p.x === x && p.y === y);
     if (!placement || !placement.rotations || placement.rotations.length === 0) {
+      // Even without valid rotations, pin the tile and show HUD.
+      this._pendingPlacement = { x, y, rotation: 0 };
+      setSelectedPlacement(placement);
+      if (placement) {
+        moveToBoardPosition(x, y, 0);
+        updateMeeplePlacements(null, null);
+      }
+      if (this.dom) this.dom.hud.style.display = 'flex';
       this._updateHUD('placement-selected');
       return;
     }
@@ -336,7 +349,13 @@ export class GameView {
     // Animate the active tile from corner to the board position.
     moveToBoardPosition(x, y, targetRotation);
 
-    if (this.dom) this.dom.hud.style.display = 'flex';
+    // Show meeple outlines on the pinned tile.
+    updateMeeplePlacements(null, null);
+
+    if (this.dom) {
+      this.dom.hud.style.display = 'flex';
+      this.dom.meepleTypes.style.display = 'flex';
+    }
     this._updateHUD('placement-selected');
   }
 

@@ -393,15 +393,83 @@ export class LobbyView extends EventEmitter {
       this.peerManager.on('msg:game_starting', (payload) => {
         // Remove cancel button if present.
         if (cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
+
+        // Reconstruct full game state from the host's sanitized initial state.
+        const init = payload.initialState;
+        const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'gray'];
+
+        // Reconstruct placed tiles with full tile objects from TILE_DATA.
+        const placedTiles = (init.placedTiles || []).map((pt) => {
+          const tileDef = TILE_DATA.find((t) => t.id === pt.tileId) || {};
+          return {
+            tile: tileDef,
+            rotation: pt.rotation || 0,
+            x: pt.x,
+            y: pt.y,
+            playerIndex: pt.playerIndex,
+            meeples: (pt.meeples || []).map((m) => ({
+              playerIndex: m.playerIndex,
+              placement: m.placement || {},
+              meepleType: m.meepleType || 'normal',
+              scored: m.scored !== false,
+            })),
+            tower: pt.towerHeight != null ? { height: pt.towerHeight, completed: false } : undefined,
+            features: { cities: [], roads: [], farms: [], cloister: null },
+            northTileIndex: undefined,
+            southTileIndex: undefined,
+            eastTileIndex: undefined,
+            westTileIndex: undefined,
+          };
+        });
+
+        // Rebuild adjacency indices.
+        for (let i = 0; i < placedTiles.length; i++) {
+          const pt = placedTiles[i];
+          for (let j = 0; j < placedTiles.length; j++) {
+            if (i === j) continue;
+            const ot = placedTiles[j];
+            if (ot.x === pt.x && ot.y === pt.y - 1) pt.northTileIndex = j;
+            if (ot.x === pt.x && ot.y === pt.y + 1) pt.southTileIndex = j;
+            if (ot.y === pt.y && ot.x === pt.x - 1) pt.westTileIndex = j;
+            if (ot.y === pt.y && ot.x === pt.x + 1) pt.eastTileIndex = j;
+          }
+        }
+
+        // Reconstruct active tile.
+        const activeTile = init.activeTile && init.activeTile.tileId
+          ? { tile: TILE_DATA.find((t) => t.id === init.activeTile.tileId) || {},
+              validPlacements: init.activeTile.validPlacements || [] }
+          : null;
+
+        const clientState = {
+          players: (init.players || []).map((p, i) => ({
+            user: { username: p.username || `Player ${i}`, _id: `client-player-${i}` },
+            color: p.color || colors[i % colors.length],
+            points: p.points || 0,
+            remainingMeeples: p.remainingMeeples != null ? p.remainingMeeples : 7,
+            active: p.active || false,
+            hasLargeMeeple: false,
+            hasBuilderMeeple: false,
+            hasPigMeeple: false,
+            goods: p.goods || {},
+            towers: p.towers || 0,
+          })),
+          currentPlayerIndex: init.currentPlayerIndex != null ? init.currentPlayerIndex : 0,
+          placedTiles,
+          activeTile,
+          unusedTiles: new Array(init.unusedTilesCount || 0),
+          step: init.step || 'place',
+          finished: init.finished || false,
+          expansions: init.expansions || ['base-game'],
+          messages: init.messages || [],
+        };
+
         this._transitionToGame({
           isHost: false,
           peerManager: this.peerManager,
-          initialState: payload.initialState,
+          localState: clientState,
           playerIndex: result.playerIndex,
-          localPlayers: [{
-            user: { username: name, _id: `player-${result.playerIndex}` },
-            color: ['red', 'blue', 'green', 'purple', 'orange', 'teal'][result.playerIndex],
-          }],
+          localPlayers: clientState.players,
         });
       });
 

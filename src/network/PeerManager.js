@@ -333,7 +333,7 @@ export class HostPeerManager extends PeerManager {
   /**
    * Strip internal fields before sending to clients:
    * - Remove full tile objects (clients only need tile IDs)
-   * - Remove unusedTiles (clients don't need the pile)
+   * - Remove unusedTiles (clients only need the count)
    */
   _sanitizeState(state) {
     return {
@@ -367,6 +367,7 @@ export class HostPeerManager extends PeerManager {
       activeTile: state.activeTile
         ? { tileId: state.activeTile.tile.id, validPlacements: state.activeTile.validPlacements }
         : null,
+      unusedTilesCount: (state.unusedTiles || []).length,
       step: state.step,
       messages: state.messages,
     };

@@ -95,6 +95,10 @@ export class GameClient extends EventEmitter {
     gs.finished = sanitized.finished;
     gs.messages = sanitized.messages || [];
 
+    // Update unused tile count for display (actual tiles stay on host).
+    const count = sanitized.unusedTilesCount != null ? sanitized.unusedTilesCount : 0;
+    gs.unusedTiles = new Array(count).fill(null);
+
     // Reconstruct placed tiles from tile ID projection
     gs.placedTiles = (sanitized.placedTiles || []).map((pt) => {
       const tileDef = TILE_DATA.find((t) => t.id === pt.tileId) || {};
