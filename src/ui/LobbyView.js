@@ -131,6 +131,8 @@ export class LobbyView extends EventEmitter {
     this.isHost = false;
     this.roomCode = null;
     this.players = [];
+    /** Map conn → playerIndex for tracking disconnects. */
+    this._connToPlayer = new Map();
   }
 
   mount() {
@@ -161,12 +163,20 @@ export class LobbyView extends EventEmitter {
     const saved = localStorage.getItem('carcassonne_player_name');
     if (saved) this.dom.playerName.value = saved;
 
-    // Check URL for room code (joining).
-    const params = new URLSearchParams(window.location.search);
-    const roomParam = params.get('room');
+    // Check URL for room code (joining) — try search params first,
+    // then fall back to hash params (for hash-based SPA routing).
+    let roomParam = new URLSearchParams(window.location.search).get('room');
+    if (!roomParam) {
+      const hash = window.location.hash;
+      const qm = hash.indexOf('?');
+      if (qm !== -1) {
+        roomParam = new URLSearchParams(hash.slice(qm)).get('room');
+      }
+    }
     if (roomParam) {
       this.dom.roomCodeInput.value = roomParam.toUpperCase();
       this._joinGame();
+      return; // _joinGame continues from here
     }
 
     this._setStatus('Ready');
@@ -174,10 +184,23 @@ export class LobbyView extends EventEmitter {
 
   destroy() {
     if (this.peerManager) {
+      this.peerManager.removeAllListeners();
       this.peerManager.destroy();
       this.peerManager = null;
     }
     this.container.innerHTML = '';
+    this.removeAllListeners();
+  }
+
+  /**
+   * Remove all LobbyView's event listeners from peerManager without
+   * destroying the peer or connections. Used when transitioning to the
+   * game view so GameHost/GameClient can take over the PeerManager.
+   */
+  _cleanupPeerManager() {
+    if (this.peerManager) {
+      this.peerManager.removeAllListeners();
+    }
   }
 
   _bindEvents() {
@@ -295,6 +318,7 @@ export class LobbyView extends EventEmitter {
         if (message.type === MessageType.JOIN_REQUEST) {
           const result = this.peerManager.acceptJoin(conn, message.payload.playerName);
           if (result.accepted) {
+            this._connToPlayer.set(conn, result.playerIndex);
             this.players.push({
               name: message.payload.playerName,
               isHost: false,
@@ -308,13 +332,15 @@ export class LobbyView extends EventEmitter {
 
       // Auto-remove player on disconnect.
       this.peerManager.on('peer-disconnected', (conn) => {
-        const idx = this.players.findIndex(
-          (p) => !p.isHost && p.playerIndex === this.peerManager.connectedPlayers.find(cp => cp.conn === conn)?.playerIndex
-        );
-        if (idx !== -1) {
-          const removed = this.players.splice(idx, 1)[0];
-          this._updatePlayerList();
-          this._setStatus(`${removed.name} disconnected`);
+        const playerIndex = this._connToPlayer.get(conn);
+        if (playerIndex != null) {
+          const idx = this.players.findIndex((p) => p.playerIndex === playerIndex);
+          if (idx !== -1) {
+            const removed = this.players.splice(idx, 1)[0];
+            this._connToPlayer.delete(conn);
+            this._updatePlayerList();
+            this._setStatus(`${removed.name} disconnected`);
+          }
         }
       });
 
@@ -375,8 +401,6 @@ export class LobbyView extends EventEmitter {
       if (playerCount) playerCount.style.display = 'none';
       if (expansionContainer) expansionContainer.style.display = 'none';
 
-      this._setStatus('Joined! Waiting for host to start the game...');
-
       // Add a cancel/back button for joiners.
       const cancelBtn = document.createElement('button');
       cancelBtn.textContent = 'Leave Lobby';
@@ -388,6 +412,41 @@ export class LobbyView extends EventEmitter {
       });
       const statusContainer = this.dom.status.parentNode;
       statusContainer.appendChild(cancelBtn);
+
+      // Show player list from JOIN_ACCEPT payload.
+      this.players = (result.players || []).map((p) => ({
+        name: p.name,
+        isHost: p.isHost || p.playerIndex === 0,
+        playerIndex: p.playerIndex,
+      }));
+      this.dom.lobbyPlayers.style.display = 'block';
+      this._updatePlayerList();
+      this._setStatus('Joined! Waiting for host to start the game...');
+
+      // Listen for lobby updates (new players joining / leaving).
+      this.peerManager.on('msg:player_joined', (payload) => {
+        // Avoid duplicates.
+        if (!this.players.find((p) => p.playerIndex === payload.playerIndex)) {
+          this.players.push({
+            name: payload.name || 'Player',
+            isHost: false,
+            playerIndex: payload.playerIndex,
+          });
+          this._updatePlayerList();
+        }
+      });
+      this.peerManager.on('msg:player_left', (payload) => {
+        this.players = this.players.filter((p) => p.playerIndex !== payload.playerIndex);
+        this._updatePlayerList();
+      });
+      this.peerManager.on('msg:lobby_state', (payload) => {
+        this.players = (payload.players || []).map((p) => ({
+          name: p.name,
+          isHost: p.isHost || p.playerIndex === 0,
+          playerIndex: p.playerIndex,
+        }));
+        this._updatePlayerList();
+      });
 
       // Listen for game start.
       this.peerManager.on('msg:game_starting', (payload) => {
@@ -600,12 +659,16 @@ export class LobbyView extends EventEmitter {
   }
 
   _transitionToGame(config) {
-    this.destroy();
+    // Remove peerManager listeners but do NOT destroy the PeerManager —
+    // GameView's GameHost/GameClient will take it over.
+    this._cleanupPeerManager();
+    this.container.innerHTML = '';
     this.emit('start-game', config);
   }
 
   _copyInviteLink() {
-    const url = `${window.location.origin}${window.location.pathname}?room=${this.roomCode}`;
+    // Use hash-based URL so the SPA Router can resolve the room param.
+    const url = `${window.location.origin}${window.location.pathname}#/?room=${this.roomCode}`;
     navigator.clipboard.writeText(url).then(() => {
       this._setStatus('Invite link copied!');
     }).catch(() => {

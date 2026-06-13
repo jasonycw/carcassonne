@@ -13,7 +13,7 @@
  */
 
 import { EventEmitter } from '../utils/EventEmitter.js';
-import { MessageType, createMessage } from './Protocol.js';
+import { MessageType, createMessage, gameOver } from './Protocol.js';
 import {
   placeTile as glPlaceTile,
   placeMeeple as glPlaceMeeple,
@@ -159,6 +159,9 @@ export class GameHost extends EventEmitter {
   /** Emit game-over if the state is flagged as finished. */
   _checkGameOver() {
     if (this.gamestate.finished) {
+      // Broadcast GAME_OVER with sanitized state so clients can reconstruct.
+      const sanitized = this.hostPeerManager._sanitizeState(this.gamestate);
+      this.hostPeerManager.broadcast(gameOver(sanitized));
       this.emit('game-over', this.gamestate);
     }
   }

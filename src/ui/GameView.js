@@ -114,6 +114,8 @@ export class GameView {
   }
 
   mount(container) {
+    // Prevent double game-over alert from STATE_UPDATE + GAME_OVER messages.
+    this._gameOverShown = false;
     container.innerHTML = GAME_HTML;
     this.dom = {
       container,
@@ -542,6 +544,9 @@ export class GameView {
   // ── Game over ────────────────────────────────────────────────────────
 
   _showGameOver() {
+    if (this._gameOverShown) return;
+    this._gameOverShown = true;
+
     // Clear saved state — game is done.
     removeGame();
 

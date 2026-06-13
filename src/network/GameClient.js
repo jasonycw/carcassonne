@@ -32,8 +32,9 @@ export class GameClient extends EventEmitter {
     });
 
     this.clientPeerManager.on('msg:game_over', (payload) => {
+      // _applyRemoteState emits 'game-over' when it detects finished=true,
+      // so no separate emit needed here.
       this._applyRemoteState(payload.state || payload);
-      this.emit('game-over');
     });
 
     this.clientPeerManager.on('msg:chat_message', (payload) => {
@@ -87,9 +88,29 @@ export class GameClient extends EventEmitter {
     if (!this.gamestate || !sanitized) return;
 
     const gs = this.gamestate;
+    const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'gray'];
 
-    // Simple scalar/array fields
-    gs.players = sanitized.players;
+    // Reconstruct players with proper nested format (user.username / user._id)
+    // because GameView expects p.user.username and p.user._id for rendering.
+    gs.name = sanitized.name || gs.name;
+    gs.expansions = sanitized.expansions || gs.expansions || ['base-game'];
+    gs.players = (sanitized.players || []).map((p, i) => ({
+      user: {
+        username: p.username || `Player ${i}`,
+        _id: `client-player-${i}`,
+      },
+      color: p.color || colors[i % colors.length],
+      points: p.points || 0,
+      remainingMeeples: p.remainingMeeples != null ? p.remainingMeeples : 7,
+      active: p.active || false,
+      hasLargeMeeple: (gs.expansions).includes('inns-and-cathedrals'),
+      hasBuilderMeeple: (gs.expansions).includes('traders-and-builders'),
+      hasPigMeeple: (gs.expansions).includes('traders-and-builders'),
+      goods: p.goods || {},
+      towers: p.towers || 0,
+      capturedMeeples: [],
+      acknowledgedGameEnd: false,
+    }));
     gs.currentPlayerIndex = sanitized.currentPlayerIndex;
     gs.step = sanitized.step;
     gs.finished = sanitized.finished;
@@ -148,6 +169,11 @@ export class GameClient extends EventEmitter {
     }
 
     this.emit('state-update', gs);
+
+    // Detect game-over from finished flag so clients show the summary.
+    if (gs.finished) {
+      this.emit('game-over', gs);
+    }
   }
 
   /** Clean up. */

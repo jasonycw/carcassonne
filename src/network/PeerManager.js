@@ -237,6 +237,25 @@ export class HostPeerManager extends PeerManager {
       ...settings,
     };
     this.connectedPlayers = []; // { id, conn, name, playerIndex }
+    this._initHostDisconnectHandler();
+  }
+
+  /**
+   * Auto-cleanup: when a client's DataConnection closes, remove them from
+   * connectedPlayers and notify other clients.
+   */
+  _initHostDisconnectHandler() {
+    this.on('peer-disconnected', (conn) => {
+      const idx = this.connectedPlayers.findIndex((p) => p.conn === conn);
+      if (idx !== -1) {
+        const removed = this.connectedPlayers.splice(idx, 1)[0];
+        // Notify remaining clients that this player left.
+        this.broadcast(createMessage(MessageType.PLAYER_LEFT, {
+          playerIndex: removed.playerIndex,
+          name: removed.name,
+        }));
+      }
+    });
   }
 
   /**
@@ -422,7 +441,11 @@ export class ClientPeerManager extends PeerManager {
         if (message.type === MessageType.JOIN_ACCEPT) {
           this.playerIndex = message.payload.playerIndex;
           this.removeListener('message', onJoinResult);
-          resolve({ playerIndex: this.playerIndex });
+          resolve({
+            playerIndex: this.playerIndex,
+            players: message.payload.players || [],
+            settings: message.payload.settings || {},
+          });
         } else if (message.type === MessageType.JOIN_REJECT) {
           this.removeListener('message', onJoinResult);
           reject(new Error(message.payload.reason || 'Join rejected'));
