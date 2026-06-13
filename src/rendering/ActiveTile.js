@@ -234,8 +234,8 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
     .attr('class', 'meeple-outline')
     .attr('width', MEEMPLE_NORMAL_SIZE)
     .attr('height', MEEMPLE_NORMAL_SIZE)
-    .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 2 - MEEMPLE_NORMAL_SIZE / 2)
-    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 2 - MEEMPLE_NORMAL_SIZE / 2)
+    .attr('x', (d) => d.offset.x * TILE_SIZE - MEEMPLE_NORMAL_SIZE / 2)
+    .attr('y', (d) => d.offset.y * TILE_SIZE - MEEMPLE_NORMAL_SIZE / 2)
     .attr('href', (d) => {
       const suffix = d.locationType === 'farm' ? 'lying' : 'standing';
       return img(`/images/meeples/outline_${suffix}.png`);
