@@ -29,6 +29,7 @@ dist/
 
 # Test artifacts
 test-results/
+test-dist/
 playwright-report/
 .antigravitycli/
 .playwright-mcp/
