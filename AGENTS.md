@@ -40,4 +40,4 @@ This must be followed everytime, for audit, tracking and prevent huge chunk of u
 - **Atomic Changes:** One specific structural change or logic file translation per commit. 
 - **Iterative & Traceable:** Commits should represent a step-by-step assembly of the phases. Never one commit with multiple changes/fixes
 - **Clean Commit History:** Document messages explicitly detailing what changed, matching exactly the lines impacted.
-- **No artifact left:** All files must either be commited or gitignore, must not have any untrack/unstaged file left
+- **No artifact left:** All files must either be commited or gitignore, must not have any untrack/unstaged file left, testing artifacts must by ignored, all commited file must be absolutely neccessary for the goal.
