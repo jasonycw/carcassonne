@@ -18,6 +18,7 @@ import {
   renderActiveTile, resetActiveTile, moveToBoardPosition,
   setSelectedPlacement, setCurrentRotation, getCurrentRotation, getSelectedMove,
   updateBoardPosition, updateMeeplePlacements,
+  showMeeplePlacements, hideMeeplePlacements,
   onTilePlaced, onRotationChanged,
 } from '../rendering/ActiveTile.js';
 import { img } from '../utils/AssetPaths.js';
@@ -104,6 +105,8 @@ export class GameView {
     this._callbacks = {};
     this._pendingPlacement = null;
     this._currentTileImage = null;
+    /** @type {''|'placement-selected'|'confirmed'|'sending'} */
+    this._confirmPhase = '';
     this.chatPanel = null;
     this.settingsPanel = null;
     this.gameHost = null;
@@ -135,7 +138,13 @@ export class GameView {
     });
 
     onRotationChanged(() => {
-      // Rotation is tracked internally by ActiveTile.
+      // If the player was in meeple-selection phase ('confirmed') and changes
+      // rotation, reset to 'placement-selected' since meeple positions change.
+      if (this._confirmPhase === 'confirmed') {
+        this._confirmPhase = 'placement-selected';
+        this._updateHUD('placement-selected');
+        hideMeeplePlacements();
+      }
     });
 
     // Mount ChatPanel.
@@ -294,6 +303,9 @@ export class GameView {
     const at = this.gamestate.activeTile;
     const isActive = this.gamestate.players[this.playerIndex]?.active;
     if (at && at.tile && at.validPlacements && isActive) {
+      // Reset confirm phase for the new tile.
+      this._confirmPhase = '';
+      this._pendingPlacement = null;
       if (this.dom) {
         this.dom.hud.style.display = 'flex';
         // Show meeple type selector only when it's the viewer's turn
@@ -321,25 +333,30 @@ export class GameView {
       setSelectedPlacement(placement);
       if (placement) {
         moveToBoardPosition(x, y, 0);
-        updateMeeplePlacements(null, null);
+        // Do NOT show meeple outlines yet — they show after confirm.
+        hideMeeplePlacements();
       }
       if (this.dom) this.dom.hud.style.display = 'flex';
+      this._confirmPhase = 'placement-selected';
       this._updateHUD('placement-selected');
       return;
     }
 
-    // Rotation cycling: clicking the same placement cycles to the next valid rotation.
+    // Determine target rotation.
+    // In the original game, clicking the same board position cycles rotation.
     const selectedMove = getSelectedMove();
     const currentPlacement = selectedMove ? selectedMove.placement : null;
     const isSamePlacement = currentPlacement && currentPlacement.x === x && currentPlacement.y === y;
 
     let targetRotation;
     if (isSamePlacement) {
+      // Same placement clicked again → cycle to next valid rotation.
       const currentRot = getCurrentRotation();
       const currentIdx = placement.rotations.findIndex((r) => r.rotation === currentRot);
       const nextIdx = (currentIdx + 1) % placement.rotations.length;
       targetRotation = placement.rotations[nextIdx].rotation;
     } else {
+      // First time clicking this placement → use first valid rotation.
       targetRotation = placement.rotations[0].rotation;
     }
 
@@ -349,13 +366,15 @@ export class GameView {
     // Animate the active tile from corner to the board position.
     moveToBoardPosition(x, y, targetRotation);
 
-    // Show meeple outlines on the pinned tile.
-    updateMeeplePlacements(null, null);
+    // Do NOT show meeple outlines yet — they show only after the player
+    // clicks "Place Tile" (confirm step) to lock in the rotation.
+    hideMeeplePlacements();
 
     if (this.dom) {
       this.dom.hud.style.display = 'flex';
       this.dom.meepleTypes.style.display = 'flex';
     }
+    this._confirmPhase = 'placement-selected';
     this._updateHUD('placement-selected');
   }
 
@@ -401,10 +420,25 @@ export class GameView {
     if (!pp) return;
 
     const selectedMove = getSelectedMove();
-    const rot = getCurrentRotation();
-    const meeple = selectedMove ? selectedMove.meeple : null;
-    this._handleTilePlacement(pp.x, pp.y, rot, meeple);
-    this._pendingPlacement = null;
+
+    if (this._confirmPhase === 'placement-selected') {
+      // Phase 1 → Phase 2: player confirmed the rotation.
+      // Show meeple outlines and change button to "Send Move".
+      showMeeplePlacements();
+      this._confirmPhase = 'confirmed';
+      this._updateHUD('confirmed');
+      return;
+    }
+
+    if (this._confirmPhase === 'confirmed') {
+      // Phase 2 → Phase 3: player is sending the move.
+      const rot = getCurrentRotation();
+      const meeple = selectedMove ? selectedMove.meeple : null;
+      this._handleTilePlacement(pp.x, pp.y, rot, meeple);
+      this._pendingPlacement = null;
+      this._confirmPhase = '';
+      return;
+    }
   }
 
   /** Update the HUD button state based on the current game phase. */
@@ -413,6 +447,14 @@ export class GameView {
     const btn = this.dom.confirm;
     switch (phase) {
       case 'placement-selected':
+        // Phase 1: confirm the rotation before showing meeple outlines.
+        btn.textContent = 'Place Tile';
+        btn.style.background = '#66bb6a';
+        btn.style.color = '#111';
+        btn.disabled = false;
+        break;
+      case 'confirmed':
+        // Phase 2: rotation confirmed, meeple outlines shown, ready to send.
         btn.textContent = 'Send Move';
         btn.style.background = '#ffa726';
         btn.style.color = '#111';
