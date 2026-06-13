@@ -58,9 +58,15 @@ test.describe('Multiplayer Game', () => {
       if (hasPlacement) {
         await placement.click({ timeout: 3000, force: true });
         await page.waitForTimeout(400);
-        const confirmBtn = page.locator('#hud-confirm');
-        if (await confirmBtn.isVisible()) {
-          await confirmBtn.click();
+
+        // New 3-phase flow: "Place Tile" (confirm rotation) → "Send Move" (execute)
+        const hudBtn = page.locator('#hud-confirm');
+        if (await hudBtn.isVisible()) {
+          // Phase 1: click "Place Tile" to confirm rotation and show meeple outlines
+          await hudBtn.click();
+          await page.waitForTimeout(300);
+          // Phase 2: click "Send Move" to execute the move (skip meeple placement)
+          await hudBtn.click();
           await page.waitForTimeout(500);
           playedTurn = true;
         }

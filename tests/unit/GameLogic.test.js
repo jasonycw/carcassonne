@@ -161,9 +161,9 @@ describe('GameLogic', () => {
       expect(gs.players[0].color).toBe('red');
       expect(gs.players[1].color).toBe('blue');
       expect(gs.players[2].color).toBe('green');
-      expect(gs.players[3].color).toBe('purple');
-      expect(gs.players[4].color).toBe('orange');
-      expect(gs.players[5].color).toBe('teal');
+      expect(gs.players[3].color).toBe('yellow');
+      expect(gs.players[4].color).toBe('purple');
+      expect(gs.players[5].color).toBe('gray');
     });
 
     it('cycles colours when more than 6 players are created', () => {
