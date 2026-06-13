@@ -25,6 +25,7 @@ import {
 import { createGameState, initializeNewGame } from '../game/GameLogic.js';
 import { ALL_TILES as TILE_DATA } from '../game/TileData.js';
 import { hasRecoverableGame, getSavedGameInfo, loadGame, removeGame } from '../network/StateSync.js';
+import { img } from '../utils/AssetPaths.js';
 
 // ---------------------------------------------------------------------------
 // HTML templates (simple innerHTML — no build step needed)
@@ -137,6 +138,16 @@ export class LobbyView extends EventEmitter {
 
   mount() {
     this.container.innerHTML = LOBBY_HTML;
+    
+    // Set background image for lobby
+    const lobbyContainer = this.container.querySelector('#lobby-container');
+    if (lobbyContainer) {
+      lobbyContainer.style.backgroundImage = `url('${img('/images/ui/bg.jpg')}')`;
+      lobbyContainer.style.backgroundSize = 'cover';
+      lobbyContainer.style.backgroundPosition = 'center';
+      lobbyContainer.style.backgroundAttachment = 'fixed';
+    }
+    
     this.dom = {
       roomDisplay: this.container.querySelector('#room-display'),
       roomCode: this.container.querySelector('#room-code'),

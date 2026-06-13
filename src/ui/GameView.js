@@ -48,7 +48,6 @@ const GAME_HTML = `
   ">
     <span id="game-title">Carcassonne</span>
     <span id="game-turn-indicator" style="opacity:0.7;"></span>
-    <span id="game-tile-count" style="opacity:0.6; font-size:0.8rem;"></span>
     <button id="game-menu-btn" style="
       background: none; border: 1px solid #555; color: #eee;
       padding: 4px 12px; border-radius: 4px; cursor: pointer;
@@ -121,7 +120,6 @@ export class GameView {
       container,
       svg: container.querySelector('#game-svg'),
       turnIndicator: container.querySelector('#game-turn-indicator'),
-      tileCount: container.querySelector('#game-tile-count'),
       menuBtn: container.querySelector('#game-menu-btn'),
       scoreboard: container.querySelector('#game-scoreboard'),
       hud: container.querySelector('#game-hud'),
@@ -290,11 +288,6 @@ export class GameView {
       this.dom.turnIndicator.textContent = p
         ? `${p.user.username}'s turn`
         : '';
-    }
-    // Update tile count.
-    if (this.dom && this.dom.tileCount && this.gamestate) {
-      const remaining = this.gamestate.unusedTiles ? this.gamestate.unusedTiles.length : 0;
-      this.dom.tileCount.textContent = `Tiles: ${remaining}`;
     }
     // Update scoreboard.
     if (this.dom && this.dom.scoreboard && this.gamestate) {
