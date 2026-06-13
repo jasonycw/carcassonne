@@ -24,6 +24,9 @@ data/
 # Build output
 dist/
 
+# Claude Code session state
+.claude/
+
 # OpenCode session state
 .sisyphus/
 

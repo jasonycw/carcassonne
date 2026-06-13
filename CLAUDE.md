@@ -1,0 +1,1 @@
+Guidence is in AGENTS.md
