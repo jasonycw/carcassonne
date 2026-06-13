@@ -35,9 +35,9 @@ const LOBBY_HTML = `
 <div id="lobby-container" style="
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: #1a1a2e; color: #eee; font-family: 'Segoe UI', sans-serif;
+  background-repeat: repeat; color: #eee; font-family: 'Segoe UI', sans-serif;
 ">
-  <div style="max-width: 480px; width: 100%; padding: 24px;">
+  <div style="max-width: 480px; width: 100%; padding: 24px; background: rgba(26, 26, 46, 0.9); border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);">
 
     <h1 style="text-align:center; margin-bottom: 24px; font-size: 2.2rem;">
       🏰 Carcassonne
@@ -139,13 +139,14 @@ export class LobbyView extends EventEmitter {
   mount() {
     this.container.innerHTML = LOBBY_HTML;
     
-    // Set background image for lobby
+    // Set background image for lobby with tiling pattern
     const lobbyContainer = this.container.querySelector('#lobby-container');
     if (lobbyContainer) {
       lobbyContainer.style.backgroundImage = `url('${img('/images/ui/bg.jpg')}')`;
-      lobbyContainer.style.backgroundSize = 'cover';
-      lobbyContainer.style.backgroundPosition = 'center';
-      lobbyContainer.style.backgroundAttachment = 'fixed';
+      lobbyContainer.style.backgroundRepeat = 'repeat';
+      lobbyContainer.style.backgroundSize = 'auto';
+      lobbyContainer.style.backgroundPosition = '0 0';
+      lobbyContainer.style.backgroundAttachment = 'scroll';
     }
     
     this.dom = {
