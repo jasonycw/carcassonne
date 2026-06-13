@@ -38,3 +38,4 @@ Before committing tasks or marking a feature phase complete, you must explicitly
 - **Atomic Changes:** One specific structural change or logic file translation per commit. 
 - **Iterative & Traceable:** Commits should represent a step-by-step assembly of the phases.
 - **Clean Commit History:** Document messages explicitly detailing what changed, matching exactly the lines impacted.
+- **No artifact left:** All files must either be commited or gitignore, must not have any untrack/unstaged file left
