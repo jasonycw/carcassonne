@@ -67,11 +67,8 @@ export function renderScoreboard(container, gamestate, currentPlayerIndex, gameO
         <span style="margin-left:2px; font-weight:bold; color:${colorHex};">
           ${player.points}
         </span>
-        <span style="opacity:0.5; font-size:0.75rem; display:inline-flex; align-items:center; gap:2px;">
-          <img src="${img(`/images/meeples/${color}_standing.png`)}"
-               style="width:12px;height:12px;vertical-align:middle;"
-               alt="meeples" />
-          ${player.remainingMeeples != null ? player.remainingMeeples : '?'}
+        <span style="opacity:0.7; font-size:0.75rem; display:inline-flex; align-items:center; gap:1px; flex-wrap:nowrap;">
+          ${renderMeepleIcons(color, player.remainingMeeples)}
         </span>`;
 
     // ── Special meeple icons ────────────────────────────────────────
@@ -103,27 +100,37 @@ export function renderScoreboard(container, gamestate, currentPlayerIndex, gameO
 
   html += '</div>';
 
-  // Game-over overlay
-  if (gameOver) {
-    const winner = players.reduce((best, p) =>
-      p.points > best.points ? p : best,
-    );
-    html += `
-      <div style="
-        margin-top:6px; padding:6px 12px; border-radius:6px;
-        background:#2e7d32; color:#fff; font-size:0.85rem; font-weight:bold;
-      ">
-        🏆 ${escapeHtml(winner.user?.username || 'Player')} wins with ${winner.points} points!
-      </div>
-    `;
-  }
-
   container.innerHTML = html;
+}
+
+/**
+ * Render individual small meeple icons for the player's remaining meeples.
+ * Shows up to 8 icons; if more remain, shows "+N" overflow label.
+ * @param {string} colorName  Internal colour name (e.g. 'red', 'blue')
+ * @param {number|null} count  Number of remaining meeples
+ * @returns {string} HTML string
+ */
+function renderMeepleIcons(colorName, count) {
+  if (count == null) return '<span style="opacity:0.5;">?</span>';
+  const maxShow = 8;
+  const show = Math.min(count, maxShow);
+  const src = img(`/images/meeples/${colorName}_standing.png`);
+  let html = '';
+  for (let i = 0; i < show; i++) {
+    html += `<img src="${src}" style="width:12px;height:12px;" alt="meeple" />`;
+  }
+  if (count > maxShow) {
+    html += `<span style="font-size:0.65rem;opacity:0.6;margin-left:1px;">+${count - maxShow}</span>`;
+  }
+  return html;
 }
 
 /** Render a small meeple icon for special meeples (large, builder, pig). */
 function meepleIcon(colorName, type) {
-  const src = img(`/images/meeples/${colorName}_${type}.png`);
+  // Large meeples reuse the standing/lying images (rendered at larger size on board),
+  // but in the scoreboard we show a small icon with 'large' label
+  const suffix = type === 'large' ? 'standing' : type;
+  const src = img(`/images/meeples/${colorName}_${suffix}.png`);
   return `<img src="${src}" style="width:20px;height:20px;border-radius:2px;" title="${type}" />`;
 }
 
@@ -138,7 +145,7 @@ function tokenIcon(path, label) {
  * @param {string} color  Internal colour name: 'red', 'blue', 'green', etc.
  * @returns {string}  CSS hex colour
  */
-function getColorHex(color) {
+export function getColorHex(color) {
   const map = {
     red: '#e74c3c',
     blue: '#3498db',
@@ -151,7 +158,7 @@ function getColorHex(color) {
 }
 
 /** Minimal HTML-escape to prevent XSS from player names. */
-function escapeHtml(str) {
+export function escapeHtml(str) {
   if (!str) return '';
   return str
     .replace(/&/g, '&amp;')
