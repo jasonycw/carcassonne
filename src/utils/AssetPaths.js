@@ -26,3 +26,18 @@ export function img(path) {
   const clean = path.startsWith('/') ? path.slice(1) : path;
   return BASE + clean;
 }
+
+/**
+ * Return the path for a large meeple image.
+ * Large meeples (Inns & Cathedrals) reuse the standing/lying images,
+ * rendered at a larger size — no separate image file needed.
+ * Provided for compatibility; prefer using img() with standing/lying suffix.
+ *
+ * @param {string} color  Color name (e.g. 'red', 'blue')
+ * @param {string} location  'farm' → 'lying', otherwise 'standing'
+ * @returns {string}  Base-aware path to the meeple image
+ */
+export function getLargeMeeplePath(color, location) {
+  const suffix = location === 'farm' ? 'lying' : 'standing';
+  return img(`/images/meeples/${color}_${suffix}.png`);
+}
