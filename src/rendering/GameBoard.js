@@ -550,8 +550,8 @@ export function draw(gamestate, playerId, callbacks = {}) {
 // ---------------------------------------------------------------------------
 
 /**
- * Draw a small crown image on tiles that contain a meeple owned by the
- * current-turn player.
+ * Draw a small crown icon on tiles that contain a meeple owned by the
+ * current-turn player. Uses an inline SVG path (no external asset needed).
  */
 function drawCrownMarkers(tileGroups, gamestate, placedTiles) {
   const currentIdx = gamestate.currentPlayerIndex;
@@ -570,22 +570,26 @@ function drawCrownMarkers(tileGroups, gamestate, placedTiles) {
     }
   });
 
-  // Crown markers are drawn directly into the tileGroups container.
-  // We use a separate selection for cleanliness.
-  tileGroups.selectAll('image.crown-marker')
+  // Inline SVG crown path (simple 3-point crown shape)
+  // Size: 16x16 viewBox, gold fill with darker stroke
+  tileGroups.selectAll('g.crown-marker')
     .data(crownData)
     .join(
-      (enter) => enter.append('image')
-        .attr('class', 'crown-marker')
-        .attr('width', 16)
-        .attr('height', 16)
-        .attr('href', img('/images/crown.png'))
-        .attr('pointer-events', 'none'),
+      (enter) => {
+        const g = enter.append('g')
+          .attr('class', 'crown-marker')
+          .attr('pointer-events', 'none');
+        g.append('path')
+          .attr('d', 'M0,5 L3,0 L6,5 L10,0 L13,5 L13,10 L0,10 Z')
+          .attr('fill', '#FFD700')
+          .attr('stroke', '#B8860B')
+          .attr('stroke-width', '1');
+        return g;
+      },
       (update) => update,
       (exit) => exit.remove()
     )
-    .attr('x', (d) => d.x)
-    .attr('y', (d) => d.y);
+    .attr('transform', (d) => `translate(${d.x},${d.y})`);
 }
 
 // ---------------------------------------------------------------------------
