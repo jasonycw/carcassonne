@@ -179,32 +179,39 @@ export class GameView {
     // Wire up P2P orchestration layer.
     if (this.peerManager && !this.isLocalGame) {
       if (this.isHost) {
+        console.log('[GameView] Creating GameHost for P2P host');
         this.gameHost = new GameHost(this.peerManager, this.gamestate);
         this.gameHost.on('state-changed', () => {
+          console.log('[GameView] Host state changed, re-rendering');
           this._renderBoard();
           this._updateTurnIndicator();
           this._showActiveTileIfNeeded();
         });
         this.gameHost.on('game-over', () => {
+          console.log('[GameView] Host game over');
           this._showGameOver();
         });
         this.gameHost.on('chat-message', (payload) => {
           this.chatPanel.addMessage(payload.username, payload.message);
         });
       } else {
+        console.log('[GameView] Creating GameClient for P2P client, playerIndex:', this.playerIndex);
         this.gameClient = new GameClient(this.peerManager, this.gamestate);
         this.gameClient.on('state-update', () => {
+          console.log('[GameView] Client state update, re-rendering');
           this._renderBoard();
           this._updateTurnIndicator();
           this._showActiveTileIfNeeded();
         });
         this.gameClient.on('game-over', () => {
+          console.log('[GameView] Client game over');
           this._showGameOver();
         });
         this.gameClient.on('chat-message', (payload) => {
           this.chatPanel.addMessage(payload.username, payload.message);
         });
         this.gameClient.on('move-rejected', () => {
+          console.log('[GameView] Move rejected by host');
           // Re-show the active tile so the client can try again.
           this._renderBoard();
           this._updateTurnIndicator();
@@ -268,6 +275,16 @@ export class GameView {
   // ── Board rendering ──────────────────────────────────────────────────
 
   _renderBoard() {
+    // Sync playerIndex for P2P host mode with local slots (needed before
+    // _updateTurnIndicator is called, since _renderBoard uses this.playerIndex
+    // to determine isActive for the onPlacementClick callback).
+    if (this.isHost && !this.isLocalGame && this.gamestate) {
+      const remotePlayerIndices = this._getRemotePlayerIndices();
+      if (!remotePlayerIndices.includes(this.gamestate.currentPlayerIndex)) {
+        this.playerIndex = this.gamestate.currentPlayerIndex;
+      }
+    }
+
     const player = this.gamestate.players[this.playerIndex];
     const playerId = player?.user?._id || `player-${this.playerIndex}`;
     const isActive = player?.active || false;
