@@ -256,7 +256,7 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('transform', `scale(${TILE_SIZE / 32})`)
     .attr('fill', 'white')
     .attr('stroke', 'black')
-    .attr('opacity', 0)
+    .attr('opacity', 1)
     .attr('pointer-events', 'none');
   // Meeple-placements sub-group (hidden by default).
   meeplePlacementsGroup = activeTileRotGroup.append('g')
@@ -664,7 +664,7 @@ export function clearBoard() {
       .attr('transform', `scale(${TILE_SIZE / 32})`)
       .attr('fill', 'white')
       .attr('stroke', 'black')
-      .attr('opacity', 0)
+      .attr('opacity', 1)
       .attr('pointer-events', 'none');
     meeplePlacementsGroup = activeTileRotGroup.append('g')
       .attr('class', 'meeple-placements')
