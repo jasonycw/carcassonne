@@ -229,15 +229,26 @@ export class HostPeerManager extends PeerManager {
    * @param {string} roomCode
    * @param {object} [settings]  Default game settings (expansions, etc.)
    */
-  constructor(roomCode, settings = {}) {
+  /**
+   * @param {string} roomCode
+   * @param {object} [settings]  Default game settings (expansions, etc.)
+   * @param {string} [hostName]  The host player's display name
+   */
+  constructor(roomCode, settings = {}, hostName = 'Host') {
     super('host', roomCode);
     this.settings = {
       expansions: ['base-game'],
       turnTimer: 0,
       ...settings,
     };
+    this.hostName = hostName;
     this.connectedPlayers = []; // { id, conn, name, playerIndex }
     this._initHostDisconnectHandler();
+  }
+
+  /** Update the host's display name (e.g. from the name input field). */
+  setHostName(name) {
+    this.hostName = name || 'Host';
   }
 
   /**
@@ -299,7 +310,7 @@ export class HostPeerManager extends PeerManager {
   /** Build the lobby player list (host + joined clients). */
   getPlayerList() {
     const list = [
-      { id: this.peer.id, name: 'Host', playerIndex: 0, isHost: true },
+      { id: this.peer.id, name: this.hostName || 'Host', playerIndex: 0, isHost: true },
     ];
     for (const p of this.connectedPlayers) {
       list.push({ id: p.id, name: p.name, playerIndex: p.playerIndex, isHost: false });
