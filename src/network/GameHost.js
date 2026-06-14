@@ -105,7 +105,7 @@ export class GameHost extends EventEmitter {
     }
 
     if (success) {
-      this.broadcastState();
+      this._afterStateChange();
     }
   }
 
@@ -116,7 +116,7 @@ export class GameHost extends EventEmitter {
       return;
     }
     glSkipMeeple(this.gamestate);
-    this.broadcastState();
+    this._afterStateChange();
   }
 
   /** Handle a SKIP_TURN from a remote client. */
@@ -126,8 +126,7 @@ export class GameHost extends EventEmitter {
       return;
     }
     glSkipTurn(this.gamestate);
-    this.broadcastState();
-    this._checkGameOver();
+    this._afterStateChange();
   }
 
   /** Validate that the sender is the current player. */
@@ -168,6 +167,13 @@ export class GameHost extends EventEmitter {
 
   /** Broadcast the current game state to all connected peers. */
   broadcastState() {
+    console.log('[GameHost] Broadcasting state', {
+      players: this.gamestate.players?.length,
+      placedTiles: this.gamestate.placedTiles?.length,
+      currentPlayerIndex: this.gamestate.currentPlayerIndex,
+      step: this.gamestate.step,
+      finished: this.gamestate.finished,
+    });
     this.hostPeerManager.broadcastState(this.gamestate);
     saveGame(this.gamestate);
     this.emit('state-changed', this.gamestate);
