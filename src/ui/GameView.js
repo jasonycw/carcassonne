@@ -26,7 +26,8 @@ import { placeTile } from '../game/GameLogic.js';
 import { GameHost } from '../network/GameHost.js';
 import { GameClient } from '../network/GameClient.js';
 import { saveGame, removeGame } from '../network/StateSync.js';
-import { renderScoreboard } from '../rendering/ScoreBoard.js';
+import { renderScoreboard, getColorHex, escapeHtml } from '../rendering/ScoreBoard.js';
+import { navigate } from './Router.js';
 import { ChatPanel } from './ChatPanel.js';
 import { SettingsPanelUI, initSettings } from './SettingsPanel.js';
 
@@ -74,6 +75,12 @@ const GAME_HTML = `
     <div id="game-scoreboard" style="
       position: absolute; top: 40px; left: 12px; right: 12px; z-index: 15;
       pointer-events: none;
+    "></div>
+
+    <!-- Game-over banner -->
+    <div id="game-over-banner" style="
+      position: absolute; top: 0; left: 0; right: 0; z-index: 50;
+      display: none; pointer-events: auto;
     "></div>
   </div>
 </div>
@@ -283,11 +290,30 @@ export class GameView {
       this.playerIndex = this.gamestate.currentPlayerIndex;
     }
 
+    // In P2P host mode, if the current player slot is NOT controlled by a
+    // remote client (i.e. it's a "missing slot"), the host can play for them
+    // just like hot-seat mode. Sync playerIndex so the host sees valid
+    // placements and the active tile UI.
+    if (this.isHost && !this.isLocalGame && this.gamestate) {
+      const remotePlayerIndices = this._getRemotePlayerIndices();
+      if (!remotePlayerIndices.includes(this.gamestate.currentPlayerIndex)) {
+        this.playerIndex = this.gamestate.currentPlayerIndex;
+      }
+    }
+
     const p = this.gamestate.players[this.gamestate.currentPlayerIndex];
     if (this.dom && this.dom.turnIndicator) {
-      this.dom.turnIndicator.textContent = p
-        ? `${p.user.username}'s turn`
-        : '';
+      if (p) {
+        const colorName = p.color || 'blue';
+        const colorHex = getColorHex(colorName);
+        this.dom.turnIndicator.innerHTML = `
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+               background:${colorHex};vertical-align:middle;margin-right:4px;"></span>
+          ${escapeHtml(p.user?.username || 'Player')}'s turn
+        `;
+      } else {
+        this.dom.turnIndicator.textContent = '';
+      }
     }
     // Update scoreboard.
     if (this.dom && this.dom.scoreboard && this.gamestate) {
@@ -298,6 +324,13 @@ export class GameView {
         this.gamestate.finished,
       );
     }
+  }
+
+  /** Get the set of player indices controlled by remote P2P clients (host only). */
+  _getRemotePlayerIndices() {
+    if (!this.isHost || !this.gameHost) return [];
+    const connected = this.gameHost.hostPeerManager?.connectedPlayers || [];
+    return connected.map(p => p.playerIndex);
   }
 
   _showActiveTileIfNeeded() {
@@ -543,11 +576,69 @@ export class GameView {
     // Clear saved state — game is done.
     removeGame();
 
-    setTimeout(() => {
-      const winner = this.gamestate.players.reduce((best, p) =>
-        p.points > best.points ? p : best,
+    this._renderGameOverBanner();
+  }
+
+  /**
+   * Render the game-over banner at the top of the game board area.
+   * Shows the winner, their score, and a button to return to the lobby.
+   */
+  _renderGameOverBanner() {
+    const banner = this.dom && this.dom.container.querySelector('#game-over-banner');
+    if (!banner) return;
+
+    const winner = this.gamestate.players.reduce((best, p) =>
+      p.points > best.points ? p : best,
+    );
+    const colorName = winner.color || 'blue';
+    const colorHex = getColorHex(colorName);
+
+    // Also re-render the scoreboard with gameOver=true (disables active highlight)
+    if (this.dom && this.dom.scoreboard) {
+      renderScoreboard(
+        this.dom.scoreboard,
+        this.gamestate,
+        this.gamestate.currentPlayerIndex,
+        true,
       );
-      alert(`Game Over!\n\n${winner.user.username} wins with ${winner.points} points!`);
-    }, 500);
+    }
+
+    banner.innerHTML = `
+      <div style="
+        background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);
+        color: #fff; padding: 16px 20px; text-align: center;
+        font-family: 'Segoe UI', sans-serif;
+        border-bottom: 3px solid #4caf50;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      ">
+        <div style="font-size:1.4rem; font-weight:bold; margin-bottom:4px;">
+          🏆 Game Over!
+        </div>
+        <div style="font-size:1.1rem; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:10px;">
+          <span style="
+            display:inline-block; width:14px; height:14px; border-radius:50%;
+            background:${colorHex};
+          "></span>
+          <span style="font-weight:bold;">${escapeHtml(winner.user?.username || 'Player')}</span>
+          wins with <span style="font-weight:bold;">${winner.points}</span> points!
+        </div>
+        <button id="game-over-lobby-btn" style="
+          background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.5);
+          color: #fff; padding: 8px 24px; border-radius: 8px;
+          font-size:0.95rem; font-weight:bold; cursor: pointer;
+          transition: all 0.2s;
+        ">Back to Lobby</button>
+      </div>
+    `;
+
+    // Wire up the lobby button.
+    const btn = banner.querySelector('#game-over-lobby-btn');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        navigate('/');
+      });
+    }
+
+    banner.style.display = 'block';
   }
 }
