@@ -24,6 +24,11 @@ import {
  */
 export function initMeepleSelector(container, player, onSelect) {
   if (!container) return;
+  // Hide selector entirely when the player has no meeples left.
+  if (player.remainingMeeples <= 0) {
+    container.innerHTML = '';
+    return;
+  }
 
   const types = [{ type: 'normal', label: 'Meeple', available: player.remainingMeeples > 0 }];
 
@@ -43,7 +48,7 @@ export function initMeepleSelector(container, player, onSelect) {
         padding:6px 14px; border-radius:6px; border:1px solid #4fc3f7;
         background:#16213e; color:${t.available ? '#4fc3f7' : '#666'};
         cursor:${t.available ? 'pointer' : 'not-allowed'};
-        font-size:0.82rem; opacity:${t.available ? 1 : 0.4};
+        font-size:0.82rem; opacity:1;
       "
       ${t.available ? '' : 'disabled'}
     >${t.label}</button>
