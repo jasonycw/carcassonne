@@ -183,6 +183,8 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
       // Clear any previously placed meeple (rotation invalidates meeple positions).
       selectedMove.meeple = null;
       groups.meeplePlacementsGroup.selectAll('image.placed-meeple').remove();
+      // Re-show all outlines that may have been hidden when a meeple was placed.
+      groups.meeplePlacementsGroup.selectAll('image.meeple-outline').attr('visibility', null);
 
       // Update rotation transform.
       const metrics = getBoardMetrics();
@@ -192,8 +194,8 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
         .duration(200)
         .attr('transform', `rotate(${currentRotation * 90}) scale(${scale})`);
 
-      // Show rotation indicator briefly.
-      const indicator = activeTileRotGroup.select('text.rotation-indicator');
+      // Show rotation indicator briefly (SVG icon, no text popup).
+      const indicator = activeTileRotGroup.select('use.active-tile-rotation-indicator');
       if (!indicator.empty()) {
         indicator.attr('opacity', 1)
           .transition().delay(500).duration(300)
@@ -205,20 +207,11 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
       }
     });
 
-   // Rotation indicator text (shows current rotation: 0°, 90°, 180°, 270°).
-   activeTileRotGroup.append('text')
-    .attr('class', 'rotation-indicator')
-    .attr('x', 0)
-    .attr('y', TILE_SIZE / 2 + 5)
-    .attr('text-anchor', 'middle')
-    .attr('font-size', '12px')
-    .attr('font-weight', 'bold')
-    .attr('fill', '#fff')
-    .attr('pointer-events', 'none')
-    .attr('opacity', 0)
-    .text(`${currentRotation * 90}°`);
-
   // ── Meeple placements group ──────────────────────────────────────────
+  // Ensure meeple placements render ON TOP of the tile image by
+  // re-appending the container to the end of activeTileRotGroup.
+  activeTileRotGroup.node().appendChild(meeplePlacementsGroup.node());
+
   // Hide until a valid placement is selected.
   meeplePlacementsGroup
     .attr('visibility', 'hidden')
@@ -234,8 +227,8 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
     .attr('class', 'meeple-outline')
     .attr('width', MEEMPLE_NORMAL_SIZE)
     .attr('height', MEEMPLE_NORMAL_SIZE)
-    .attr('x', (d) => d.offset.x * TILE_SIZE - MEEMPLE_NORMAL_SIZE / 2)
-    .attr('y', (d) => d.offset.y * TILE_SIZE - MEEMPLE_NORMAL_SIZE / 2)
+    .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 2 - MEEMPLE_NORMAL_SIZE / 2)
+    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 2 - MEEMPLE_NORMAL_SIZE / 2)
     .attr('href', (d) => {
       const suffix = d.locationType === 'farm' ? 'lying' : 'standing';
       return img(`/images/meeples/outline_${suffix}.png`);
@@ -320,11 +313,10 @@ function rotateActiveTile(direction) {
     .duration(200)
     .attr('transform', `rotate(${currentRotation * 90}) scale(${scale})`);
 
-  // Flash the rotation indicator.
-  const indicator = groups.activeTileRotGroup.select('text.rotation-indicator');
+  // Flash the rotation indicator (SVG icon, no text per original UX).
+  const indicator = groups.activeTileRotGroup.select('use.active-tile-rotation-indicator');
   if (!indicator.empty()) {
-    indicator.text(`${currentRotation * 90}°`)
-      .attr('opacity', 1)
+    indicator.attr('opacity', 1)
       .transition()
       .delay(300)
       .duration(300)
@@ -336,7 +328,9 @@ function rotateActiveTile(direction) {
     selectedMove.meeple = null;
   }
   groups.meeplePlacementsGroup.selectAll('image.placed-meeple').attr('visibility', 'hidden');
-  // Show outlines for the new rotation.
+  // Re-show all outlines that may have been hidden when a meeple was placed
+  // (rotation may change which features are accessible).
+  groups.meeplePlacementsGroup.selectAll('image.meeple-outline').attr('visibility', null);
   if (selectedMove && selectedMove.placement) {
     updateMeeplePlacementsInternal();
   }
@@ -421,11 +415,14 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
   if (!groups) return Promise.resolve();
 
   const metrics = getBoardMetrics();
-  const boardX = metrics.svgWidth / 2 + gridX * TILE_SIZE;
-  const boardY = metrics.svgHeight / 2 + gridY * TILE_SIZE;
+  // Use the TILE CENTER coordinate, not the corner, to correctly account
+  // for the zoom transform.  The active tile rotation group's (0,0) is the
+  // tile center, so we transform the center point to screen-space.
+  const centerX = metrics.svgWidth / 2 + gridX * TILE_SIZE + TILE_SIZE / 2;
+  const centerY = metrics.svgHeight / 2 + gridY * TILE_SIZE + TILE_SIZE / 2;
   const t = metrics.transform;
-  const screenX = t.applyX(boardX);
-  const screenY = t.applyY(boardY);
+  const screenCenterX = t.applyX(centerX);
+  const screenCenterY = t.applyY(centerY);
 
   // Save pinned state for zoom tracking.
   _isPinned = true;
@@ -442,7 +439,7 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
     groups.activeTileTransGroup
       .transition()
       .duration(TRANSITION_DURATION)
-      .attr('transform', `translate(${screenX + TILE_SIZE / 2},${screenY + TILE_SIZE / 2})`);
+      .attr('transform', `translate(${screenCenterX},${screenCenterY})`);
 
     groups.activeTileRotGroup
       .transition()
@@ -467,14 +464,15 @@ export function updateBoardPosition() {
   if (!groups) return;
 
   const metrics = getBoardMetrics();
-  const boardX = metrics.svgWidth / 2 + _pinnedGridX * TILE_SIZE;
-  const boardY = metrics.svgHeight / 2 + _pinnedGridY * TILE_SIZE;
+  // Use tile CENTER coordinate to correctly account for zoom transform
+  const centerX = metrics.svgWidth / 2 + _pinnedGridX * TILE_SIZE + TILE_SIZE / 2;
+  const centerY = metrics.svgHeight / 2 + _pinnedGridY * TILE_SIZE + TILE_SIZE / 2;
   const t = metrics.transform;
-  const screenX = t.applyX(boardX);
-  const screenY = t.applyY(boardY);
+  const screenCenterX = t.applyX(centerX);
+  const screenCenterY = t.applyY(centerY);
 
   groups.activeTileTransGroup
-    .attr('transform', `translate(${screenX + TILE_SIZE / 2},${screenY + TILE_SIZE / 2})`);
+    .attr('transform', `translate(${screenCenterX},${screenCenterY})`);
 
   // Update scale to match current zoom level.
   groups.activeTileRotGroup
