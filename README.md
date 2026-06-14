@@ -6,9 +6,9 @@ Play solo, hot-seat with friends on one device, or create a room and share the c
 
 ## Screenshots
 
-| Lobby | Game Started | Mid-game |
-|-------|-------------|----------|
-| ![Lobby](screenshots/01-lobby.png) | ![Game Board](screenshots/03-game-board.png) | ![Multiple Tiles](screenshots/05-multiple-tiles.png) |
+| Lobby | Game Started | Mid-game | Game Over |
+|-------|-------------|----------|-----------|
+| ![Lobby](screenshots/01-lobby.png) | ![Game Board](screenshots/02-game-started.png) | ![Mid-game](screenshots/03-mid-game.png) | ![Game Over](screenshots/04-game-over.png) |
 
 ## Features
 
