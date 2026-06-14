@@ -28,10 +28,17 @@ export class GameClient extends EventEmitter {
   /** Set up listeners for state syncs and game events from the host. */
   _init() {
     this.clientPeerManager.on('msg:game_state_sync', (payload) => {
+      console.log('[GameClient] Received game_state_sync', {
+        tileCount: payload.state?.placedTiles?.length,
+        currentPlayer: payload.state?.currentPlayerIndex,
+        step: payload.state?.step,
+        activeTile: payload.state?.activeTile?.tileId,
+      });
       this._applyRemoteState(payload.state);
     });
 
     this.clientPeerManager.on('msg:game_over', (payload) => {
+      console.log('[GameClient] Received game_over');
       // _applyRemoteState emits 'game-over' when it detects finished=true,
       // so no separate emit needed here.
       this._applyRemoteState(payload.state || payload);
