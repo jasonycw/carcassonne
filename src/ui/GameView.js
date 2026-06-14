@@ -542,7 +542,8 @@ export class GameView {
     const mode = meeplePlacementMode;
 
     container.innerHTML = types.map((type) => {
-      const suffix = type === 'normal' ? 'standing' : type;
+      // Large meeples reuse the standing meeple image (rendered larger on board).
+      const suffix = type === 'normal' || type === 'large' ? 'standing' : type;
       const src = img(`/images/meeples/${colorName}_${suffix}.png`);
       const active = type === mode;
       return `<img src="${src}" data-type="${type}" class="meeple-type-btn"
