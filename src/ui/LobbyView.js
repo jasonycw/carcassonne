@@ -177,16 +177,30 @@ export class LobbyView extends EventEmitter {
 
     // Check URL for room code (joining) — try search params first,
     // then fall back to hash params (for hash-based SPA routing).
+    console.log('[LobbyView] mount() URL search:', window.location.search, 'hash:', window.location.hash);
     let roomParam = new URLSearchParams(window.location.search).get('room');
     if (!roomParam) {
       const hash = window.location.hash;
       const qm = hash.indexOf('?');
       if (qm !== -1) {
         roomParam = new URLSearchParams(hash.slice(qm)).get('room');
+        console.log('[LobbyView] Found room param in hash:', roomParam);
+      } else {
+        console.log('[LobbyView] No ? in hash, trying #/?room= format');
+        // Also try parsing the hash alone (e.g. from #/?room=XXXX)
+        const hashParts = hash.replace(/^#\/?/, '').split('?');
+        if (hashParts.length > 1) {
+          const hashParams = new URLSearchParams(hashParts[1]);
+          roomParam = hashParams.get('room');
+          console.log('[LobbyView] Room from hash params:', roomParam);
+        }
       }
+    } else {
+      console.log('[LobbyView] Found room param in search:', roomParam);
     }
     if (roomParam) {
       this.dom.roomCodeInput.value = roomParam.toUpperCase();
+      console.log('[LobbyView] Auto-joining room:', roomParam.toUpperCase());
       this._joinGame();
       return; // _joinGame continues from here
     }
@@ -299,8 +313,10 @@ export class LobbyView extends EventEmitter {
     this._setStatus('Creating room...');
 
     try {
-      this.peerManager = new HostPeerManager(this.roomCode, { expansions });
+      console.log('[LobbyView] Creating host peer manager, room:', this.roomCode, 'name:', name);
+      this.peerManager = new HostPeerManager(this.roomCode, { expansions }, name);
       await this.peerManager.init();
+      console.log('[LobbyView] Host peer initialized, peerId:', this.peerManager.peerId);
 
       // Show room code.
       this.dom.roomCode.textContent = this.roomCode;
@@ -359,7 +375,12 @@ export class LobbyView extends EventEmitter {
       // Add name change listener for host: re-render player list on input.
       this.dom.playerName.addEventListener('input', () => {
         if (this.players.length > 0 && this.players[0].isHost) {
-          this.players[0].name = this.dom.playerName.value.trim() || 'Host';
+          const newName = this.dom.playerName.value.trim() || 'Host';
+          this.players[0].name = newName;
+          // Update the host name in the PeerManager so joiners see the real name.
+          if (this.peerManager && typeof this.peerManager.setHostName === 'function') {
+            this.peerManager.setHostName(newName);
+          }
           this._updatePlayerList();
         }
       });
@@ -393,13 +414,17 @@ export class LobbyView extends EventEmitter {
       return;
     }
 
+    console.log('[LobbyView] _joinGame() called - name:', name, 'code:', code);
+
     localStorage.setItem('carcassonne_player_name', name);
     this.roomCode = code;
     this._setStatus('Connecting...');
 
     try {
+      console.log('[LobbyView] Creating ClientPeerManager for room:', code);
       this.peerManager = new ClientPeerManager(code);
       const result = await this.peerManager.connectToHost(name);
+      console.log('[LobbyView] Connected to host! Player index:', result.playerIndex, 'players:', result.players);
 
       // Hide the action buttons, keep name input visible.
       const createBtn = this.dom.createBtn;
@@ -462,6 +487,7 @@ export class LobbyView extends EventEmitter {
 
       // Listen for game start.
       this.peerManager.on('msg:game_starting', (payload) => {
+        console.log('[LobbyView] Received game_starting from host!', payload);
         // Remove cancel button if present.
         if (cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
 
@@ -512,6 +538,7 @@ export class LobbyView extends EventEmitter {
               validPlacements: init.activeTile.validPlacements || [] }
           : null;
 
+        const clientExpansions = init.expansions || ['base-game'];
         const clientState = {
           players: (init.players || []).map((p, i) => ({
             user: { username: p.username || `Player ${i}`, _id: `client-player-${i}` },
@@ -519,11 +546,13 @@ export class LobbyView extends EventEmitter {
             points: p.points || 0,
             remainingMeeples: p.remainingMeeples != null ? p.remainingMeeples : 7,
             active: p.active || false,
-            hasLargeMeeple: false,
-            hasBuilderMeeple: false,
-            hasPigMeeple: false,
+            hasLargeMeeple: clientExpansions.includes('inns-and-cathedrals'),
+            hasBuilderMeeple: clientExpansions.includes('traders-and-builders'),
+            hasPigMeeple: clientExpansions.includes('traders-and-builders'),
             goods: p.goods || {},
             towers: p.towers || 0,
+            capturedMeeples: [],
+            acknowledgedGameEnd: false,
           })),
           currentPlayerIndex: init.currentPlayerIndex != null ? init.currentPlayerIndex : 0,
           placedTiles,
@@ -564,8 +593,23 @@ export class LobbyView extends EventEmitter {
         }, 3000);
       });
     } catch (err) {
-      console.error('Failed to join:', err);
-      this._setStatus('Failed to join: ' + err.message);
+      console.error('[LobbyView] Failed to join room:', err);
+      let errorMsg = 'Failed to join: ' + err.message;
+      // Provide user-friendly suggestions for common PeerJS errors.
+      if (err.message && err.message.includes('Could not connect to peer')) {
+        errorMsg = 'Could not connect to host. The room code may be invalid or the host may have left.';
+      } else if (err.message && err.message.includes('timed out')) {
+        errorMsg = 'Connection timed out. Check the room code and try again.';
+      } else if (err.message && err.message.includes('peer unavailable')) {
+        errorMsg = 'Room not found. The host may have closed the room or the code is wrong.';
+      }
+      this._setStatus(errorMsg);
+      // Destroy PeerManager on failure so we don't leak connections.
+      if (this.peerManager) {
+        this.peerManager.removeAllListeners();
+        this.peerManager.destroy();
+        this.peerManager = null;
+      }
     }
   }
 
