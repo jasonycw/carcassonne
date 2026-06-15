@@ -378,6 +378,9 @@ export class HostPeerManager extends PeerManager {
         active: p.active,
         goods: p.goods,
         towers: p.towers,
+        hasLargeMeeple: p.hasLargeMeeple || false,
+        hasBuilderMeeple: p.hasBuilderMeeple || false,
+        hasPigMeeple: p.hasPigMeeple || false,
       })),
       placedTiles: state.placedTiles.map((pt) => ({
         tileId: pt.tile.id,

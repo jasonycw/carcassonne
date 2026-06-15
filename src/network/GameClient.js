@@ -12,6 +12,7 @@
 
 import { EventEmitter } from '../utils/EventEmitter.js';
 import { ALL_TILES as TILE_DATA } from '../game/TileData.js';
+import { saveGame } from './StateSync.js';
 
 export class GameClient extends EventEmitter {
   /**
@@ -110,9 +111,9 @@ export class GameClient extends EventEmitter {
       points: p.points || 0,
       remainingMeeples: p.remainingMeeples != null ? p.remainingMeeples : 7,
       active: p.active || false,
-      hasLargeMeeple: (gs.expansions).includes('inns-and-cathedrals'),
-      hasBuilderMeeple: (gs.expansions).includes('traders-and-builders'),
-      hasPigMeeple: (gs.expansions).includes('traders-and-builders'),
+      hasLargeMeeple: p.hasLargeMeeple != null ? p.hasLargeMeeple : (gs.expansions).includes('inns-and-cathedrals'),
+      hasBuilderMeeple: p.hasBuilderMeeple != null ? p.hasBuilderMeeple : (gs.expansions).includes('traders-and-builders'),
+      hasPigMeeple: p.hasPigMeeple != null ? p.hasPigMeeple : (gs.expansions).includes('traders-and-builders'),
       goods: p.goods || {},
       towers: p.towers || 0,
       capturedMeeples: [],
@@ -174,6 +175,9 @@ export class GameClient extends EventEmitter {
     } else {
       gs.activeTile = null;
     }
+
+    // Persist synced state for crash recovery (Bug 24).
+    saveGame(gs);
 
     this.emit('state-update', gs);
 
