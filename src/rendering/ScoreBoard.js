@@ -34,15 +34,17 @@ export function renderScoreboard(container, gamestate, currentPlayerIndex, gameO
   const tilesPlaced = gamestate.placedTiles ? gamestate.placedTiles.length : 1; // starting tile always placed
   const totalTiles = tilesRemaining + tilesPlaced;
 
-  let html = '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">';
+  // Vertical layout matching original game.ejs scoreboard.
+  // Each player row: color dot + name + score + meeple icons + specials.
+  let html = '<div style="display:flex; flex-direction:column; gap:2px; min-width:180px;">';
 
   // Remaining tiles indicator (matches original game placement).
   html += `<div style="
-    padding:4px 10px; border-radius:6px; background:rgba(255,255,255,0.05);
-    font-size:0.82rem; color:#aaa;
+    padding:3px 8px; border-radius:4px; background:rgba(255,255,255,0.05);
+    font-size:0.78rem; color:#aaa; margin-bottom:4px;
   ">
     Tiles: <span style="font-weight:bold;color:#fff;">${tilesRemaining}</span>
-    <span style="opacity:0.5;font-size:0.75rem;">/ ${totalTiles}</span>
+    <span style="opacity:0.5;font-size:0.7rem;">/ ${totalTiles}</span>
   </div>`;
 
   players.forEach((player, i) => {
@@ -52,22 +54,23 @@ export function renderScoreboard(container, gamestate, currentPlayerIndex, gameO
 
     html += `
       <div class="sb-player ${isActive ? 'sb-active' : ''}" style="
-        display:flex; align-items:center; gap:4px; padding:4px 10px;
-        border-radius:6px; background:${isActive ? 'rgba(255,255,255,0.12)' : 'transparent'};
-        border:${isActive ? `2px solid ${colorHex}` : '2px solid transparent'};
+        display:flex; align-items:center; gap:6px; padding:3px 8px;
+        border-radius:4px; 
+        background:${isActive ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.2)'};
+        border-left:${isActive ? `3px solid ${colorHex}` : '3px solid transparent'};
         transition: all 0.2s; font-size:0.82rem;
       ">
         <span style="
-          display:inline-block; width:12px; height:12px; border-radius:50%;
+          display:inline-block; width:10px; height:10px; border-radius:50%;
           background:${colorHex}; flex-shrink:0;
         "></span>
-        <span style="font-weight:${isActive ? 'bold' : 'normal'};">
+        <span style="font-weight:${isActive ? 'bold' : 'normal'}; flex-shrink:0; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
           ${escapeHtml(player.user?.username || `Player ${i + 1}`)}
         </span>
-        <span style="margin-left:2px; font-weight:bold; color:${colorHex};">
+        <span style="margin-left:auto; font-weight:bold; color:${colorHex}; flex-shrink:0;">
           ${player.points}
         </span>
-        <span style="opacity:0.7; font-size:0.75rem; display:inline-flex; align-items:center; gap:1px; flex-wrap:nowrap;">
+        <span style="opacity:0.7; font-size:0.7rem; display:inline-flex; align-items:center; gap:1px; flex-wrap:nowrap; margin-left:4px;">
           ${renderMeepleIcons(color, player.remainingMeeples)}
         </span>`;
 
@@ -112,15 +115,15 @@ export function renderScoreboard(container, gamestate, currentPlayerIndex, gameO
  */
 function renderMeepleIcons(colorName, count) {
   if (count == null) return '<span style="opacity:0.5;">?</span>';
-  const maxShow = 8;
+  const maxShow = 7;
   const show = Math.min(count, maxShow);
   const src = img(`/images/meeples/${colorName}_standing.png`);
   let html = '';
   for (let i = 0; i < show; i++) {
-    html += `<img src="${src}" style="width:12px;height:12px;" alt="meeple" />`;
+    html += `<img src="${src}" style="width:10px;height:10px;" alt="meeple" />`;
   }
   if (count > maxShow) {
-    html += `<span style="font-size:0.65rem;opacity:0.6;margin-left:1px;">+${count - maxShow}</span>`;
+    html += `<span style="font-size:0.6rem;opacity:0.6;margin-left:1px;">+${count - maxShow}</span>`;
   }
   return html;
 }
