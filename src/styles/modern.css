@@ -141,9 +141,9 @@ html, body {
 
 #game-scoreboard {
   position: absolute;
-  top: 40px;
+  top: 4px;
   left: 12px;
-  right: 12px;
+  max-width: 400px;
   z-index: 15;
   pointer-events: none;
 }

@@ -134,7 +134,8 @@ function meepleIcon(colorName, type) {
   // but in the scoreboard we show a small icon with 'large' label
   const suffix = type === 'large' ? 'standing' : type;
   const src = img(`/images/meeples/${colorName}_${suffix}.png`);
-  return `<img src="${src}" style="width:20px;height:20px;border-radius:2px;" title="${type}" />`;
+  const size = type === 'large' ? 24 : 20;
+  return `<img src="${src}" style="width:${size}px;height:${size}px;border-radius:2px;" title="${type}" />`;
 }
 
 /** Render a small icon with a count label. */

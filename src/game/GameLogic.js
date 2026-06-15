@@ -237,10 +237,14 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
   }
 
   // Validate meeple placement if provided.
+  // Large meeples are allowed wherever normal meeples can go — they count as
+  // two meeples for majority but don't change the placement rules.
+  // Builders and pigs have their own entries in rotEntry.meeples (generated
+  // by TilePlacement.js) when the adjacent feature contains the active
+  // player's special meeple from a previous turn.
   if (meeple) {
-    const meepleTypeCheck = meeple.meepleType === 'large' ? 'normal' : meeple.meepleType;
     const meepleValid = rotEntry.meeples.some(
-      (m) => m.meepleType === meepleTypeCheck &&
+      (m) => (m.meepleType === meeple.meepleType || (meeple.meepleType === 'large' && m.meepleType === 'normal')) &&
              m.locationType === meeple.locationType &&
              m.index === meeple.index,
     );
@@ -396,6 +400,15 @@ export function placeMeeple(gamestate, tileIndex, locationType, featureIndex, me
   if (meepleType !== 'normal') {
     const flag = getMeepleFlag(meepleType);
     if (!player[flag]) return { success: false, message: `No ${meepleType} meeple available` };
+  }
+
+  // Builder can only be placed on ROAD features.
+  if (meepleType === 'builder' && locationType !== 'road') {
+    return { success: false, message: 'Builder can only be placed on a road' };
+  }
+  // Pig can only be placed on FARM/field features.
+  if (meepleType === 'pig' && locationType !== 'farm') {
+    return { success: false, message: 'Pig can only be placed on a farm' };
   }
 
   if (meepleType === 'normal') {

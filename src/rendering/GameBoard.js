@@ -141,7 +141,7 @@ function resolveMeepleOffset(placement, tile) {
 
 /** Compute meeple render size (px) based on meeple type. */
 function meepleSize(meepleType) {
-  return meepleType !== 'normal' ? TILE_SIZE * 3 / 8 : TILE_SIZE / 4;
+  return meepleType === 'large' ? TILE_SIZE * 3 / 8 : TILE_SIZE / 4;
 }
 
 // ---------------------------------------------------------------------------
@@ -355,7 +355,11 @@ export function draw(gamestate, playerId, callbacks = {}) {
   tileGroups = tileGroups.merge(tileGroupsEnter);
 
   tileGroups
-    .attr('transform', (d) => `translate(${svgWidth / 2 + d.x * TILE_SIZE},${svgHeight / 2 + d.y * TILE_SIZE})`);
+    .attr('transform', (d) => {
+      const x = svgWidth / 2 + d.x * TILE_SIZE;
+      const y = svgHeight / 2 + d.y * TILE_SIZE;
+      return `rotate(${90 * d.rotation},${x + TILE_SIZE / 2},${y + TILE_SIZE / 2}) translate(${x},${y})`;
+    });
 
   // ── Meeples on placed tiles ───────────────────────────────────────────
   tileGroups.selectAll('image.meeple')

@@ -110,7 +110,7 @@ function resolveMeepleOffset(placement, tile) {
 
 /** Compute meeple render size based on type. */
 function meepleSize(type) {
-  return type !== 'normal' ? MEEMPLE_SPECIAL_SIZE : MEEMPLE_NORMAL_SIZE;
+  return type === 'large' ? MEEMPLE_SPECIAL_SIZE : MEEMPLE_NORMAL_SIZE;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,13 +203,9 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
         .duration(200)
         .attr('transform', `rotate(${currentRotation * 90}) scale(${scale})`);
 
-      // Show rotation indicator briefly (SVG icon, no text popup).
-      const indicator = activeTileRotGroup.select('use.active-tile-rotation-indicator');
-      if (!indicator.empty()) {
-        indicator.attr('opacity', 1)
-          .transition().delay(500).duration(300)
-          .attr('opacity', 0);
-      }
+      // Rotation indicator visibility is managed by _updateRotationIndicator()
+      // (persistent show/hide based on rotation count). Refresh state.
+      _updateRotationIndicator();
 
       if (onRotationChangedCallback) {
         onRotationChangedCallback(currentRotation);
@@ -224,6 +220,7 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
   // Clear meeplePlacementsGroup content
   meeplePlacementsGroup
     .attr('visibility', 'hidden')
+    .style('pointer-events', 'none')
     .selectAll('*').remove();
 
   // Create meeple-outline images for each valid meeple position on the
@@ -243,13 +240,14 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
     )
     .each(function (d) {
       const g = d3.select(this);
-      // Outline image
+      // Outline image — use current meeple type size
+      const outlineSize = meepleSize(currentMeepleType);
       g.append('image')
         .attr('class', 'meeple-outline')
-        .attr('width', MEEMPLE_NORMAL_SIZE)
-        .attr('height', MEEMPLE_NORMAL_SIZE)
-        .attr('x', -MEEMPLE_NORMAL_SIZE / 2)
-        .attr('y', -MEEMPLE_NORMAL_SIZE / 2)
+        .attr('width', outlineSize)
+        .attr('height', outlineSize)
+        .attr('x', -outlineSize / 2)
+        .attr('y', -outlineSize / 2)
         .attr('href', () => {
           const suffix = d.locationType === 'farm' ? 'lying' : 'standing';
           return img(`/images/meeples/outline_${suffix}.png`);
@@ -359,15 +357,9 @@ function rotateActiveTile(direction) {
     .duration(200)
     .attr('transform', `rotate(${currentRotation * 90}) scale(${scale})`);
 
-  // Flash the rotation indicator (SVG icon, no text per original UX).
-  const indicator = groups.activeTileRotGroup.select('use.active-tile-rotation-indicator');
-  if (!indicator.empty()) {
-    indicator.attr('opacity', 1)
-      .transition()
-      .delay(300)
-      .duration(300)
-      .attr('opacity', 0);
-  }
+  // Rotation indicator visibility is managed by _updateRotationIndicator()
+  // (persistent show/hide based on rotation count). Refresh state.
+  _updateRotationIndicator();
 
   // Clear meeple placement but keep the selected placement.
   if (selectedMove) {
@@ -626,11 +618,29 @@ export function updateMeeplePlacements(validMeeplesIn, meepleTypeIn, svgElement)
   // Bug 4: Update outline sizes to match the current meeple type.
   const groups = getActiveTileGroups();
   if (groups) {
-    const type = currentMeepleType === 'large' ? 'normal' : currentMeepleType;
-    const size = meepleSize(type);
+    const size = meepleSize(currentMeepleType);
     groups.meeplePlacementsGroup.selectAll('image.meeple-outline')
       .attr('width', size)
       .attr('height', size);
+
+    // Bug 4: Re-filter outline visibility based on the new meeple type.
+    // (Harmless when the group is still hidden pre-confirm; group visibility
+    //  takes precedence over individual visibility in SVG.)
+    const meepleGroup = groups.meeplePlacementsGroup;
+    if (selectedMove && selectedMove.placement && selectedMove.rotationIndex != null) {
+      const rotationEntry = selectedMove.placement.rotations[selectedMove.rotationIndex];
+      const validMeeples = rotationEntry ? rotationEntry.meeples : [];
+      const mType = currentMeepleType === 'large' ? 'normal' : currentMeepleType;
+      const hasMeeples = _playerState && (_playerState.remainingMeeples || 0) > 0;
+      meepleGroup.selectAll('image.meeple-outline')
+        .attr('visibility', (d) => {
+          if (!hasMeeples) return 'hidden';
+          const isValid = validMeeples.some(
+            (m) => m.meepleType === mType && m.locationType === d.locationType && m.index === d.index
+          );
+          return isValid ? null : 'hidden';
+        });
+    }
   }
 
   updateMeeplePlacementsInternal(validMeeplesIn);
@@ -684,6 +694,9 @@ export function showMeeplePlacements() {
   // Show the meeple group and allow pointer events for meeple selection.
   meepleGroup.attr('visibility', null);
   meepleGroup.style('pointer-events', null);
+
+  // Rotation indicator is no longer needed — meeple outlines are shown.
+  hideRotationIndicator();
 
   // Bug 3: Filter outlines to only show positions valid for this rotation.
   meepleGroup.selectAll('image.meeple-outline')
@@ -795,11 +808,32 @@ export function setSelectedPlacement(placement) {
   // Do NOT show meeple outlines here — they show only after the player clicks
   // "Place Tile" (confirm).  The outlines are already created in renderActiveTile
   // and will be shown by showMeeplePlacements().
+
+  // Show rotation indicator if >1 valid rotations (Bug 3/5: persistent visibility).
+  _updateRotationIndicator();
 }
 
 /** Get the current rotation. */
 export function getCurrentRotation() {
   return currentRotation;
+}
+
+/**
+ * Show or hide the rotation indicator based on how many valid rotations the
+ * current placement has.  Hidden when ≤ 1 (rotation not available or trivial).
+ */
+function _updateRotationIndicator() {
+  const groups = getActiveTileGroups();
+  if (!groups) return;
+  const indicator = groups.activeTileRotGroup.select('use.active-tile-rotation-indicator');
+  if (indicator.empty()) return;
+  const hasMultipleRotations =
+    selectedMove &&
+    selectedMove.placement &&
+    selectedMove.placement.rotations &&
+    selectedMove.placement.rotations.length > 1;
+  indicator.interrupt();
+  indicator.attr('opacity', hasMultipleRotations ? 1 : 0);
 }
 
 /** Force-set rotation (e.g. when restoring game state). */

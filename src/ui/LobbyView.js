@@ -175,28 +175,32 @@ export class LobbyView extends EventEmitter {
     const saved = localStorage.getItem('carcassonne_player_name');
     if (saved) this.dom.playerName.value = saved;
 
-    // Check URL for room code (joining) — try search params first,
-    // then fall back to hash params (for hash-based SPA routing).
-    console.log('[LobbyView] mount() URL search:', window.location.search, 'hash:', window.location.hash);
-    let roomParam = new URLSearchParams(window.location.search).get('room');
-    if (!roomParam) {
-      const hash = window.location.hash;
-      const qm = hash.indexOf('?');
-      if (qm !== -1) {
-        roomParam = new URLSearchParams(hash.slice(qm)).get('room');
+    // Extra robust check: directly parse search params early.
+    const directParams = new URLSearchParams(window.location.search);
+    const directRoom = directParams.get('room');
+    if (directRoom) {
+      console.log('[LobbyView] Direct room param found in search:', directRoom);
+      this.dom.roomCodeInput.value = directRoom.toUpperCase();
+      this._joinGame();
+      return;
+    }
+
+    // Check URL for room code (joining) — fall back to hash params
+    // (for hash-based SPA routing like #/?room=XXXX).
+    console.log('[LobbyView] mount() hash:', window.location.hash);
+    let roomParam = null;
+    const hash = window.location.hash;
+    const qm = hash.indexOf('?');
+    if (qm !== -1) {
+      const afterQM = hash.slice(qm + 1);
+      try {
+        roomParam = new URLSearchParams(afterQM).get('room');
         console.log('[LobbyView] Found room param in hash:', roomParam);
-      } else {
-        console.log('[LobbyView] No ? in hash, trying #/?room= format');
-        // Also try parsing the hash alone (e.g. from #/?room=XXXX)
-        const hashParts = hash.replace(/^#\/?/, '').split('?');
-        if (hashParts.length > 1) {
-          const hashParams = new URLSearchParams(hashParts[1]);
-          roomParam = hashParams.get('room');
-          console.log('[LobbyView] Room from hash params:', roomParam);
-        }
+      } catch (e) {
+        // fallback to regex
+        const match = hash.match(/[?&]room=([^&]+)/i);
+        if (match) roomParam = match[1];
       }
-    } else {
-      console.log('[LobbyView] Found room param in search:', roomParam);
     }
     if (roomParam) {
       this.dom.roomCodeInput.value = roomParam.toUpperCase();
@@ -350,6 +354,7 @@ export class LobbyView extends EventEmitter {
             this.players.push({
               name: message.payload.playerName,
               isHost: false,
+              isRemote: true,
               playerIndex: result.playerIndex,
             });
             this._updatePlayerList();
@@ -622,7 +627,13 @@ export class LobbyView extends EventEmitter {
       const li = document.createElement('li');
       li.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:8px; margin:4px 0; background:#16213e; border-radius:6px;';
       const span = document.createElement('span');
-      span.textContent = p.name + (p.isHost ? ' (Host)' : '');
+      if (p.isHost) {
+        span.textContent = p.name + ' (Host)';
+      } else if (p.isRemote) {
+        span.textContent = p.name + ' (Connected)';
+      } else {
+        span.textContent = p.name;
+      }
       li.appendChild(span);
       // Kick button for host (not on self and not on host).
       if (this.isHost && !p.isHost) {
@@ -697,6 +708,12 @@ export class LobbyView extends EventEmitter {
         state.players[clientSlot].user = { username: p.name, _id: `client-${clientSlot}` };
         clientSlot++;
       }
+    }
+
+    // Fill remaining player slots with host-local players so the game
+    // can cycle through all turns (not just P2P connected clients).
+    for (let i = clientSlot; i < state.players.length; i++) {
+      state.players[i].user = { username: `Player ${i + 1}`, _id: `local-player-${i}` };
     }
 
     initializeNewGame(state, TILE_DATA.find((t) => t.startingTile));

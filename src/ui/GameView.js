@@ -73,7 +73,7 @@ const GAME_HTML = `
 
     <!-- Scoreboard (rendered by ScoreBoard.js) -- vertical left-aligned -->
     <div id="game-scoreboard" style="
-      position: absolute; top: 40px; left: 8px; z-index: 15;
+      position: absolute; top: 4px; left: 8px; z-index: 15;
       pointer-events: none;
     "></div>
 
@@ -202,6 +202,8 @@ export class GameView {
           this._renderBoard();
           this._updateTurnIndicator();
           this._showActiveTileIfNeeded();
+          this._pendingPlacement = null;
+          this._confirmPhase = '';
         });
         this.gameClient.on('game-over', () => {
           console.log('[GameView] Client game over');
@@ -212,17 +214,21 @@ export class GameView {
         });
         this.gameClient.on('move-rejected', () => {
           console.log('[GameView] Move rejected by host');
-          // Re-show the active tile so the client can try again.
+          // _showActiveTileIfNeeded nulls _pendingPlacement, so save it first.
+          const pending = this._pendingPlacement;
           this._renderBoard();
           this._updateTurnIndicator();
           this._showActiveTileIfNeeded();
-          if (this._pendingPlacement) {
-            this._showActiveTileAt(
-              this._pendingPlacement.x,
-              this._pendingPlacement.y,
-              this._pendingPlacement.rotation,
-            );
+          if (pending) {
+            // Restore tile to the previously selected board position.
+            this._showActiveTileAt(pending.x, pending.y, pending.rotation);
+            // Restore the phase so the user can retry immediately.
+            this._confirmPhase = 'confirmed';
+            this._updateHUD('confirmed');
+            showMeeplePlacements();
           }
+          this._pendingPlacement = null;
+          this._showStatusMessage('Placement rejected by host. Try a different position.');
         });
       }
     }
@@ -354,17 +360,23 @@ export class GameView {
     const at = this.gamestate.activeTile;
     const isActive = this.gamestate.players[this.playerIndex]?.active;
     if (at && at.tile && at.validPlacements && isActive) {
-      // Reset confirm phase for the new tile.
+      // Reset confirm phase and clear any stale meeple from a previous turn.
       this._confirmPhase = '';
       this._pendingPlacement = null;
+      const sm = getSelectedMove();
+      if (sm) sm.meeple = null;
       if (this.dom) {
         this.dom.hud.style.display = 'flex';
         // Show meeple type selector only when it's the viewer's turn
         this.dom.meepleTypes.style.display = 'flex';
       }
       const playerState = this.gamestate.players[this.playerIndex] || null;
+      // Default meeple type to 'normal' for the next player's turn.
+      setMeeplePlacementMode('normal');
       this._updateMeepleTypeSelector(playerState);
       renderActiveTile(at.tile, at.validPlacements, playerState, this.dom.svg);
+      // Ensure meeple outlines reflect the default 'normal' type.
+      updateMeeplePlacements(null, 'normal');
       // Default to "Place Tile" disabled until a board position is clicked
       this._updateHUD('default');
     } else {
@@ -375,6 +387,10 @@ export class GameView {
   _showActiveTileAt(x, y, rotation) {
     const at = this.gamestate.activeTile;
     if (!at || !at.tile) return;
+
+    // Clear any previously selected meeple when changing board position.
+    const sm = getSelectedMove();
+    if (sm) sm.meeple = null;
 
     // Find the matching placement.
     const placement = at.validPlacements.find((p) => p.x === x && p.y === y);
@@ -443,7 +459,7 @@ export class GameView {
       // Show a brief "waiting for host" state
       if (this.dom) this.dom.hud.style.display = 'none';
       resetActiveTile(this.dom.svg, true);
-      return;
+      return true;
     }
 
     // Host or solo mode: validate locally.
@@ -469,9 +485,14 @@ export class GameView {
         this.gameHost.broadcastState();
       }
     }
+
+    return result.success;
   }
 
   _confirmPlacement() {
+    // Prevent re-entry while waiting for P2P host response.
+    if (this._confirmPhase === 'sending') return;
+
     const pp = this._pendingPlacement;
     if (!pp) return;
 
@@ -490,9 +511,20 @@ export class GameView {
       // Phase 2 → Phase 3: player is sending the move.
       const rot = getCurrentRotation();
       const meeple = selectedMove ? selectedMove.meeple : null;
-      this._handleTilePlacement(pp.x, pp.y, rot, meeple);
-      this._pendingPlacement = null;
-      this._confirmPhase = '';
+      const ok = this._handleTilePlacement(pp.x, pp.y, rot, meeple);
+
+      if (this.gameClient) {
+        // P2P client: wait for host response before advancing.
+        // Keep _pendingPlacement set so move-rejected can restore.
+        this._confirmPhase = 'sending';
+      } else if (ok) {
+        // Host/solo: placement succeeded, clear state for next turn.
+        this._pendingPlacement = null;
+        this._confirmPhase = '';
+      } else {
+        // Host/solo: placement failed — show error, let user retry.
+        this._showStatusMessage('Invalid placement! Please try a different position.');
+      }
       return;
     }
   }
@@ -523,6 +555,30 @@ export class GameView {
         btn.disabled = true;
         break;
     }
+  }
+
+  /** Show a temporary status message overlay over the board area. */
+  _showStatusMessage(msg) {
+    const area = this.dom && this.dom.container.querySelector('#game-board-area');
+    if (!area) return;
+    const prev = area.querySelector('.game-status-message');
+    if (prev) prev.remove();
+    const el = document.createElement('div');
+    el.className = 'game-status-message';
+    el.textContent = msg || '';
+    Object.assign(el.style, {
+      position: 'absolute', bottom: '80px', left: '50%', transform: 'translateX(-50%)',
+      background: 'rgba(0,0,0,0.85)', color: '#ff6b6b',
+      padding: '8px 20px', borderRadius: '8px', fontSize: '0.9rem',
+      fontFamily: "'Segoe UI', sans-serif", zIndex: '100',
+      pointerEvents: 'none', whiteSpace: 'nowrap',
+    });
+    area.appendChild(el);
+    setTimeout(() => {
+      el.style.transition = 'opacity 0.3s';
+      el.style.opacity = '0';
+      setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+    }, 3000);
   }
 
   /**
@@ -562,6 +618,9 @@ export class GameView {
       imgEl.addEventListener('click', () => {
         const type = imgEl.dataset.type;
         setMeeplePlacementMode(type);
+        // Clear any previously selected meeple when switching types.
+        const move = getSelectedMove();
+        if (move) move.meeple = null;
         // Update visual highlight.
         container.querySelectorAll('.meeple-type-btn').forEach((b) => {
           b.style.border = '2px solid transparent';

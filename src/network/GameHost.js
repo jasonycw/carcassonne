@@ -53,6 +53,9 @@ export class GameHost extends EventEmitter {
         case MessageType.CHAT_MESSAGE:
           this._relayChat(message.payload);
           break;
+        case MessageType.PLACE_TOWER:
+          this._handlePlaceTower(message.payload, conn);
+          break;
       }
     });
   }
@@ -134,6 +137,19 @@ export class GameHost extends EventEmitter {
     if (!conn) return true; // host player, always valid
     const playerEntry = this.hostPeerManager.connectedPlayers.find(p => p.conn === conn);
     return playerEntry && playerEntry.playerIndex === this.gamestate.currentPlayerIndex;
+  }
+
+  /**
+   * Handle a PLACE_TOWER move from a remote client.
+   * Tower placement is not yet supported in P2P; reject with a message.
+   */
+  _handlePlaceTower(payload, conn) {
+    if (!this._validateTurn(conn)) return;
+    if (conn) {
+      this.hostPeerManager.send(conn, createMessage(MessageType.MOVE_RESULT, {
+        success: false, message: 'Tower placement not yet supported in P2P',
+      }));
+    }
   }
 
   /** Relay a chat message from a client to all connected peers. */

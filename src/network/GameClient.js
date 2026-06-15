@@ -28,6 +28,14 @@ export class GameClient extends EventEmitter {
 
   /** Set up listeners for state syncs and game events from the host. */
   _init() {
+    // Listen for game-starting message (safety net — LobbyView normally handles
+    // this before creating the GameClient, but if the client reconnects or
+    // receives the message late, this ensures the transition still works).
+    this.clientPeerManager.on('msg:game_starting', (payload) => {
+      console.log('[GameClient] Received game_starting', payload);
+      this.emit('game-starting', payload.initialState);
+    });
+
     this.clientPeerManager.on('msg:game_state_sync', (payload) => {
       console.log('[GameClient] Received game_state_sync', {
         tileCount: payload.state?.placedTiles?.length,
