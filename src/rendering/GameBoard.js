@@ -247,7 +247,8 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('transform', `translate(${TILE_SIZE / 2},${TILE_SIZE / 2})`);
   activeTileRotGroup = activeTileTransGroup.append('g')
     .attr('class', 'active-tile-rotation');
-  // Rotation indicator (hidden by default).
+  // Rotation indicator (hidden by default — only shown when tile is pinned
+  // on board and the placement has more than 1 valid rotation).
   activeTileRotGroup.append('use')
     .attr('class', 'active-tile-rotation-indicator')
     .attr('href', '#svgicon-repeat-payment')
@@ -256,7 +257,7 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('transform', `scale(${TILE_SIZE / 32})`)
     .attr('fill', 'white')
     .attr('stroke', 'black')
-    .attr('opacity', 1)
+    .attr('opacity', 0)
     .attr('pointer-events', 'none');
   // Meeple-placements sub-group (hidden by default).
   meeplePlacementsGroup = activeTileRotGroup.append('g')
@@ -535,62 +536,13 @@ export function draw(gamestate, playerId, callbacks = {}) {
     .attr('y', (d) => svgHeight / 2 + d.y * TILE_SIZE);
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 5. Crown markers (small crown on tiles with the current player's meeple)
-  //    Scoreboard is rendered as HTML by ScoreBoard.js via GameView.
+  // 5. Scoreboard is rendered as HTML by ScoreBoard.js via GameView.
   // ═══════════════════════════════════════════════════════════════════════
-  drawCrownMarkers(tileGroups, gamestate, placedTiles);
 }
 
 // DRAW SCOREBOARD REMOVED — HTML ScoreBoard.js handles this now.
 // The SVG scoreboard was causing duplicate rendering with the HTML scoreboard.
 // All player display (names, points, meeples, tokens) is done by ScoreBoard.js.
-
-// ---------------------------------------------------------------------------
-// Crown markers
-// ---------------------------------------------------------------------------
-
-/**
- * Draw a small crown icon on tiles that contain a meeple owned by the
- * current-turn player. Uses an inline SVG path (no external asset needed).
- */
-function drawCrownMarkers(tileGroups, gamestate, placedTiles) {
-  const currentIdx = gamestate.currentPlayerIndex;
-  if (currentIdx == null) return;
-
-  const crownData = [];
-  placedTiles.forEach((pt, i) => {
-    const hasCurrentPlayerMeeple = (pt.meeples || []).some(
-      (m) => m.playerIndex === currentIdx
-    );
-    if (hasCurrentPlayerMeeple) {
-      crownData.push({
-        x: TILE_SIZE - 18,
-        y: 2,
-      });
-    }
-  });
-
-  // Inline SVG crown path (simple 3-point crown shape)
-  // Size: 16x16 viewBox, gold fill with darker stroke
-  tileGroups.selectAll('g.crown-marker')
-    .data(crownData)
-    .join(
-      (enter) => {
-        const g = enter.append('g')
-          .attr('class', 'crown-marker')
-          .attr('pointer-events', 'none');
-        g.append('path')
-          .attr('d', 'M0,5 L3,0 L6,5 L10,0 L13,5 L13,10 L0,10 Z')
-          .attr('fill', '#FFD700')
-          .attr('stroke', '#B8860B')
-          .attr('stroke-width', '1');
-        return g;
-      },
-      (update) => update,
-      (exit) => exit.remove()
-    )
-    .attr('transform', (d) => `translate(${d.x},${d.y})`);
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -664,7 +616,7 @@ export function clearBoard() {
       .attr('transform', `scale(${TILE_SIZE / 32})`)
       .attr('fill', 'white')
       .attr('stroke', 'black')
-      .attr('opacity', 1)
+      .attr('opacity', 0)
       .attr('pointer-events', 'none');
     meeplePlacementsGroup = activeTileRotGroup.append('g')
       .attr('class', 'meeple-placements')
