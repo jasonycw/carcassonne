@@ -1,23 +1,22 @@
 /**
  * ActiveTile.js — Floating active tile and meeple-placement UI for Carcassonne.
  *
- * The active tile is the tile a player has drawn and is currently placing on
- * the board.  This module handles:
- *   - Rendering the floating tile image (with rotation)
- *   - Providing rotation controls (scroll-wheel / click)
- *   - Showing valid-meeple-placement outlines on the tile
- *   - Confirming a tile placement and meeple placement
+ * Matches the original game.ejs behavior:
+ *   - Floating tile starts in the corner with no rotation indicator
+ *   - Clicking a valid board placement moves the tile there + shows rotation
+ *     indicator (only if >1 valid rotation), shows Confirm button
+ *   - Clicking Confirm hides rotation indicator, shows meeple outlines
+ *   - Clicking a meeple outline places a meeple, shows Send Move button
+ *   - Rotation indicator shows as a semi-transparent icon overlay
  *
- * It depends on GameBoard.js for the SVG groups (activeTileGroup,
- * activeTileTransGroup, activeTileRotGroup, meeplePlacementsGroup) and the
- * zoom / svg references.
+ * @module ActiveTile
  */
 
 import {
   getActiveTileGroups,
   getSvgSelection,
   getBoardMetrics,
-  meeplePlacementMode,
+  meeplePlacementMode as sharedMeepleMode,
   setMeeplePlacementMode,
 } from './GameBoard.js';
 import * as d3 from 'd3';
@@ -48,9 +47,18 @@ let _isPinned = false;
 let _pinnedGridX = 0;
 let _pinnedGridY = 0;
 
+// Track if a transition is in progress so we can cancel on zoom
+let _transitioning = false;
+
 let onTilePlacedCallback = null;
 let onMeeplePlacedCallback = null;
 let onRotationChangedCallback = null;
+
+// Original game stores the valid meeple placements for the current rotation
+let _validMeepleForRotation = [];
+
+// Player state snapshot for meeple availability checks
+let _playerState = null;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -122,6 +130,7 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
   activeTileData = tileData;
   validPlacements = placements || [];
   selectedMove = null;
+  _playerState = playerState;
 
   const groups = getActiveTileGroups();
   if (!groups || !groups.activeTileGroup) return;
@@ -212,69 +221,106 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
   // re-appending the container to the end of activeTileRotGroup.
   activeTileRotGroup.node().appendChild(meeplePlacementsGroup.node());
 
-  // Hide until a valid placement is selected.
+  // Clear meeplePlacementsGroup content
   meeplePlacementsGroup
     .attr('visibility', 'hidden')
     .selectAll('*').remove();
 
   // Create meeple-outline images for each valid meeple position on the
-  // tile.  These are initially hidden; updateMeeplePlacements() shows them.
+  // tile — matching original game behavior (all possible positions).
+  // Outlines are initially hidden; they show only after Place Tile is confirmed.
   const allValidMeeples = collectValidMeeples(tileData, placements);
-  meeplePlacementsGroup.selectAll('image.meeple-outline')
+  // Store valid meeple data as a module-level var so outline click can access
+  _validMeepleForRotation = [];
+
+  meeplePlacementsGroup.selectAll('g.outline-group')
     .data(allValidMeeples)
     .enter()
-    .append('image')
-    .attr('class', 'meeple-outline')
-    .attr('width', MEEMPLE_NORMAL_SIZE)
-    .attr('height', MEEMPLE_NORMAL_SIZE)
-    .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 2 - MEEMPLE_NORMAL_SIZE / 2)
-    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 2 - MEEMPLE_NORMAL_SIZE / 2)
-    .attr('href', (d) => {
-      const suffix = d.locationType === 'farm' ? 'lying' : 'standing';
-      return img(`/images/meeples/outline_${suffix}.png`);
-    })
-    .attr('visibility', 'hidden')
-    .attr('cursor', 'pointer')
+    .append('g')
+    .attr('class', 'outline-group')
+    .attr('transform', (d) =>
+      `translate(${(d.offset.x - 0.5) * TILE_SIZE},${(d.offset.y - 0.5) * TILE_SIZE})`
+    )
+    .each(function (d) {
+      const g = d3.select(this);
+      // Outline image
+      g.append('image')
+        .attr('class', 'meeple-outline')
+        .attr('width', MEEMPLE_NORMAL_SIZE)
+        .attr('height', MEEMPLE_NORMAL_SIZE)
+        .attr('x', -MEEMPLE_NORMAL_SIZE / 2)
+        .attr('y', -MEEMPLE_NORMAL_SIZE / 2)
+        .attr('href', () => {
+          const suffix = d.locationType === 'farm' ? 'lying' : 'standing';
+          return img(`/images/meeples/outline_${suffix}.png`);
+        })
+        .attr('visibility', 'hidden')
+        .attr('cursor', 'pointer');
+      // Placed meeple image (hidden until placed)
+      g.append('image')
+        .attr('class', 'placed-meeple')
+        .attr('width', MEEMPLE_NORMAL_SIZE)
+        .attr('height', MEEMPLE_NORMAL_SIZE)
+        .attr('x', -MEEMPLE_NORMAL_SIZE / 2)
+        .attr('y', -MEEMPLE_NORMAL_SIZE / 2)
+        .attr('visibility', 'hidden')
+        .attr('pointer-events', 'none');
+    });
+
+  // Attach click handler to the outline-group (matches original: click outline
+  // to place, click placed meeple to remove)
+  meeplePlacementsGroup.selectAll('g.outline-group')
     .on('click', function (event, d) {
       event.stopPropagation();
-      if (!selectedMove) {
-        selectedMove = { placement: null, rotationIndex: null, meeple: null };
-      }
 
-      const alreadyPlaced =
-        selectedMove.meeple &&
-        selectedMove.meeple.locationType === d.locationType &&
-        selectedMove.meeple.index === d.index;
+      // Validate: check if this location is valid for the current rotation
+      if (!selectedMove || !selectedMove.placement) return;
+      const rotationEntry = selectedMove.placement.rotations[selectedMove.rotationIndex];
+      const validMeeples = rotationEntry ? rotationEntry.meeples : [];
+      const mType = currentMeepleType === 'large' ? 'normal' : currentMeepleType;
+      const isValid = validMeeples.some(
+        (m) => m.meepleType === mType && m.locationType === d.locationType && m.index === d.index
+      );
+      if (!isValid) return;
 
-      if (alreadyPlaced) {
-        // Remove the meeple — toggle off.
-        selectedMove.meeple = null;
-        meeplePlacementsGroup.selectAll('image.placed-meeple')
-          .filter((pd) => pd.locationType === d.locationType && pd.index === d.index)
-          .remove();
-        // Show the outline again.
-        d3.select(this).attr('visibility', null);
+      const group = d3.select(this);
+      const placedMeepleEl = group.select('image.placed-meeple');
+      const outlineEl = group.select('image.meeple-outline');
+      const isAlreadyPlaced = placedMeepleEl.attr('visibility') !== 'hidden';
+
+      if (isAlreadyPlaced) {
+        // Toggle off — remove meeple
+        placedMeepleEl.attr('visibility', 'hidden');
+        outlineEl.attr('visibility', null);
+        if (selectedMove) selectedMove.meeple = null;
       } else {
-        // Place a new meeple (replaces any previous meeple elsewhere).
+        // Hide ALL placed meeples first (only one at a time)
+        meeplePlacementsGroup.selectAll('g.outline-group image.placed-meeple')
+          .attr('visibility', 'hidden');
+        meeplePlacementsGroup.selectAll('g.outline-group image.meeple-outline')
+          .attr('visibility', null);
+
+        // Place this meeple
+        const colorIdent = playerState ? (playerState.color || 'blue') : 'blue';
+        const suffix = d.locationType === 'farm' ? 'lying' : 'standing';
+        placedMeepleEl
+          .attr('href', img(`/images/meeples/${colorIdent}_${suffix}.png`))
+          .attr('visibility', null);
+        outlineEl.attr('visibility', 'hidden');
+
         selectedMove.meeple = {
           locationType: d.locationType,
           index: d.index,
           meepleType: currentMeepleType === 'large' ? 'normal' : currentMeepleType,
         };
-        // Remove all placed meeples first (can only place one).
-        meeplePlacementsGroup.selectAll('image.placed-meeple').remove();
-        // Hide the outline, show a placed meeple.
-        d3.select(this).attr('visibility', 'hidden');
-        updatePlacedMeeple(d, playerState);
       }
+      // Remove any tower selection if present
+      delete selectedMove.tower;
+
       if (onMeeplePlacedCallback) {
         onMeeplePlacedCallback(selectedMove.meeple);
       }
     });
-
-  // Placed-meeple group (initially empty).
-  meeplePlacementsGroup.selectAll('image.placed-meeple').remove();
-
 }
 
 // ---------------------------------------------------------------------------
@@ -414,6 +460,11 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
   const groups = getActiveTileGroups();
   if (!groups) return Promise.resolve();
 
+  // Sync the module-level rotation variable so setSelectedPlacement and
+  // the on('end') callback see the correct value.  Do NOT call
+  // setCurrentRotation() before this — let the transition animate it.
+  currentRotation = rotation % 4;
+
   const metrics = getBoardMetrics();
   // Use the TILE CENTER coordinate, not the corner, to correctly account
   // for the zoom transform.  The active tile rotation group's (0,0) is the
@@ -435,6 +486,10 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
   // Scale the active tile to match the board zoom level.
   const scale = t.k;
 
+  // Mark that a transition is in progress so updateBoardPosition can cancel it
+  // on zoom/pan during the animation.
+  _transitioning = true;
+
   return new Promise((resolve) => {
     groups.activeTileTransGroup
       .transition()
@@ -445,7 +500,10 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
       .transition()
       .duration(TRANSITION_DURATION)
       .attr('transform', `rotate(${rotation * 90}) scale(${scale})`)
-      .on('end', resolve);
+      .on('end', () => {
+        _transitioning = false;
+        resolve();
+      });
   });
 }
 
@@ -460,6 +518,8 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
  */
 export function updateBoardPosition() {
   if (!_isPinned) return;
+  // Don't interrupt a running transition (Bug 2).
+  if (_transitioning) return;
   const groups = getActiveTileGroups();
   if (!groups) return;
 
@@ -495,15 +555,17 @@ export function resetActiveTile(svgElement, animated = false) {
   if (!groups) return;
 
   _isPinned = false;
+  _transitioning = false;
 
   // Use getBoardMetrics for dimensions instead of DOM queries.
   const metrics = getBoardMetrics();
   const cornerX = metrics.svgWidth - TILE_SIZE - 10;
   const cornerY = 5;
 
-  // Hide meeple placements.
+  // Hide meeple placements and prevent click interception.
   groups.meeplePlacementsGroup
     .attr('visibility', 'hidden')
+    .style('pointer-events', 'none')
     .selectAll('image').attr('visibility', 'hidden');
 
   if (animated) {
@@ -560,6 +622,17 @@ export function updateMeeplePlacements(validMeeplesIn, meepleTypeIn, svgElement)
   if (meepleTypeIn !== undefined) {
     currentMeepleType = meepleTypeIn;
   }
+
+  // Bug 4: Update outline sizes to match the current meeple type.
+  const groups = getActiveTileGroups();
+  if (groups) {
+    const type = currentMeepleType === 'large' ? 'normal' : currentMeepleType;
+    const size = meepleSize(type);
+    groups.meeplePlacementsGroup.selectAll('image.meeple-outline')
+      .attr('width', size)
+      .attr('height', size);
+  }
+
   updateMeeplePlacementsInternal(validMeeplesIn);
 }
 
@@ -592,6 +665,9 @@ function updateMeeplePlacementsInternal() {
 /**
  * Show meeple outlines on the confirmed tile, enabling meeple selection.
  * Called after the player clicks "Place Tile" (confirm step).
+ *
+ * Bug 3: Only show outlines for meeple positions valid for the current rotation.
+ * Bug 10: Hide outlines if the player has no remaining meeples.
  */
 export function showMeeplePlacements() {
   const groups = getActiveTileGroups();
@@ -599,10 +675,25 @@ export function showMeeplePlacements() {
   const meepleGroup = groups.meeplePlacementsGroup;
   if (!selectedMove || !selectedMove.placement) return;
 
-  // Show the meeple group and all outlines.
+  // Get valid meeple positions for this rotation.
+  const rotationEntry = selectedMove.placement.rotations[selectedMove.rotationIndex];
+  const validMeeples = rotationEntry ? rotationEntry.meeples : [];
+  const mType = currentMeepleType === 'large' ? 'normal' : currentMeepleType;
+  const hasMeeples = _playerState && (_playerState.remainingMeeples || 0) > 0;
+
+  // Show the meeple group and allow pointer events for meeple selection.
   meepleGroup.attr('visibility', null);
+  meepleGroup.style('pointer-events', null);
+
+  // Bug 3: Filter outlines to only show positions valid for this rotation.
   meepleGroup.selectAll('image.meeple-outline')
-    .attr('visibility', null);
+    .attr('visibility', (d) => {
+      if (!hasMeeples) return 'hidden';
+      const isValid = validMeeples.some(
+        (m) => m.meepleType === mType && m.locationType === d.locationType && m.index === d.index
+      );
+      return isValid ? null : 'hidden';
+    });
 
   // Update placed-meeple visibility.
   meepleGroup.selectAll('image.placed-meeple')
@@ -620,12 +711,15 @@ export function showMeeplePlacements() {
 
 /**
  * Hide meeple outlines (e.g. when cancelling or before confirm step).
+ * Also sets pointer-events: none on the group to prevent hidden SVG
+ * elements from intercepting clicks on the board below.
  */
 export function hideMeeplePlacements() {
   const groups = getActiveTileGroups();
   if (!groups) return;
   const meepleGroup = groups.meeplePlacementsGroup;
   meepleGroup.attr('visibility', 'hidden');
+  meepleGroup.style('pointer-events', 'none');
 }
 
 // ---------------------------------------------------------------------------
@@ -660,6 +754,23 @@ function updatePlacedMeeple(data, playerState) {
 }
 
 
+
+// ---------------------------------------------------------------------------
+// hideRotationIndicator
+// ---------------------------------------------------------------------------
+
+/**
+ * Immediately hide the rotation indicator overlay on the active tile.
+ */
+function hideRotationIndicator() {
+  const groups = getActiveTileGroups();
+  if (!groups) return;
+  const indicator = groups.activeTileRotGroup.select('use.active-tile-rotation-indicator');
+  if (!indicator.empty()) {
+    indicator.interrupt();
+    indicator.attr('opacity', 0);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Accessors / setters
@@ -700,6 +811,15 @@ export function setCurrentRotation(rotation) {
     const scale = _isPinned ? metrics.transform.k : 1;
     groups.activeTileRotGroup.attr('transform', `rotate(${currentRotation * 90}) scale(${scale})`);
   }
+}
+
+/**
+ * Set ONLY the rotation state variable without updating the DOM transform.
+ * Used before moveToBoardPosition() so the D3 transition has meaningful
+ * start → end values (Bug 1: premature rotation indicator).
+ */
+export function setRotationState(rotation) {
+  currentRotation = rotation % 4;
 }
 
 // ---------------------------------------------------------------------------

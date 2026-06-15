@@ -16,7 +16,7 @@ import {
 } from '../rendering/GameBoard.js';
 import {
   renderActiveTile, resetActiveTile, moveToBoardPosition,
-  setSelectedPlacement, setCurrentRotation, getCurrentRotation, getSelectedMove,
+  setSelectedPlacement, setRotationState, getCurrentRotation, getSelectedMove,
   updateBoardPosition, updateMeeplePlacements,
   showMeeplePlacements, hideMeeplePlacements,
   onTilePlaced, onRotationChanged,
@@ -71,9 +71,9 @@ const GAME_HTML = `
       ">Place Tile</button>
     </div>
 
-    <!-- Scoreboard (rendered by ScoreBoard.js) -->
+    <!-- Scoreboard (rendered by ScoreBoard.js) -- vertical left-aligned -->
     <div id="game-scoreboard" style="
-      position: absolute; top: 40px; left: 12px; right: 12px; z-index: 15;
+      position: absolute; top: 40px; left: 8px; z-index: 15;
       pointer-events: none;
     "></div>
 
@@ -411,7 +411,12 @@ export class GameView {
       targetRotation = placement.rotations[0].rotation;
     }
 
-    setCurrentRotation(targetRotation);
+    // Bug 1: Only update rotation STATE, not the DOM — the D3 transition
+    // in moveToBoardPosition handles the visual animation.  If we call
+    // setCurrentRotation here, the rotation group's transform is set
+    // immediately, making the subsequent transition a no-op with zoom=1,
+    // which causes an immediate on('end') firing (premature indicator).
+    setRotationState(targetRotation);
     setSelectedPlacement(placement);
 
     // Animate the active tile from corner to the board position.
