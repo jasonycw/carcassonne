@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('GitHub Pages Deployment Test', () => {
   // Test from the /carcassonne/ subpath
-  const baseURL = 'http://localhost:8001/carcassonne/';
+  const baseURL = 'http://localhost:5173/carcassonne/';
 
   test('loads without errors', async ({ page }) => {
     await page.goto(baseURL);
