@@ -235,6 +235,7 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
     .enter()
     .append('g')
     .attr('class', 'outline-group')
+    .style('pointer-events', 'none')
     .attr('transform', (d) =>
       `translate(${(d.offset.x - 0.5) * TILE_SIZE},${(d.offset.y - 0.5) * TILE_SIZE})`
     )
@@ -253,7 +254,8 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
           return img(`/images/meeples/outline_${suffix}.png`);
         })
         .attr('visibility', 'hidden')
-        .attr('cursor', 'pointer');
+        .attr('cursor', 'pointer')
+        .style('pointer-events', 'none');
       // Placed meeple image (hidden until placed)
       g.append('image')
         .attr('class', 'placed-meeple')
@@ -262,7 +264,7 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
         .attr('x', -MEEMPLE_NORMAL_SIZE / 2)
         .attr('y', -MEEMPLE_NORMAL_SIZE / 2)
         .attr('visibility', 'hidden')
-        .attr('pointer-events', 'none');
+        .style('pointer-events', 'none');
     });
 
   // Attach click handler to the outline-group (matches original: click outline
@@ -309,7 +311,7 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
         selectedMove.meeple = {
           locationType: d.locationType,
           index: d.index,
-          meepleType: currentMeepleType === 'large' ? 'normal' : currentMeepleType,
+          meepleType: currentMeepleType,
         };
       }
       // Remove any tower selection if present
@@ -630,7 +632,7 @@ export function updateMeeplePlacements(validMeeplesIn, meepleTypeIn, svgElement)
     if (selectedMove && selectedMove.placement && selectedMove.rotationIndex != null) {
       const rotationEntry = selectedMove.placement.rotations[selectedMove.rotationIndex];
       const validMeeples = rotationEntry ? rotationEntry.meeples : [];
-      const mType = currentMeepleType === 'large' ? 'normal' : currentMeepleType;
+      let mType = currentMeepleType; if (mType === 'large') mType = 'normal';
       const hasMeeples = _playerState && (_playerState.remainingMeeples || 0) > 0;
       meepleGroup.selectAll('image.meeple-outline')
         .attr('visibility', (d) => {
@@ -688,12 +690,14 @@ export function showMeeplePlacements() {
   // Get valid meeple positions for this rotation.
   const rotationEntry = selectedMove.placement.rotations[selectedMove.rotationIndex];
   const validMeeples = rotationEntry ? rotationEntry.meeples : [];
-  const mType = currentMeepleType === 'large' ? 'normal' : currentMeepleType;
+  let mType = currentMeepleType; if (mType === 'large') mType = 'normal';
   const hasMeeples = _playerState && (_playerState.remainingMeeples || 0) > 0;
 
   // Show the meeple group and allow pointer events for meeple selection.
   meepleGroup.attr('visibility', null);
   meepleGroup.style('pointer-events', null);
+  meepleGroup.selectAll('g.outline-group').style('pointer-events', null);
+  meepleGroup.selectAll('image.meeple-outline').style('pointer-events', null);
 
   // Rotation indicator is no longer needed — meeple outlines are shown.
   hideRotationIndicator();
@@ -746,7 +750,7 @@ function updatePlacedMeeple(data, playerState) {
 
   const meepleGroup = groups.meeplePlacementsGroup;
   const colorIdent = playerState ? playerState.color || 'blue' : 'blue';
-  const type = currentMeepleType === 'large' ? 'normal' : currentMeepleType;
+  const type = currentMeepleType;
   const size = meepleSize(type);
   const path = meepleImagePath(colorIdent, type, data.locationType);
 
@@ -763,7 +767,7 @@ function updatePlacedMeeple(data, playerState) {
     .attr('y', data.offset.y * TILE_SIZE - TILE_SIZE / 2 - size / 2)
     .attr('href', path)
     .attr('visibility', null)
-    .attr('pointer-events', 'none');
+    .style('pointer-events', 'none');
 }
 
 
