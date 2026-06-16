@@ -60,9 +60,12 @@ const GAME_HTML = `
     <svg id="game-svg" style="width:100%; height:100%;"></svg>
 
     <!-- Floating HUD buttons -->
+    <!-- Bug 11: Increase bottom spacing so HUD doesn't sit too low on mobile -->
+    <!-- Bug 19: Enable wrapping so meeple selector doesn't overlap confirm button -->
     <div id="game-hud" style="
-      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%);
       display: none; gap: 8px; z-index: 20; align-items: center;
+      flex-wrap: wrap; justify-content: center; max-width: 95vw;
     ">
       <div id="hud-meeple-types" style="display:flex; gap:4px; align-items:center;"></div>
       <button class="hud-btn" id="hud-confirm" style="
@@ -793,8 +796,10 @@ export class GameView {
       const suffix = type === 'normal' || type === 'large' ? 'standing' : type;
       const src = img(`/images/meeples/${colorName}_${suffix}.png`);
       const active = type === mode;
+      // Bug 15: Large meeples show bigger in the selector
+      const iconSize = type === 'large' ? '36px' : '28px';
       return `<img src="${src}" data-type="${type}" class="meeple-type-btn"
-        style="width:28px; height:28px; cursor:pointer; border-radius:4px;
+        style="width:${iconSize}; height:${iconSize}; cursor:pointer; border-radius:4px;
                border:${active ? '2px solid #4fc3f7' : '2px solid transparent'};
                opacity:${active ? '1' : '0.5'};
                background:rgba(255,255,255,0.1);" />`;
