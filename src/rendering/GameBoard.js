@@ -269,8 +269,9 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('x', -16)
     .attr('y', -16)
     .attr('transform', `scale(${TILE_SIZE / 32})`)
-    .attr('fill', 'white')
-    .attr('stroke', 'black')
+    .attr('fill', '#ffcc00')
+    .attr('stroke', '#000')
+    .attr('stroke-width', 2)
     .attr('opacity', 0)
     .attr('pointer-events', 'none');
   // Meeple-placements sub-group (hidden by default).
