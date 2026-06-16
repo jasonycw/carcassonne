@@ -73,7 +73,8 @@ export function createGameState(expansions, playerCount, tileData) {
     placedTiles: [],
     activeTile: null,          // { tile, validPlacements } — set during drawTile()
     currentPlayerIndex: 0,
-    step: 'draw',             // 'draw' | 'place' | 'meeple' | 'tower' | 'done'
+    step: 'draw',             // 'draw' | 'place' | 'meeple' | 'tower' | 'capture' | 'done'
+    pendingCapture: null,     // { tileIndex, capturableMeeples: [...] }
     lastModified: new Date(),
   };
 }
@@ -358,24 +359,33 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
   // Check cloisters (this tile + all adjacent tiles within range).
   checkCloisters(newTile, gamestate);
 
+  // ── Determine next step ────────────────────────────────────────────
+  // After placing a tile, the player may:
+  //   a) Place a meeple (already handled above — meeple was attached)
+  //   b) Place a tower piece (if no meeple placed and tile has tower base)
+  //   c) End turn (advance to next player)
+  //
+  // The Tower expansion: if the player did NOT place a meeple and the
+  // placed tile has a tower base, offer the tower step. On a builder
+  // activation the extra turn is suppressed here — skipTowerStep /
+  // placeTowerPiece handle the advance when the tower step finishes.
+
+  const canPlaceTower = !meeple
+    && gamestate.expansions.indexOf('the-tower') !== -1
+    && activePlayer.towers > 0
+    && newTile.tile.tower && newTile.tile.tower.offset != null;
+
   // ── Clear active tile ───────────────────────────────────────────────
   gamestate.activeTile = null;
-  gamestate.step = 'draw';
 
-  // ── Advance to next player or keep same if builder activated ────────
-  // Builder activation: the active player gets an extra turn IF they haven't
-  // already had one (the previous tile was placed by a different player).
-  const prevTile = gamestate.placedTiles.length >= 2
-    ? gamestate.placedTiles[gamestate.placedTiles.length - 2]
-    : null;
-
-  if (!builderActivated || (prevTile && prevTile.playerIndex === activeIdx)) {
-    advanceToNextPlayer(gamestate);
+  if (canPlaceTower) {
+    // Offer the tower step — player may place a tower piece or skip.
+    gamestate.step = 'tower';
+    return { success: true };
   }
 
-  // ── Draw next tile ──────────────────────────────────────────────────
-  drawTile(gamestate);
-
+  // ── End turn normally ───────────────────────────────────────────────
+  _endTurn(gamestate, builderActivated, activeIdx);
   return { success: true };
 }
 
@@ -430,6 +440,207 @@ export function placeMeeple(gamestate, tileIndex, locationType, featureIndex, me
 // ---------------------------------------------------------------------------
 // skipMeeple / skipTurn
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Tower expansion (The Tower)
+// ---------------------------------------------------------------------------
+
+/**
+ * Place a tower piece on a tile that has a tower base.
+ *
+ * Consumes 1 tower piece from the player's supply, increases the tower
+ * height by 1, and triggers the capture step if the tower height (1-3)
+ * reaches a meeple on an opponent's tile within range.
+ *
+ * @param {object} gamestate
+ * @param {number} tileIndex  Index of the tile in gamestate.placedTiles
+ * @returns {{ success: boolean, message?: string }}
+ */
+export function placeTowerPiece(gamestate, tileIndex) {
+  const player = getActivePlayer(gamestate);
+  const tile = gamestate.placedTiles[tileIndex];
+
+  if (gamestate.step !== 'tower') {
+    return { success: false, message: 'Not the tower step' };
+  }
+  if (!tile) {
+    return { success: false, message: 'Tile not found' };
+  }
+  if (!tile.tile.tower || tile.tile.tower.offset == null) {
+    return { success: false, message: 'This tile does not have a tower base' };
+  }
+  if (tile.tower.completed) {
+    return { success: false, message: 'Tower is already complete' };
+  }
+  if (player.towers <= 0) {
+    return { success: false, message: 'No tower pieces remaining' };
+  }
+
+  // Consume one tower piece.
+  player.towers -= 1;
+  tile.tower.height += 1;
+
+  // Check for capturable opponent meeples within range.
+  const capturable = getCapturableMeeples(gamestate, tileIndex);
+
+  if (capturable.length > 0) {
+    // Enter capture step — player must choose a meeple to capture.
+    gamestate.step = 'capture';
+    gamestate.pendingCapture = {
+      tileIndex,
+      capturableMeeples: capturable,
+    };
+  } else {
+    // No capturable meeples — end turn.
+    _endTurnAfterTower(gamestate);
+  }
+
+  return { success: true };
+}
+
+/**
+ * Return all opponent meeples that a tower can capture.
+ *
+ * A tower at height 1 captures from tiles 1 step away (N/S/E/W).
+ * Height 2 captures from up to 2 steps, height 3 from up to 3 steps.
+ * Only opponent meeples (different playerIndex) are eligible.
+ *
+ * @param {object} gamestate
+ * @param {number} towerTileIndex
+ * @returns {Array<{ tileIndex: number, meepleIndex: number, playerIndex: number, meepleType: string }>}
+ */
+function getCapturableMeeples(gamestate, towerTileIndex) {
+  const towerTile = gamestate.placedTiles[towerTileIndex];
+  if (!towerTile || !towerTile.tower || towerTile.tower.height <= 0) return [];
+
+  const range = Math.min(towerTile.tower.height, 3);
+  const activeIdx = gamestate.currentPlayerIndex;
+  const capturable = [];
+
+  for (let i = 0; i < gamestate.placedTiles.length; i++) {
+    const pt = gamestate.placedTiles[i];
+    // Must be in a straight line N/S/E/W (not diagonal).
+    const dx = Math.abs(pt.x - towerTile.x);
+    const dy = Math.abs(pt.y - towerTile.y);
+    const inRange = (dx === 0 && dy > 0 && dy <= range)
+                 || (dy === 0 && dx > 0 && dx <= range);
+    if (!inRange) continue;
+
+    for (let m = 0; m < pt.meeples.length; m++) {
+      const meeple = pt.meeples[m];
+      if (meeple.playerIndex !== activeIdx && !meeple.scored) {
+        capturable.push({
+          tileIndex: i,
+          meepleIndex: m,
+          playerIndex: meeple.playerIndex,
+          meepleType: meeple.meepleType,
+        });
+      }
+    }
+  }
+
+  return capturable;
+}
+
+/**
+ * Capture a specific opponent meeple (called from the capture step).
+ *
+ * Removes the meeple from the tile and returns it to the owner's supply.
+ * Then ends the current turn.
+ *
+ * @param {object} gamestate
+ * @param {number} capturedTileIndex   Index of the tile containing the meeple
+ * @param {number} capturedMeepleIndex Index of the meeple on that tile
+ * @returns {{ success: boolean, message?: string }}
+ */
+export function captureMeeple(gamestate, capturedTileIndex, capturedMeepleIndex) {
+  const capture = gamestate.pendingCapture;
+  if (!capture) {
+    return { success: false, message: 'No pending capture' };
+  }
+  if (gamestate.step !== 'capture') {
+    return { success: false, message: 'Not the capture step' };
+  }
+
+  // Validate the target.
+  const valid = capture.capturableMeeples.some(
+    (m) => m.tileIndex === capturedTileIndex && m.meepleIndex === capturedMeepleIndex,
+  );
+  if (!valid) {
+    return { success: false, message: 'Invalid capture target' };
+  }
+
+  const tile = gamestate.placedTiles[capturedTileIndex];
+  const meeple = tile.meeples[capturedMeepleIndex];
+  const owner = gamestate.players[meeple.playerIndex];
+
+  // Remove meeple from the tile.
+  tile.meeples.splice(capturedMeepleIndex, 1);
+
+  // Return the meeple to its owner's supply.
+  if (meeple.meepleType === 'normal') {
+    owner.remainingMeeples += 1;
+  } else {
+    owner[getMeepleFlag(meeple.meepleType)] = true;
+  }
+
+  // Clear pending capture and end turn.
+  gamestate.pendingCapture = null;
+  _endTurnAfterTower(gamestate);
+
+  return { success: true };
+}
+
+/**
+ * Skip the tower step (no tower piece placed) and end the turn normally.
+ */
+export function skipTowerStep(gamestate) {
+  if (gamestate.step !== 'tower') {
+    return { success: false, message: 'Not the tower step' };
+  }
+  _endTurnAfterTower(gamestate);
+  return { success: true };
+}
+
+/**
+ * Skip the capture step (decline to capture) and end the turn.
+ */
+export function skipCapture(gamestate) {
+  if (gamestate.step !== 'capture') {
+    return { success: false, message: 'Not the capture step' };
+  }
+  gamestate.pendingCapture = null;
+  _endTurnAfterTower(gamestate);
+  return { success: true };
+}
+
+/**
+ * End the turn after the tower step (with or without having placed a tower piece).
+ */
+function _endTurnAfterTower(gamestate) {
+  const builderActivated = false;
+  const activeIdx = gamestate.currentPlayerIndex;
+  _endTurn(gamestate, builderActivated, activeIdx);
+}
+
+/**
+ * Internal — advance to the next player and draw a tile.
+ * Extracted so both the normal path and the tower-step path can re-use it.
+ */
+function _endTurn(gamestate, builderActivated, activeIdx) {
+  gamestate.step = 'draw';
+
+  // Advance to next player or keep same if builder activated.
+  const prevTile = gamestate.placedTiles.length >= 2
+    ? gamestate.placedTiles[gamestate.placedTiles.length - 2]
+    : null;
+
+  if (!builderActivated || (prevTile && prevTile.playerIndex === activeIdx)) {
+    advanceToNextPlayer(gamestate);
+  }
+
+  drawTile(gamestate);
+}
 
 /** Skip meeple placement and end the turn. */
 export function skipMeeple(gamestate) {
@@ -704,6 +915,12 @@ export function getGameSummary(gamestate) {
         }
       : null,
     step: gamestate.step,
+    pendingCapture: gamestate.pendingCapture
+      ? {
+          tileIndex: gamestate.pendingCapture.tileIndex,
+          capturableMeeples: gamestate.pendingCapture.capturableMeeples,
+        }
+      : null,
     messages: gamestate.messages,
   };
 }
