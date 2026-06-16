@@ -87,22 +87,35 @@ export function getRotatedFeatureDirections(directions, rotation, isFarm) {
 // ---------------------------------------------------------------------------
 
 /**
- * Produce a string that is the same length but with the first character
- * flipped (N↔S, E↔W) – used to translate a direction from one tile's
- * perspective to the adjacent tile's perspective.
+ * Mirror a direction from one tile's perspective to the adjacent tile's
+ * perspective across the shared edge.
  *
- * e.g. flipBase('NNE') → 'SSE'
+ * For cardinal directions (N,E,S,W): single character, simple swap.
+ *
+ * For farm directions (8-point compass): the pairing is:
+ *   NNE ↔ SSW    ENE ↔ WNW    ESE ↔ WSW    SSE ↔ NNW
+ *
+ * e.g. flipBase('NNE') → 'SSW'
  */
 function flipBase(dir) {
+	// Farm direction lookup table (8-point compass pairs)
+	const FARM_PAIRS = {
+		'NNE': 'SSW', 'SSW': 'NNE',
+		'ENE': 'WNW', 'WNW': 'ENE',
+		'ESE': 'WSW', 'WSW': 'ESE',
+		'SSE': 'NNW', 'NNW': 'SSE',
+	};
+	if (FARM_PAIRS[dir]) return FARM_PAIRS[dir];
+
+	// Simple cardinal flip (N↔S, E↔W)
 	const first = dir.charAt(0);
-	const rest = dir.slice(1);
 	const flipped =
 		first === 'N' ? 'S' :
 		first === 'S' ? 'N' :
 		first === 'E' ? 'W' :
 		first === 'W' ? 'E' :
 		first;
-	return flipped + rest;
+	return flipped + dir.slice(1);
 }
 
 /**
@@ -652,10 +665,11 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 				}
 
 			} else if (currentPlacement.directionToSource === 'S') {
+				// Bug 12 fix: SSW ↔ NNE, SSE ↔ NNW — the original code had these swapped
 				if (rotatedFarmDirs.indexOf('SSW') !== -1) {
-					const adjNNWIndex = getFeatureIndex(adjacentTile, 'farm', 'NNW');
-					if (adjNNWIndex !== -1) {
-						const ffSSW = getFeatureMeeples(adjacentTile, adjNNWIndex, 'farm', placedTiles);
+					const adjNNEIndex = getFeatureIndex(adjacentTile, 'farm', 'NNE');
+					if (adjNNEIndex !== -1) {
+						const ffSSW = getFeatureMeeples(adjacentTile, adjNNEIndex, 'farm', placedTiles);
 						for (let mSSW = 0; mSSW < ffSSW.tilesWithMeeples.length; mSSW++) {
 							const mepSSW = ffSSW.tilesWithMeeples[mSSW];
 							const pSSW = mepSSW.placedTile.meeples[mepSSW.meepleIndex].playerIndex;
@@ -672,9 +686,9 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 					}
 				}
 				if (rotatedFarmDirs.indexOf('SSE') !== -1) {
-					const adjNNEIndex = getFeatureIndex(adjacentTile, 'farm', 'NNE');
-					if (adjNNEIndex !== -1) {
-						const ffSSE = getFeatureMeeples(adjacentTile, adjNNEIndex, 'farm', placedTiles);
+					const adjNNWIndex = getFeatureIndex(adjacentTile, 'farm', 'NNW');
+					if (adjNNWIndex !== -1) {
+						const ffSSE = getFeatureMeeples(adjacentTile, adjNNWIndex, 'farm', placedTiles);
 						for (let mSSE = 0; mSSE < ffSSE.tilesWithMeeples.length; mSSE++) {
 							const mepSSE = ffSSE.tilesWithMeeples[mSSE];
 							const pSSE = mepSSE.placedTile.meeples[mepSSE.meepleIndex].playerIndex;
