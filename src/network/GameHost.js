@@ -19,6 +19,10 @@ import {
   placeMeeple as glPlaceMeeple,
   skipMeeple as glSkipMeeple,
   skipTurn as glSkipTurn,
+  placeTowerPiece as glPlaceTowerPiece,
+  captureMeeple as glCaptureMeeple,
+  skipTowerStep as glSkipTowerStep,
+  skipCapture as glSkipCapture,
 } from '../game/GameLogic.js';
 import { saveGame } from './StateSync.js';
 
@@ -55,6 +59,9 @@ export class GameHost extends EventEmitter {
           break;
         case MessageType.PLACE_TOWER:
           this._handlePlaceTower(message.payload, conn);
+          break;
+        case MessageType.CAPTURE_MEEPLE:
+          this._handleCaptureMeeple(message.payload, conn);
           break;
       }
     });
@@ -141,14 +148,50 @@ export class GameHost extends EventEmitter {
 
   /**
    * Handle a PLACE_TOWER move from a remote client.
-   * Tower placement is not yet supported in P2P; reject with a message.
+   * tileIndex -1 means skip the tower step.
    */
   _handlePlaceTower(payload, conn) {
     if (!this._validateTurn(conn)) return;
+
+    const { tileIndex } = payload;
+    let result;
+
+    if (tileIndex === -1) {
+      // Client is skipping the tower step.
+      result = glSkipTowerStep(this.gamestate);
+    } else {
+      result = glPlaceTowerPiece(this.gamestate, tileIndex);
+    }
+
     if (conn) {
       this.hostPeerManager.send(conn, createMessage(MessageType.MOVE_RESULT, {
-        success: false, message: 'Tower placement not yet supported in P2P',
+        success: result.success,
+        message: result.message || null,
       }));
+    }
+
+    if (result.success) {
+      this._afterStateChange();
+    }
+  }
+
+  /**
+   * Handle a CAPTURE_MEEPLE move from a remote client.
+   */
+  _handleCaptureMeeple(payload, conn) {
+    if (!this._validateTurn(conn)) {
+      this.hostPeerManager.send(conn, createMessage(MessageType.MOVE_RESULT, { success: false, message: 'Not your turn' }));
+      return;
+    }
+
+    const result = glCaptureMeeple(this.gamestate, payload.tileIndex, payload.meepleIndex);
+
+    if (conn) {
+      this.hostPeerManager.send(conn, createMessage(MessageType.MOVE_RESULT, { success: result.success }));
+    }
+
+    if (result.success) {
+      this._afterStateChange();
     }
   }
 

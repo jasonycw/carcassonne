@@ -511,4 +511,14 @@ export class ClientPeerManager extends PeerManager {
       timestamp: Date.now(),
     }));
   }
+
+  /** Place a tower piece on a tower tile. tileIndex -1 means skip. */
+  placeTowerPiece(tileIndex) {
+    this.sendMove(createMessage(MessageType.PLACE_TOWER, { tileIndex }));
+  }
+
+  /** Capture a meeple. */
+  captureMeeple(tileIndex, meepleIndex) {
+    this.sendMove(createMessage(MessageType.CAPTURE_MEEPLE, { tileIndex, meepleIndex }));
+  }
 }

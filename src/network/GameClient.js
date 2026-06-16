@@ -91,6 +91,16 @@ export class GameClient extends EventEmitter {
     this.clientPeerManager.sendChat(text);
   }
 
+  /** Send a PLACE_TOWER move to the host. tileIndex -1 means skip tower. */
+  placeTowerPiece(tileIndex) {
+    this.clientPeerManager.placeTowerPiece(tileIndex);
+  }
+
+  /** Send a CAPTURE_MEEPLE move to the host. */
+  captureMeeple(tileIndex, meepleIndex) {
+    this.clientPeerManager.captureMeeple(tileIndex, meepleIndex);
+  }
+
   // ── State reconstruction ────────────────────────────────────────────
 
   /**

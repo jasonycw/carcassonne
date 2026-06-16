@@ -39,7 +39,8 @@ export const MessageType = {
   PLACE_MEEPLE:       'place_meeple',       // { tileIndex, locationType, index, meepleType }
   SKIP_MEEPLE:        'skip_meeple',
   SKIP_TURN:          'skip_turn',
-  PLACE_TOWER:        'place_tower',        // { tileIndex, meepleType?, capture? }
+  PLACE_TOWER:        'place_tower',        // { tileIndex }
+  CAPTURE_MEEPLE:     'capture_meeple',     // { tileIndex, meepleIndex }
 
   // ── Game state (host → client) ──────────────────────────────────────
   GAME_STATE_SYNC:    'game_state_sync',    // full state snapshot
@@ -147,4 +148,12 @@ export function skipMeepleMove() {
 
 export function skipTurnMove() {
   return createMessage(MessageType.SKIP_TURN, {});
+}
+
+export function placeTowerMove(tileIndex) {
+  return createMessage(MessageType.PLACE_TOWER, { tileIndex });
+}
+
+export function captureMeepleMove(tileIndex, meepleIndex) {
+  return createMessage(MessageType.CAPTURE_MEEPLE, { tileIndex, meepleIndex });
 }
