@@ -190,6 +190,20 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('flood-color', '#00cc44')
     .attr('flood-opacity', 0.6);
 
+  // Glow filter for capturable meeples (The Tower capture step).
+  defs.append('filter')
+    .attr('id', 'capture-glow')
+    .attr('x', '-30%')
+    .attr('y', '-30%')
+    .attr('width', '160%')
+    .attr('height', '160%')
+    .append('feDropShadow')
+    .attr('dx', 0)
+    .attr('dy', 0)
+    .attr('stdDeviation', 6)
+    .attr('flood-color', '#ff3333')
+    .attr('flood-opacity', 0.8);
+
   // ── Zoom behaviour ────────────────────────────────────────────────────
   const scaleExtent = options.scaleExtent || [0.25, 1];
   zoomBehavior = d3.zoom()
@@ -288,8 +302,12 @@ export function initializeBoard(svgElement, options = {}) {
  * @param {Function} [callbacks.onPlacementClick] (x, y, rotation) => void
  * @param {Function} [callbacks.onScoreboardClick] (playerIndex) => void
  * @param {Function} [callbacks.onZoom] (transform) => void
+ * @param {Function} [callbacks.onTowerOutlineClick] (tileIndex) => void
+ * @param {Function} [callbacks.onMeepleClick] (tileIndex, meepleIndex) => void (capture step)
+ * @param {string}  [step] Current game step ('tower' shows tower outlines)
+ * @param {object}  [pendingCapture] Current pending capture data, if any
  */
-export function draw(gamestate, playerId, callbacks = {}) {
+export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) {
   // ── Cache for resize re-draws ─────────────────────────────────────────
   lastGamestate = gamestate;
   lastPlayerId = playerId;
@@ -362,15 +380,26 @@ export function draw(gamestate, playerId, callbacks = {}) {
     });
 
   // ── Meeples on placed tiles ───────────────────────────────────────────
+  const isCaptureStep = step === 'capture';
+
   tileGroups.selectAll('image.meeple')
     .data((d) => {
       const tile = d.tile;
-      return (d.meeples || []).map((m) => {
+      const tileIndex = gamestate.placedTiles.indexOf(d);
+      return (d.meeples || []).map((m, meepleIdx) => {
         const offset = resolveMeepleOffset(m.placement, tile);
         const pIdx = m.playerIndex;
         const player = gamestate.players[pIdx] || {};
         const colorHex = player.color || getPlayerColor(pIdx);
+        // Check if this meeple is capturable.
+        const isCapturable = isCaptureStep && pendingCapture
+          ? pendingCapture.capturableMeeples.some(
+              (cm) => cm.tileIndex === tileIndex && cm.meepleIndex === meepleIdx
+            )
+          : false;
         return {
+          tileIndex,
+          meepleIndex: meepleIdx,
           playerIndex: pIdx,
           colorHex,
           colorName: colorNameForPlayer({ color: colorHex }),
@@ -378,13 +407,38 @@ export function draw(gamestate, playerId, callbacks = {}) {
           location: m.placement.locationType,
           meepleType: m.meepleType,
           meepleOffset: offset,
+          isCapturable,
         };
       });
     })
     .join(
-      (enter) => enter.append('image')
-        .attr('class', 'meeple'),
-      (update) => update,
+      (enter) => {
+        const img = enter.append('image')
+          .attr('class', 'meeple');
+        // Add click handler for capture step.
+        if (isCaptureStep) {
+          img.style('cursor', (d) => d.isCapturable ? 'pointer' : 'default')
+            .on('click', function (event, d) {
+              if (d.isCapturable && callbacks.onMeepleClick) {
+                callbacks.onMeepleClick(d.tileIndex, d.meepleIndex);
+              }
+            });
+        }
+        return img;
+      },
+      (update) => {
+        if (isCaptureStep) {
+          update.style('cursor', (d) => d.isCapturable ? 'pointer' : 'default')
+            .on('click', function (event, d) {
+              if (d.isCapturable && callbacks.onMeepleClick) {
+                callbacks.onMeepleClick(d.tileIndex, d.meepleIndex);
+              }
+            });
+        } else {
+          update.style('cursor', null).on('click', null);
+        }
+        return update;
+      },
       (exit) => exit.remove()
     )
     .attr('width', (d) => meepleSize(d.meepleType))
@@ -393,7 +447,9 @@ export function draw(gamestate, playerId, callbacks = {}) {
     .attr('y', (d) => d.meepleOffset.y * TILE_SIZE - meepleSize(d.meepleType) / 2)
     .attr('href', (d) => meepleImagePath(d.colorName, d.meepleType, d.location))
     .attr('transform', (d) =>
-      `rotate(${d.rotation * -90},${d.meepleOffset.x * TILE_SIZE},${d.meepleOffset.y * TILE_SIZE})`);
+      `rotate(${d.rotation * -90},${d.meepleOffset.x * TILE_SIZE},${d.meepleOffset.y * TILE_SIZE})`)
+    // Add capture highlight filter.
+    .attr('filter', (d) => d.isCapturable ? 'url(#capture-glow)' : null);
 
   // ── Tower pieces on placed tiles (The Tower expansion) ────────────────
   const towerVerticalSize = TILE_SIZE / 12;
@@ -426,7 +482,10 @@ export function draw(gamestate, playerId, callbacks = {}) {
     .attr('transform', (d) =>
       `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE})`);
 
-  // Tower outlines (unplaced, clickable).
+  // Determine whether tower outlines are interactive (The Tower expansion step).
+  const isTowerStep = step === 'tower';
+
+  // Tower outlines (unplaced, clickable). Visible only during tower step.
   tileGroups.selectAll('image.tower-outline')
     .data((d, i) => {
       if (!d.tile.tower || d.tower.completed) return [];
@@ -443,9 +502,10 @@ export function draw(gamestate, playerId, callbacks = {}) {
         .attr('width', TILE_SIZE / 3)
         .attr('height', TILE_SIZE / 3)
         .attr('href', img('/images/meeples/outline_tower.png'))
-        .attr('visibility', 'hidden')
+        .attr('visibility', isTowerStep ? 'visible' : 'hidden')
+        .style('cursor', isTowerStep ? 'pointer' : 'default')
         .on('click', function (event, d) {
-          // Notify via callback.
+          if (!isTowerStep) return;
           if (callbacks.onTowerOutlineClick) {
             callbacks.onTowerOutlineClick(d.tileIndex);
           }
@@ -456,33 +516,9 @@ export function draw(gamestate, playerId, callbacks = {}) {
     .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 6)
     .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6 - towerVerticalSize * d.towerHeight)
     .attr('transform', (d) =>
-      `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE})`);
-
-  // Tower placements (overlaid on outline when selected).
-  tileGroups.selectAll('image.placed-tower')
-    .data((d, i) => {
-      if (!d.tile.tower || d.tower.completed) return [];
-      return [{
-        offset: d.tile.tower.offset,
-        tileRotation: d.rotation,
-        tileIndex: i,
-        towerHeight: d.tower.height,
-      }];
-    })
-    .join(
-      (enter) => enter.append('image')
-        .attr('class', 'placed-tower')
-        .attr('width', TILE_SIZE / 3)
-        .attr('height', TILE_SIZE / 3)
-        .attr('href', img('/images/meeples/tower.png')),
-      (update) => update,
-      (exit) => exit.remove()
-    )
-    .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 6)
-    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6 - towerVerticalSize * d.towerHeight)
-    .attr('transform', (d) =>
       `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE})`)
-    .attr('visibility', 'hidden');
+    .attr('visibility', isTowerStep ? 'visible' : 'hidden')
+    .style('cursor', isTowerStep ? 'pointer' : 'default');
 
   // ═══════════════════════════════════════════════════════════════════════
   // 3. Turn markers (coloured border rects on each player's most recent tile)
