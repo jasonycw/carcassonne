@@ -166,17 +166,8 @@ export class GameView {
     this.settingsPanel.mount();
     initSettings();
 
-    // Draw initial board state.
-    if (this.gamestate) {
-      this._renderBoard();
-      this._updateTurnIndicator();
-      this._showActiveTileIfNeeded();
-
-      // Persist game state on first render (enables crash recovery).
-      saveGame(this.gamestate);
-    }
-
-    // Wire up P2P orchestration layer.
+    // Wire up P2P orchestration layer FIRST so that _getRemotePlayerIndices()
+    // works correctly during the initial render (especially for Fix 3/4).
     if (this.peerManager && !this.isLocalGame) {
       if (this.isHost) {
         console.log('[GameView] Creating GameHost for P2P host');
@@ -231,6 +222,16 @@ export class GameView {
           this._showStatusMessage('Placement rejected by host. Try a different position.');
         });
       }
+    }
+
+    // Draw initial board state (now with gameHost/gameClient initialized).
+    if (this.gamestate) {
+      this._renderBoard();
+      this._updateTurnIndicator();
+      this._showActiveTileIfNeeded();
+
+      // Persist game state on first render (enables crash recovery).
+      saveGame(this.gamestate);
     }
   }
 

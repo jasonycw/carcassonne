@@ -134,6 +134,8 @@ export class LobbyView extends EventEmitter {
     this.players = [];
     /** Map conn → playerIndex for tracking disconnects. */
     this._connToPlayer = new Map();
+    /** Index of the local player in the players array. */
+    this.localPlayerIndex = 0;
   }
 
   mount() {
@@ -340,6 +342,7 @@ export class LobbyView extends EventEmitter {
 
       // Add host to player list.
       this.players = [{ name, isHost: true, playerIndex: 0 }];
+      this.localPlayerIndex = 0;
       this._updatePlayerList();
 
       // Show lobby.
@@ -461,7 +464,10 @@ export class LobbyView extends EventEmitter {
         isHost: p.isHost || p.playerIndex === 0,
         playerIndex: p.playerIndex,
       }));
+      this.localPlayerIndex = result.playerIndex;
       this.dom.lobbyPlayers.style.display = 'block';
+      // Hide start game button — only host can start.
+      this.dom.startBtn.style.display = 'none';
       this._updatePlayerList();
       this._setStatus('Joined! Waiting for host to start the game...');
 
@@ -627,12 +633,13 @@ export class LobbyView extends EventEmitter {
       const li = document.createElement('li');
       li.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:8px; margin:4px 0; background:#16213e; border-radius:6px;';
       const span = document.createElement('span');
+      const isLocal = p.playerIndex === this.localPlayerIndex;
       if (p.isHost) {
-        span.textContent = p.name + ' (Host)';
+        span.textContent = p.name + ' (Host)' + (isLocal ? ' (you)' : '');
       } else if (p.isRemote) {
         span.textContent = p.name + ' (Connected)';
       } else {
-        span.textContent = p.name;
+        span.textContent = p.name + (isLocal ? ' (you)' : '');
       }
       li.appendChild(span);
       // Kick button for host (not on self and not on host).
@@ -653,6 +660,27 @@ export class LobbyView extends EventEmitter {
       }
       list.appendChild(li);
     });
+
+    // Update start button state for host.
+    if (this.isHost && this.dom.startBtn) {
+      const playerCount = parseInt(this.dom.playerCount.value, 10);
+      const hasRemoteClients = this.players.some(p => !p.isHost);
+      // Disable when in P2P mode and only the host is present.
+      const enoughPlayers = playerCount === 1 || !hasRemoteClients || this.players.length >= 2;
+      if (!enoughPlayers) {
+        this.dom.startBtn.disabled = true;
+        this.dom.startBtn.style.background = '#555';
+        this.dom.startBtn.style.color = '#888';
+        this.dom.startBtn.style.cursor = 'default';
+        this.dom.startBtn.title = 'Waiting for players to join...';
+      } else {
+        this.dom.startBtn.disabled = false;
+        this.dom.startBtn.style.background = '#66bb6a';
+        this.dom.startBtn.style.color = '#111';
+        this.dom.startBtn.style.cursor = 'pointer';
+        this.dom.startBtn.title = '';
+      }
+    }
   }
 
   _startGame() {
