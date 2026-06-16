@@ -243,6 +243,14 @@ export class LobbyView extends EventEmitter {
       e.preventDefault();
       this._copyInviteLink();
     });
+    // Hide Join Game button when Solo is selected (Bug 2)
+    this.dom.playerCount.addEventListener('change', () => {
+      const isSolo = parseInt(this.dom.playerCount.value, 10) === 1;
+      this.dom.joinBtn.style.display = isSolo ? 'none' : '';
+    });
+    // Run once on mount
+    const initialIsSolo = parseInt(this.dom.playerCount.value, 10) === 1;
+    if (initialIsSolo) this.dom.joinBtn.style.display = 'none';
   }
 
   /** Check if a recoverable game exists and show a resume banner. */
@@ -636,10 +644,11 @@ export class LobbyView extends EventEmitter {
       li.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:8px; margin:4px 0; background:#16213e; border-radius:6px;';
       const span = document.createElement('span');
       const isLocal = p.playerIndex === this.localPlayerIndex;
+      // Bug 3: Host never gets (you) — only the joiner/local player
       if (p.isHost) {
-        span.textContent = p.name + ' (Host)' + (isLocal ? ' (you)' : '');
+        span.textContent = p.name + ' (Host)';
       } else if (p.isRemote) {
-        span.textContent = p.name + ' (Connected)';
+        span.textContent = p.name + (isLocal ? ' (you)' : ' (Connected)');
       } else {
         span.textContent = p.name + (isLocal ? ' (you)' : '');
       }
