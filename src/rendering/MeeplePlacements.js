@@ -24,8 +24,12 @@ import {
  */
 export function initMeepleSelector(container, player, onSelect) {
   if (!container) return;
-  // Hide selector entirely when the player has no meeples left.
-  if (player.remainingMeeples <= 0) {
+  // Hide selector entirely only when the player has no meeples of any type.
+  const hasAnyMeeple = player.remainingMeeples > 0
+    || player.hasLargeMeeple
+    || player.hasBuilderMeeple
+    || player.hasPigMeeple;
+  if (!hasAnyMeeple) {
     container.innerHTML = '';
     return;
   }
