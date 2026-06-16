@@ -428,12 +428,12 @@ export function checkAndFinalizeFeature(placedTile, featureIndex, featureType, g
       // Return meeple to the player's supply
       if (meepleType === 'normal') {
         gameState.players[playerIndex].remainingMeeples += 1;
-      } else if (meepleType !== 'pig' && meepleType !== 'builder') {
-        // Large meeples and other special types use the flag system
+      } else if (meepleType !== 'pig') {
+        // Large meeples, builder, and other special types use the flag system
         gameState.players[playerIndex][getMeepleFlagFromType(meepleType)] = true;
       }
-      // Note: pig and builder meeples are NOT removed during mid-game scoring
-      // (they stay on the board until end-game)
+      // Note: builder has flag restored (player can reuse it). Only pig stays on the board
+      // until end-game (pig is not returned during mid-game scoring).
     }
 
     // --- Track pig meeples (farm scoring bonus) ----------------------------
