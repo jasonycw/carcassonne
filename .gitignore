@@ -36,3 +36,5 @@ test-dist/
 playwright-report/
 .antigravitycli/
 .playwright-mcp/
+
+tower-game-start.png
