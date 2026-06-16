@@ -22,7 +22,7 @@ import {
   onTilePlaced, onRotationChanged,
 } from '../rendering/ActiveTile.js';
 import { img } from '../utils/AssetPaths.js';
-import { placeTile } from '../game/GameLogic.js';
+import { placeTile, placeTowerPiece, captureMeeple, skipTowerStep, skipCapture } from '../game/GameLogic.js';
 import { GameHost } from '../network/GameHost.js';
 import { GameClient } from '../network/GameClient.js';
 import { saveGame, removeGame } from '../network/StateSync.js';
@@ -298,13 +298,22 @@ export class GameView {
     draw(this.gamestate, playerId, {
       onPlacementClick: (x, y, rotation) => {
         if (!isActive) return;
+        if (this.gamestate.step !== 'place') return;
         this._pendingPlacement = { x, y, rotation };
         this._showActiveTileAt(x, y, rotation);
+      },
+      onTowerOutlineClick: (tileIndex) => {
+        if (this.gamestate.step !== 'tower') return;
+        this._handleTowerPiecePlacement(tileIndex);
+      },
+      onMeepleClick: (tileIndex, meepleIndex) => {
+        if (this.gamestate.step !== 'capture') return;
+        this._handleCaptureMeeple(tileIndex, meepleIndex);
       },
       onZoom: () => {
         updateBoardPosition();
       },
-    });
+    }, this.gamestate.step, this.gamestate.pendingCapture);
   }
 
   _updateTurnIndicator() {
@@ -360,6 +369,26 @@ export class GameView {
   _showActiveTileIfNeeded() {
     const at = this.gamestate.activeTile;
     const isActive = this.gamestate.players[this.playerIndex]?.active;
+    const step = this.gamestate.step;
+
+    // Handle tower step: show tower HUD instead of tile HUD.
+    if (step === 'tower' && isActive) {
+      this._confirmPhase = '';
+      this._pendingPlacement = null;
+      if (this.dom) {
+        this.dom.hud.style.display = 'flex';
+        this.dom.meepleTypes.style.display = 'none';
+      }
+      this._updateHUD('tower');
+      return;
+    }
+
+    // Handle capture step: show capture HUD.
+    if (step === 'capture' && isActive) {
+      this._showCaptureUI();
+      return;
+    }
+
     if (at && at.tile && at.validPlacements && isActive) {
       // Reset confirm phase and clear any stale meeple from a previous turn.
       this._confirmPhase = '';
@@ -494,6 +523,20 @@ export class GameView {
     // Prevent re-entry while waiting for P2P host response.
     if (this._confirmPhase === 'sending') return;
 
+    const step = this.gamestate.step;
+
+    // Tower step: skip tower placement (go to meeple placement).
+    if (step === 'tower') {
+      this._handleSkipTower();
+      return;
+    }
+
+    // Capture step: skip capture.
+    if (step === 'capture') {
+      this._handleSkipCapture();
+      return;
+    }
+
     const pp = this._pendingPlacement;
     if (!pp) return;
 
@@ -530,6 +573,51 @@ export class GameView {
     }
   }
 
+  /** Skip the tower step and proceed to meeple placement or end turn. */
+  _handleSkipTower() {
+    if (this.gameClient) {
+      // P2P client: tell host we're skipping the tower step.
+      this.gameClient.placeTowerPiece(-1); // -1 = skip
+      if (this.dom) this.dom.hud.style.display = 'none';
+      return;
+    }
+
+    const result = skipTowerStep(this.gamestate);
+    if (result.success) {
+      this._renderBoard();
+      this._updateTurnIndicator();
+      this._showActiveTileIfNeeded();
+      saveGame(this.gamestate);
+
+      if (this.gamestate.finished) {
+        this._showGameOver();
+      }
+
+      if (this.gameHost) {
+        this.gameHost.broadcastState();
+      }
+    }
+  }
+
+  /** Skip the capture step (decline to capture any meeple). */
+  _handleSkipCapture() {
+    const result = skipCapture(this.gamestate);
+    if (result.success) {
+      this._renderBoard();
+      this._updateTurnIndicator();
+      this._showActiveTileIfNeeded();
+      saveGame(this.gamestate);
+
+      if (this.gamestate.finished) {
+        this._showGameOver();
+      }
+
+      if (this.gameHost) {
+        this.gameHost.broadcastState();
+      }
+    }
+  }
+
   /** Update the HUD button state based on the current game phase. */
   _updateHUD(phase) {
     if (!this.dom || !this.dom.confirm) return;
@@ -549,12 +637,109 @@ export class GameView {
         btn.style.color = '#111';
         btn.disabled = false;
         break;
+      case 'tower':
+        // Tower step: offer to skip tower placement.
+        btn.textContent = 'Skip (Place Meeple)';
+        btn.style.background = '#78909c';
+        btn.style.color = '#fff';
+        btn.disabled = false;
+        break;
+      case 'capture':
+        // Capture step: done capturing.
+        btn.textContent = 'Skip Capture';
+        btn.style.background = '#78909c';
+        btn.style.color = '#fff';
+        btn.disabled = false;
+        break;
       default:
         btn.textContent = 'Place Tile';
         btn.style.background = '#555';
         btn.style.color = '#888';
         btn.disabled = true;
         break;
+    }
+  }
+
+  // ── Tower / Capture step handlers ────────────────────────────────────
+
+  /**
+   * Handle a tower outline click during the tower step.
+   * Places a tower piece on the clicked tile.
+   */
+  _handleTowerPiecePlacement(tileIndex) {
+    if (this.gameClient) {
+      // P2P client: send tower placement to host.
+      this.gameClient.placeTowerPiece(tileIndex);
+      if (this.dom) this.dom.hud.style.display = 'none';
+      return;
+    }
+
+    // Host/solo: validate locally.
+    const result = placeTowerPiece(this.gamestate, tileIndex);
+
+    if (result.success) {
+      this._renderBoard();
+      this._updateTurnIndicator();
+      this._showActiveTileIfNeeded();
+      saveGame(this.gamestate);
+
+      if (this.gamestate.finished) {
+        this._showGameOver();
+      }
+
+      // Broadcast to P2P peers.
+      if (this.gameHost) {
+        this.gameHost.broadcastState();
+      }
+    } else {
+      this._showStatusMessage(result.message || 'Cannot place tower piece');
+    }
+  }
+
+  /**
+   * Show the capture-step UI — highlights capturable meeples.
+   * The player clicks a capturable meeple to capture it.
+   */
+  _showCaptureUI() {
+    if (this.dom) {
+      this.dom.hud.style.display = 'flex';
+      this.dom.meepleTypes.style.display = 'none';
+    }
+    this._updateHUD('capture');
+
+    // The capturable meeples are highlighted by GameBoard.js based on
+    // gamestate.pendingCapture.capturableMeeples — re-render to show them.
+    this._renderBoard();
+  }
+
+  /**
+   * Handle a click on a capturable meeple (during capture step).
+   * Captures the meeple and advances the turn.
+   */
+  _handleCaptureMeeple(tileIndex, meepleIndex) {
+    if (this.gameClient) {
+      this.gameClient.captureMeeple(tileIndex, meepleIndex);
+      if (this.dom) this.dom.hud.style.display = 'none';
+      return;
+    }
+
+    const result = captureMeeple(this.gamestate, tileIndex, meepleIndex);
+
+    if (result.success) {
+      this._renderBoard();
+      this._updateTurnIndicator();
+      this._showActiveTileIfNeeded();
+      saveGame(this.gamestate);
+
+      if (this.gamestate.finished) {
+        this._showGameOver();
+      }
+
+      if (this.gameHost) {
+        this.gameHost.broadcastState();
+      }
+    } else {
+      this._showStatusMessage(result.message || 'Cannot capture meeple');
     }
   }
 
