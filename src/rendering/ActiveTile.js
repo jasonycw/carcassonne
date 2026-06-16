@@ -242,6 +242,7 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
     .each(function (d) {
       const g = d3.select(this);
       // Outline image — use current meeple type size
+      // Bug 17/18: Use meeple-type-specific outline (builder, pig) instead of generic standing/lying
       const outlineSize = meepleSize(currentMeepleType);
       g.append('image')
         .attr('class', 'meeple-outline')
@@ -250,6 +251,9 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
         .attr('x', -outlineSize / 2)
         .attr('y', -outlineSize / 2)
         .attr('href', () => {
+          const mt = currentMeepleType;
+          if (mt === 'builder') return img('/images/meeples/outline_builder.png');
+          if (mt === 'pig') return img('/images/meeples/outline_pig.png');
           const suffix = d.locationType === 'farm' ? 'lying' : 'standing';
           return img(`/images/meeples/outline_${suffix}.png`);
         })
@@ -257,12 +261,14 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
         .attr('cursor', 'pointer')
         .style('pointer-events', 'none');
       // Placed meeple image (hidden until placed)
+      // Bug 16: Size dynamically based on currentMeepleType so large meeples show larger
+      const placedSize = meepleSize(currentMeepleType);
       g.append('image')
         .attr('class', 'placed-meeple')
-        .attr('width', MEEMPLE_NORMAL_SIZE)
-        .attr('height', MEEMPLE_NORMAL_SIZE)
-        .attr('x', -MEEMPLE_NORMAL_SIZE / 2)
-        .attr('y', -MEEMPLE_NORMAL_SIZE / 2)
+        .attr('width', placedSize)
+        .attr('height', placedSize)
+        .attr('x', -placedSize / 2)
+        .attr('y', -placedSize / 2)
         .attr('visibility', 'hidden')
         .style('pointer-events', 'none');
     });
@@ -302,9 +308,16 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
 
         // Place this meeple
         const colorIdent = playerState ? (playerState.color || 'blue') : 'blue';
-        const suffix = d.locationType === 'farm' ? 'lying' : 'standing';
+        // Bug 17/18: Use meeple-type-specific suffix for builder/pig instead of location-based
+        const placedSuffix = meepleImageSuffix(currentMeepleType, d.locationType);
+        // Bug 16: Ensure placed meeple uses correct size for current meeple type
+        const placedSize = meepleSize(currentMeepleType);
         placedMeepleEl
-          .attr('href', img(`/images/meeples/${colorIdent}_${suffix}.png`))
+          .attr('width', placedSize)
+          .attr('height', placedSize)
+          .attr('x', -placedSize / 2)
+          .attr('y', -placedSize / 2)
+          .attr('href', img(`/images/meeples/${colorIdent}_${placedSuffix}.png`))
           .attr('visibility', null);
         outlineEl.attr('visibility', 'hidden');
 
@@ -633,7 +646,14 @@ export function updateMeeplePlacements(validMeeplesIn, meepleTypeIn, svgElement)
       const rotationEntry = selectedMove.placement.rotations[selectedMove.rotationIndex];
       const validMeeples = rotationEntry ? rotationEntry.meeples : [];
       let mType = currentMeepleType; if (mType === 'large') mType = 'normal';
-      const hasMeeples = _playerState && (_playerState.remainingMeeples || 0) > 0;
+      // Bug 20: Check availability of the specific meeple type, not just normal meeples
+      const hasMeeples = _playerState && (function() {
+        if (currentMeepleType === 'normal') return (_playerState.remainingMeeples || 0) > 0;
+        if (currentMeepleType === 'large') return (_playerState.remainingMeeples || 0) > 0; // large uses normal pool
+        if (currentMeepleType === 'builder') return !!_playerState.hasBuilderMeeple;
+        if (currentMeepleType === 'pig') return !!_playerState.hasPigMeeple;
+        return false;
+      })();
       meepleGroup.selectAll('image.meeple-outline')
         .attr('visibility', (d) => {
           if (!hasMeeples) return 'hidden';
@@ -691,7 +711,14 @@ export function showMeeplePlacements() {
   const rotationEntry = selectedMove.placement.rotations[selectedMove.rotationIndex];
   const validMeeples = rotationEntry ? rotationEntry.meeples : [];
   let mType = currentMeepleType; if (mType === 'large') mType = 'normal';
-  const hasMeeples = _playerState && (_playerState.remainingMeeples || 0) > 0;
+  // Bug 20: Check availability of the specific meeple type, not just normal meeples
+  const hasMeeples = _playerState && (function() {
+    if (currentMeepleType === 'normal') return (_playerState.remainingMeeples || 0) > 0;
+    if (currentMeepleType === 'large') return (_playerState.remainingMeeples || 0) > 0;
+    if (currentMeepleType === 'builder') return !!_playerState.hasBuilderMeeple;
+    if (currentMeepleType === 'pig') return !!_playerState.hasPigMeeple;
+    return false;
+  })();
 
   // Show the meeple group and allow pointer events for meeple selection.
   meepleGroup.attr('visibility', null);
