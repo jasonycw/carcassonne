@@ -466,6 +466,8 @@ export class LobbyView extends EventEmitter {
       }));
       this.localPlayerIndex = result.playerIndex;
       this.dom.lobbyPlayers.style.display = 'block';
+      // Non-host should not see the start game button.
+      this.dom.startBtn.style.display = this.isHost ? '' : 'none';
       // Hide start game button — only host can start.
       this.dom.startBtn.style.display = 'none';
       this._updatePlayerList();
