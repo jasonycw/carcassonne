@@ -66,11 +66,13 @@ const GAME_HTML = `
       position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%);
       display: none; gap: 8px; z-index: 20; align-items: center;
       flex-wrap: wrap; justify-content: center; max-width: 95vw;
+      pointer-events: none;
     ">
-      <div id="hud-meeple-types" style="display:flex; gap:4px; align-items:center;"></div>
+
+      <div id="hud-meeple-types" style="display:flex; gap:4px; align-items:center;pointer-events:auto;"></div>
       <button class="hud-btn" id="hud-confirm" style="
         padding: 8px 16px; border-radius: 8px; border: none;
-        background: #66bb6a; color: #111; font-weight: bold; cursor: pointer;
+        background: #66bb6a; color: #111; font-weight: bold; cursor: pointer; pointer-events: auto;
       ">Place Tile</button>
     </div>
 

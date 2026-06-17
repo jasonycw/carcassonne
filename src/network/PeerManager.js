@@ -74,6 +74,8 @@ export class PeerManager extends EventEmitter {
     this.connections = [];    // DataConnection[]
     this.connected = false;
     this._pingTimer = null;
+    this._reconnectTimer = null;
+    this._destroyed = false;
 
     // If a client, we store the host connection separately.
     this.hostConnection = null;
@@ -111,8 +113,8 @@ export class PeerManager extends EventEmitter {
       this.peer.on('disconnected', () => {
         this.connected = false;
         this.emit('disconnected');
-        // Attempt to reconnect.
-        setTimeout(() => this._reconnect(), RECONNECT_DELAY);
+        // Attempt to reconnect (cancelled in destroy()).
+        this._reconnectTimer = setTimeout(() => this._reconnect(), RECONNECT_DELAY);
       });
 
       this.peer.on('close', () => {
@@ -143,7 +145,12 @@ export class PeerManager extends EventEmitter {
 
   /** Close the peer and all connections. */
   destroy() {
+    this._destroyed = true;
     this._stopHeartbeat();
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
     for (const conn of this.connections) {
       conn.close();
     }
@@ -192,9 +199,11 @@ export class PeerManager extends EventEmitter {
 
   /** Reconnect a disconnected peer. */
   _reconnect() {
+    if (this._destroyed) return;
     if (this.peer && !this.peer.disconnected) return;
     this.peer.reconnect();
     this.peer.once('open', () => {
+      if (this._destroyed) return;
       this.connected = true;
       this.emit('reconnected');
     });
