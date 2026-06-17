@@ -287,10 +287,21 @@ export class GameView {
   // ── Board rendering ──────────────────────────────────────────────────
 
   _renderBoard() {
-    // Sync playerIndex for P2P host mode with local slots (needed before
-    // _updateTurnIndicator is called, since _renderBoard uses this.playerIndex
-    // to determine isActive for the onPlacementClick callback).
-    if (this.isHost && !this.isLocalGame && this.gamestate) {
+    // Sync playerIndex so _renderBoard uses the current turn's player identity,
+    // not the stale value from the previous turn. Both branches run before
+    // _updateTurnIndicator would normally do this sync, and this matters because
+    // GameBoard.draw() checks viewerIsActive (= reorderedPlayers[0].active) to
+    // decide whether to render valid-placement squares. If playerIndex is stale
+    // (e.g. pointing at Alice who just finished her turn), viewerIsActive is
+    // falsely false and no valid placements appear for the next player.
+    if (this.isLocalGame && this.gamestate) {
+      // Local games (solo / hot-seat) — we control all players, so always
+      // point at the current turn holder.
+      this.playerIndex = this.gamestate.currentPlayerIndex;
+    } else if (this.isHost && !this.isLocalGame && this.gamestate) {
+      // P2P host mode — only sync when the current player slot is NOT
+      // controlled by a remote client (i.e. it's a "missing slot" the host
+      // plays for locally).
       const remotePlayerIndices = this._getRemotePlayerIndices();
       if (!remotePlayerIndices.includes(this.gamestate.currentPlayerIndex)) {
         this.playerIndex = this.gamestate.currentPlayerIndex;
