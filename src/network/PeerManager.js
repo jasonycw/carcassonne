@@ -282,16 +282,18 @@ export class HostPeerManager extends PeerManager {
    * Accept a join request from a client.
    * @param {object} conn  DataConnection
    * @param {string} playerName
+   * @param {number} [preferredIndex] - Specific slot index to assign (for slot-based lobby).
+   *        If not provided, uses the next sequential index (connectedPlayers.length + 1).
    * @returns {{ accepted: boolean, playerIndex?: number, reason?: string }}
    */
-  acceptJoin(conn, playerName) {
+  acceptJoin(conn, playerName, preferredIndex) {
     const maxPlayers = 6;
     if (this.connectedPlayers.length >= maxPlayers) {
       this.send(conn, createMessage(MessageType.JOIN_REJECT, { reason: 'Game is full' }));
       return { accepted: false, reason: 'Game is full' };
     }
 
-    const playerIndex = this.connectedPlayers.length + 1; // 0 is host
+    const playerIndex = preferredIndex != null ? preferredIndex : this.connectedPlayers.length + 1; // 0 is host
     this.connectedPlayers.push({
       id: conn.peer,
       conn,
