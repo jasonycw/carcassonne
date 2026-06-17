@@ -217,6 +217,63 @@ image.tile-placement {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Lobby player list items                                            */
+/* ------------------------------------------------------------------ */
+
+.player-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.slot-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.slot-name-input:focus {
+  border-style: solid;
+  border-color: var(--accent);
+  outline: none;
+}
+
+.slot-badge {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.slot-badge--you {
+  background: var(--accent-success);
+  color: #111;
+  font-weight: bold;
+}
+
+.slot-badge--p2p {
+  background: var(--accent);
+  color: #111;
+  font-weight: bold;
+}
+
+.slot-badge--empty {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Responsive                                                         */
 /* ------------------------------------------------------------------ */
 
