@@ -715,7 +715,7 @@ export class LobbyView extends EventEmitter {
       } else {
         // Player name.
         const nameSpan = document.createElement('span');
-        nameSpan.textContent = htmlEscape(slot.name);
+        nameSpan.textContent = slot.name;
 
         // Badge.
         if (slot.playerIndex === this.localPlayerIndex) {
