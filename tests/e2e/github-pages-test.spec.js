@@ -39,16 +39,14 @@ test.describe('GitHub Pages Deployment Test', () => {
     // Enter player name
     await page.fill('#player-name', 'TestPlayer');
     
-    // Click create game
+    // Click create game (solo mode selected by default)
     await page.click('#create-game-btn');
     
-    // Wait for room code to appear
-    const roomCode = page.locator('#room-code');
-    await expect(roomCode).toBeVisible({ timeout: 5000 });
+    // Wait for lobby players list to appear (solo mode shows no room code)
+    await expect(page.locator('#lobby-players')).toBeVisible({ timeout: 5000 });
     
-    // Room code should be 4 characters
-    const codeText = await roomCode.textContent();
-    expect(codeText).toMatch(/^[A-Z0-9]{4}$/);
+    // Start game button should be visible
+    await expect(page.locator('#start-game-btn')).toBeVisible();
   });
 
   test('solo game starts and shows board', async ({ page }) => {
@@ -63,8 +61,8 @@ test.describe('GitHub Pages Deployment Test', () => {
     // Click create game
     await page.click('#create-game-btn');
     
-    // Wait for room code
-    await expect(page.locator('#room-code')).toBeVisible({ timeout: 5000 });
+    // Wait for lobby players (no room code for solo mode)
+    await expect(page.locator('#lobby-players')).toBeVisible({ timeout: 5000 });
     
     // Click start game button
     await page.click('#start-game-btn');
@@ -84,7 +82,7 @@ test.describe('GitHub Pages Deployment Test', () => {
     await page.fill('#player-name', 'PlacementTester');
     await page.selectOption('#player-count', '1');
     await page.click('#create-game-btn');
-    await expect(page.locator('#room-code')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#lobby-players')).toBeVisible({ timeout: 5000 });
     await page.click('#start-game-btn');
     
     // Wait for game board and active tile
@@ -137,7 +135,7 @@ test.describe('GitHub Pages Deployment Test', () => {
     await page.goto(baseURL);
     await page.fill('#player-name', 'ImageTester');
     await page.click('#create-game-btn');
-    await expect(page.locator('#room-code')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#lobby-players')).toBeVisible({ timeout: 5000 });
     
     // Give time for all image requests
     await page.waitForTimeout(2000);

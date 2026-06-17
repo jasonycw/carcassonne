@@ -20,7 +20,7 @@ test.describe('Game Persistence', () => {
     await page.locator('#player-count').selectOption('1');
     await page.locator('#create-game-btn').click();
 
-    await page.waitForSelector('#room-display', { state: 'visible', timeout: 15000 });
+    await page.waitForSelector('#lobby-players[style*="block"]', { state: 'visible', timeout: 5000 });
     await page.waitForSelector('#start-game-btn', { state: 'visible', timeout: 5000 });
     await page.locator('#start-game-btn').click();
 

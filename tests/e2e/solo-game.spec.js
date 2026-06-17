@@ -28,11 +28,11 @@ test.describe('Solo Game', () => {
     await page.locator('#player-name').fill('Tester');
     await page.locator('#player-count').selectOption('1');
 
-    // ── 2. Click create game → room display appears ────────────────────
+    // ── 2. Click create game → lobby players appears (no room code for solo) ──
     await page.locator('#create-game-btn').click();
 
-    // Wait for room display (PeerJS init + lobby UI update).
-    await page.waitForSelector('#room-display[style*="block"]', { timeout: 25000 });
+    // Wait for lobby players (solo mode shows players list without room code).
+    await page.waitForSelector('#lobby-players[style*="block"]', { timeout: 5000 });
 
     // Verify start button is visible.
     await expect(page.locator('#start-game-btn')).toBeVisible({ timeout: 5000 });
