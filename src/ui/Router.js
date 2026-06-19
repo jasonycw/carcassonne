@@ -26,7 +26,10 @@ export function register(path, handler) {
 export function navigate(path, params = {}) {
   if (path.startsWith('/')) {
     const hash = path === '/' ? '' : path;
-    window.location.hash = hash;
+    // Update URL silently (replaceState does NOT fire hashchange).
+    // Previously we used window.location.hash = hash, which triggered
+    // hashchange and caused a duplicate resolve() call (= double GameView).
+    history.replaceState(null, '', `#${hash}`);
   }
   currentParams = params;
   resolve();
