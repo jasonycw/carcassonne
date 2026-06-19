@@ -417,12 +417,15 @@ export class GameView {
         this.dom.meepleTypes.style.display = 'flex';
       }
       const playerState = this.gamestate.players[this.playerIndex] || null;
-      // Default meeple type to 'normal' for the next player's turn.
+      // Start with 'normal' default — _updateMeepleTypeSelector will
+      // auto-select the first available type if normal meeples are exhausted.
       setMeeplePlacementMode('normal');
       this._updateMeepleTypeSelector(playerState);
       renderActiveTile(at.tile, at.validPlacements, playerState, this.dom.svg);
-      // Ensure meeple outlines reflect the default 'normal' type.
-      updateMeeplePlacements(null, 'normal');
+      // Sync meeple outlines to whatever type the selector settled on
+      // (the selector's auto-select may have already called updateMeeplePlacements).
+      const effectiveType = meeplePlacementMode;
+      updateMeeplePlacements(null, effectiveType);
       // Default to "Place Tile" disabled until a board position is clicked
       this._updateHUD('default');
     } else {
@@ -802,7 +805,14 @@ export class GameView {
     if (playerState.hasBuilderMeeple) types.push('builder');
     if (playerState.hasPigMeeple) types.push('pig');
 
-    const mode = meeplePlacementMode;
+    // Bug 9: If current mode is not available, auto-select first available type.
+    let mode = meeplePlacementMode;
+    if (types.length > 0 && !types.includes(mode)) {
+      mode = types[0];
+      setMeeplePlacementMode(mode);
+      // Sync ActiveTile's internal meeple type so outlines render correctly.
+      updateMeeplePlacements(null, mode);
+    }
 
     container.innerHTML = types.map((type) => {
       // Large meeples reuse the standing meeple image (rendered larger on board).
