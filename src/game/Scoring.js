@@ -507,6 +507,36 @@ export function checkAndFinalizeFeature(placedTile, featureIndex, featureType, g
   }
 
   // -------------------------------------------------------------------------
+  // Record scoring event for per-category breakdown
+  // -------------------------------------------------------------------------
+  if (scoringPlayers.length > 0 || scoringPlayersWithPig.length > 0) {
+    if (!gameState.featureScores) {
+      gameState.featureScores = [];
+    }
+
+    const playerAwards = [];
+    for (let s = 0; s < scoringPlayers.length; s++) {
+      playerAwards.push({
+        playerIndex: gameState.players.indexOf(scoringPlayers[s]),
+        points: Math.floor(scoredPoints),
+      });
+    }
+    for (let s = 0; s < scoringPlayersWithPig.length; s++) {
+      playerAwards.push({
+        playerIndex: gameState.players.indexOf(scoringPlayersWithPig[s]),
+        points: Math.floor(scoredPoints * 4 / 3),
+      });
+    }
+
+    gameState.featureScores.push({
+      type: featureType,
+      players: playerAwards,
+      count: 1,
+      complete: featureInfo.complete,
+    });
+  }
+
+  // -------------------------------------------------------------------------
   // Create chat log messages
   // -------------------------------------------------------------------------
   if (scoringPlayers.length > 0 && scoredPoints > 0) {
@@ -648,6 +678,30 @@ export function completeGame(gameState) {
       }
     }
 
+    // Record goods majority scoring events for breakdown
+    if (!gameState.featureScores) gameState.featureScores = [];
+    const goodsTypes = ['fabric', 'wine', 'wheat'];
+    for (const good of goodsTypes) {
+      const maxVal = maxGoods[good];
+      if (maxVal > 0) {
+        const awardPlayers = [];
+        for (let l = 0; l < gameState.players.length; l++) {
+          if (gameState.players[l].goods[good] === maxVal) {
+            awardPlayers.push({ playerIndex: l, points: 10 });
+          }
+        }
+        if (awardPlayers.length > 0) {
+          gameState.featureScores.push({
+            type: 'goods',
+            subtype: good,
+            players: awardPlayers,
+            count: 1,
+            complete: true,
+          });
+        }
+      }
+    }
+
     if (fabricMessage !== '') {
       fabricMessage += ' scored 10 points for having the most fabric tokens';
       gameState.messages.push({ username: null, message: fabricMessage });
@@ -664,4 +718,45 @@ export function completeGame(gameState) {
 
   // Mark the game as finished
   gameState.finished = true;
+}
+
+// ---------------------------------------------------------------------------
+// Detailed Scores (per-category breakdown)
+// ---------------------------------------------------------------------------
+
+/**
+ * Aggregate featureScores records into a per-player, per-category summary.
+ * Sorts players by total score descending (highest first).
+ *
+ * @param {Object} gameState - Full game state
+ * @returns {Object} { players: [{ playerIndex, totalScore, categories }] }
+ */
+export function getDetailedScores(gameState) {
+  const featureScores = gameState.featureScores || [];
+
+  // Initialise per-player result objects
+  const result = gameState.players.map((player, idx) => ({
+    playerIndex: idx,
+    totalScore: player.points,
+    categories: {},
+  }));
+
+  // Aggregate each recorded scoring event
+  for (const event of featureScores) {
+    const type = event.type;
+    for (const award of event.players) {
+      if (!result[award.playerIndex]) continue;
+      const cat = result[award.playerIndex].categories;
+      if (!cat[type]) {
+        cat[type] = { score: 0, count: 0 };
+      }
+      cat[type].score += award.points;
+      cat[type].count += event.count || 1;
+    }
+  }
+
+  // Sort by total score descending (highest first)
+  result.sort((a, b) => b.totalScore - a.totalScore);
+
+  return { players: result };
 }

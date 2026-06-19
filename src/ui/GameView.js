@@ -23,6 +23,7 @@ import {
 } from '../rendering/ActiveTile.js';
 import { img } from '../utils/AssetPaths.js';
 import { placeTile, placeTowerPiece, captureMeeple, skipTowerStep, skipCapture } from '../game/GameLogic.js';
+import { getDetailedScores } from '../game/Scoring.js';
 import { GameHost } from '../network/GameHost.js';
 import { GameClient } from '../network/GameClient.js';
 import { saveGame, removeGame } from '../network/StateSync.js';
@@ -899,6 +900,10 @@ export class GameView {
       );
     }
 
+    // Compute per-category breakdown
+    const detailed = getDetailedScores(this.gamestate);
+    const hasGoods = detailed.players.some(p => p.categories.goods);
+
     banner.innerHTML = `
       <div style="
         background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);
@@ -918,6 +923,7 @@ export class GameView {
           <span style="font-weight:bold;">${escapeHtml(winner.user?.username || 'Player')}</span>
           wins with <span style="font-weight:bold;">${winner.points}</span> points!
         </div>
+        ${this._renderScoreBreakdown(detailed, hasGoods)}
         <button id="game-over-lobby-btn" style="
           background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.5);
           color: #fff; padding: 8px 24px; border-radius: 8px;
@@ -936,5 +942,89 @@ export class GameView {
     }
 
     banner.style.display = 'block';
+  }
+
+  /**
+   * Render a per-category score breakdown table.
+   * @param {Object} detailed - Result from getDetailedScores()
+   * @param {boolean} hasGoods - Whether goods categories exist
+   * @returns {string} HTML string for the breakdown table
+   */
+  _renderScoreBreakdown(detailed, hasGoods) {
+    if (!detailed || !detailed.players) return '';
+
+    // Category definitions in display order
+    const categories = [
+      { key: 'cities', label: 'Cities' },
+      { key: 'roads', label: 'Roads' },
+      { key: 'farms', label: 'Farms' },
+      { key: 'cloisters', label: 'Cloisters' },
+    ];
+    if (hasGoods) {
+      categories.push({ key: 'goods', label: 'Goods' });
+    }
+
+    const rows = detailed.players.map((p, rank) => {
+      const playerObj = this.gamestate.players[p.playerIndex];
+      if (!playerObj) return '';
+      const colorHex = getColorHex(playerObj.color || 'blue');
+      const isWinner = rank === 0;
+      const name = escapeHtml(playerObj.user?.username || `Player ${p.playerIndex + 1}`);
+
+      let cells = `
+        <td style="padding:3px 10px; text-align:left; white-space:nowrap;
+                   font-weight:${isWinner ? 'bold' : 'normal'};
+                   border-bottom:1px solid rgba(255,255,255,0.1);">
+          <span style="display:inline-block; width:10px; height:10px; border-radius:50%;
+               background:${colorHex}; vertical-align:middle; margin-right:4px;"></span>
+          ${name}${isWinner ? ' 👑' : ''}
+        </td>`;
+
+      for (const cat of categories) {
+        const data = p.categories[cat.key];
+        let cellContent = '-';
+        if (data && data.score > 0) {
+          const countLabel = data.count > 1 ? ` (${data.count})` : '';
+          cellContent = `${data.score}${countLabel}`;
+        } else if (data && data.score === 0 && data.count > 0) {
+          cellContent = `0 (${data.count})`;
+        } else if (data && data.score === 0) {
+          cellContent = '0';
+        }
+        cells += `<td style="padding:3px 10px; text-align:center;
+                   border-bottom:1px solid rgba(255,255,255,0.1);
+                   color:${data && data.score > 0 ? colorHex : 'rgba(255,255,255,0.4)'};
+                   font-weight:${data && data.score > 0 ? 'bold' : 'normal'};">${cellContent}</td>`;
+      }
+
+      // Total column
+      cells += `<td style="padding:3px 10px; text-align:center; font-weight:bold;
+                 border-bottom:1px solid rgba(255,255,255,0.1); color:${colorHex};">${p.totalScore}</td>`;
+
+      return `<tr>${cells}</tr>`;
+    }).join('');
+
+    const headers = categories.map(c =>
+      `<th style="padding:4px 10px; text-align:center; font-size:0.78rem;
+                  color:rgba(255,255,255,0.7); border-bottom:1px solid rgba(255,255,255,0.2);">${c.label}</th>`
+    ).join('');
+
+    return `
+      <div style="margin:8px auto 12px; overflow-x:auto; max-width:100%;">
+        <table style="margin:0 auto; border-collapse:collapse; font-size:0.85rem;">
+          <thead>
+            <tr>
+              <th style="padding:4px 10px; text-align:left; font-size:0.78rem;
+                         color:rgba(255,255,255,0.7); border-bottom:1px solid rgba(255,255,255,0.2);">Player</th>
+              ${headers}
+              <th style="padding:4px 10px; text-align:center; font-size:0.78rem;
+                         color:rgba(255,255,255,0.7); border-bottom:1px solid rgba(255,255,255,0.2);">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>`;
   }
 }
