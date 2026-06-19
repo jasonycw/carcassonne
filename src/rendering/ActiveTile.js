@@ -49,6 +49,9 @@ let _pinnedGridY = 0;
 
 // Track if a transition is in progress so we can cancel on zoom
 let _transitioning = false;
+// Resolve function for the pending moveToBoardPosition animation promise,
+// so updateBoardPosition can resolve it when interrupting the transition.
+let _pendingAnimationResolve = null;
 
 let onTilePlacedCallback = null;
 let onMeeplePlacedCallback = null;
@@ -206,6 +209,9 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
       // Rotation indicator visibility is managed by _updateRotationIndicator()
       // (persistent show/hide based on rotation count). Refresh state.
       _updateRotationIndicator();
+
+      // Re-filter outlines for the new rotation.
+      _applyOutlineFilter(groups.meeplePlacementsGroup);
 
       if (onRotationChangedCallback) {
         onRotationChangedCallback(currentRotation);
@@ -500,7 +506,9 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
   // on zoom/pan during the animation.
   _transitioning = true;
 
+  _pendingAnimationResolve = null;
   return new Promise((resolve) => {
+    _pendingAnimationResolve = resolve;
     groups.activeTileTransGroup
       .transition()
       .duration(TRANSITION_DURATION)
@@ -512,8 +520,19 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
       .attr('transform', `rotate(${rotation * 90}) scale(${scale})`)
       .on('end', () => {
         _transitioning = false;
+        _pendingAnimationResolve = null;
         resolve();
       });
+
+    // Safety timeout: if the transition is interrupted (e.g., zoom/pan),
+    // ensure the promise still resolves so callers don't hang forever.
+    setTimeout(() => {
+      if (_pendingAnimationResolve) {
+        _pendingAnimationResolve();
+        _pendingAnimationResolve = null;
+        _transitioning = false;
+      }
+    }, TRANSITION_DURATION * 3);
   });
 }
 
@@ -546,6 +565,11 @@ export function updateBoardPosition() {
     groups.activeTileTransGroup.interrupt();
     groups.activeTileRotGroup.interrupt();
     _transitioning = false;
+    // Resolve the pending animation promise so it doesn't hang.
+    if (_pendingAnimationResolve) {
+      _pendingAnimationResolve();
+      _pendingAnimationResolve = null;
+    }
   }
 
   groups.activeTileTransGroup

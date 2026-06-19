@@ -190,6 +190,12 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('flood-color', '#00cc44')
     .attr('flood-opacity', 0.6);
 
+  // Rotation indicator icon (repeat/reload arrow for tile rotation).
+  defs.append('symbol')
+    .attr('id', 'svgicon-repeat-payment')
+    .attr('viewBox', '0 0 24 24')
+    .html('<path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>');
+
   // Glow filter for capturable meeples (The Tower capture step).
   defs.append('filter')
     .attr('id', 'capture-glow')
@@ -672,6 +678,17 @@ export function clearBoard() {
       .attr('transform', `scale(${TILE_SIZE / 32})`)
       .attr('fill', 'white')
       .attr('stroke', 'black')
+      .attr('opacity', 0)
+      .attr('pointer-events', 'none');
+    // Re-create the background circle pill (mirrors create() in initializeBoard).
+    activeTileRotGroup.insert('circle', '.active-tile-rotation-indicator')
+      .attr('class', 'active-tile-rotation-indicator-bg')
+      .attr('r', TILE_SIZE * 0.18)
+      .attr('cx', 0)
+      .attr('cy', 0)
+      .attr('fill', 'rgba(0,0,0,0.6)')
+      .attr('stroke', '#ffffff')
+      .attr('stroke-width', 1.5)
       .attr('opacity', 0)
       .attr('pointer-events', 'none');
     meeplePlacementsGroup = activeTileRotGroup.append('g')
