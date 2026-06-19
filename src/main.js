@@ -47,7 +47,7 @@ register('/game', (params) => {
   const config = {
     isHost: params.isHost !== undefined ? params.isHost : true,
     isLocalGame: params.isLocalGame !== undefined ? params.isLocalGame : true,
-    peerManager: params.peerManager || null,
+    peerManager: params.transferPeerManager || params.peerManager || null,
     localState,
     playerIndex: params.playerIndex || 0,
     localPlayers: params.localPlayers || localState.players,

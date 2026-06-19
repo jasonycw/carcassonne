@@ -895,6 +895,11 @@ export class LobbyView extends EventEmitter {
     // Remove peerManager listeners but do NOT destroy the PeerManager —
     // GameView's GameHost/GameClient will take it over.
     this._cleanupPeerManager();
+    // Transfer ownership of peerManager to GameView before destroy() is called.
+    // The subsequent destroy() call inside Router.resolve() would otherwise
+    // close all WebRTC connections before GameHost/GameClient can use them.
+    config.transferPeerManager = this.peerManager;
+    this.peerManager = null;
     this.container.innerHTML = '';
     this.emit('start-game', config);
   }
