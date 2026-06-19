@@ -8,6 +8,8 @@ import { describe, it, expect } from 'vitest';
 import calculateValidPlacements, {
   getRotatedEdges,
   getRotatedFeatureDirections,
+  getFeatureMeeples,
+  getFeatureIndex,
   CARDINAL_DIRECTIONS,
   FARM_DIRECTIONS,
 } from '../../src/game/TilePlacement.js';
@@ -756,6 +758,171 @@ describe('calculateValidPlacements()', () => {
     }
   });
 
+  // -----------------------------------------------------------------------
+  // Farm feature traversal depth (getFeatureMeeples)
+  // -----------------------------------------------------------------------
+
+  it('getFeatureMeeples traverses farm features across 3+ tile chains', () => {
+    // Three tiles in a horizontal line, all rotation=0.
+    // Each tile's farm[1] (bottom farm, below the road) connects E↔W.
+    // Tile A has a meeple on farm[1]; B and C have none.
+    // Traversal from C farm[1] → B farm[1] → A farm[1] MUST find the meeple.
+    const startingTile = tile('base-game/RCr');
+    const rfrTile = tile('base-game/RFr');
+
+    const tileA = {
+      x: 0, y: 0, rotation: 0,
+      tile: startingTile,
+      northTileIndex: undefined,
+      eastTileIndex: 1,
+      southTileIndex: undefined,
+      westTileIndex: undefined,
+      meeples: [{
+        playerIndex: 0,
+        placement: { locationType: 'farm', index: 1 },
+        meepleType: 'normal',
+        scored: false,
+      }],
+    };
+
+    const tileB = {
+      x: 1, y: 0, rotation: 0,
+      tile: rfrTile,
+      northTileIndex: undefined,
+      eastTileIndex: 2,
+      southTileIndex: undefined,
+      westTileIndex: 0,
+      meeples: [],
+    };
+
+    const tileC = {
+      x: 2, y: 0, rotation: 0,
+      tile: rfrTile,
+      northTileIndex: undefined,
+      eastTileIndex: undefined,
+      southTileIndex: undefined,
+      westTileIndex: 1,
+      meeples: [],
+    };
+
+    const placedTiles = [tileA, tileB, tileC];
+
+    // Call getFeatureMeeples on tile C's farm[1]
+    const result = getFeatureMeeples(tileC, 1, 'farm', placedTiles);
+
+    // Should find the meeple on tile A's farm[1]
+    expect(result.tilesWithMeeples).toHaveLength(1);
+    expect(result.tilesWithMeeples[0].placedTile).toBe(tileA);
+    expect(result.tilesWithMeeples[0].meepleIndex).toBe(0);
+  });
+
+  it('getFeatureMeeples traverses farm with rotated middle tile (rotation=2, 180°)', () => {
+    // Tile A (RCr) at (0,0) rotation=0, tile B (RFr) at (1,0) rotation=2
+    // Tile C (RFr) at (2,0) rotation=0
+    // After 180° rotation, B's farm[1] (bottom) becomes the top farm,
+    // but both farms span E↔W so the chain A→B→C still connects.
+    const startingTile = tile('base-game/RCr');
+    const rfrTile = tile('base-game/RFr');
+
+    const tileA = {
+      x: 0, y: 0, rotation: 0, tile: startingTile,
+      northTileIndex: undefined, eastTileIndex: 1,
+      southTileIndex: undefined, westTileIndex: undefined,
+      meeples: [{ playerIndex: 0, placement: { locationType: 'farm', index: 1 }, meepleType: 'normal', scored: false }],
+    };
+    const tileB = {
+      x: 1, y: 0, rotation: 2, tile: rfrTile,
+      northTileIndex: undefined, eastTileIndex: 2,
+      southTileIndex: undefined, westTileIndex: 0,
+      meeples: [],
+    };
+    const tileC = {
+      x: 2, y: 0, rotation: 0, tile: rfrTile,
+      northTileIndex: undefined, eastTileIndex: undefined,
+      southTileIndex: undefined, westTileIndex: 1,
+      meeples: [],
+    };
+
+    const placedTiles = [tileA, tileB, tileC];
+
+    // Traverse from C farm[1] through B to A — should find meeple on A farm[1]
+    const result = getFeatureMeeples(tileC, 1, 'farm', placedTiles);
+    expect(result.tilesWithMeeples).toHaveLength(1);
+    expect(result.tilesWithMeeples[0].placedTile).toBe(tileA);
+  });
+
+  it('getFeatureMeeples detects meeple on different feature index on adjacent tile', () => {
+    // Tile A (RCr) at (0,0) has farm[0]=['WNW','ENE'] and farm[1]=['WSW','SSW','SSE','ESE']
+    // Tile B (RFr) at (1,0) has farm[0]=['WNW','NNW','NNE','ENE'] and farm[1]=['ESE','SSE','SSW','WSW']
+    // A farm[0] 'ENE' connects to B farm[0] 'WNW'
+    // A farm[1] 'ESE' connects to B farm[1] 'WSW'
+    // Place meeple on A farm[0], check from C farm[0] → should find it through B farm[0]
+    const startingTile = tile('base-game/RCr');
+    const rfrTile = tile('base-game/RFr');
+
+    const tileA = {
+      x: 0, y: 0, rotation: 0, tile: startingTile,
+      northTileIndex: undefined, eastTileIndex: 1,
+      southTileIndex: undefined, westTileIndex: undefined,
+      meeples: [{ playerIndex: 0, placement: { locationType: 'farm', index: 0 }, meepleType: 'normal', scored: false }],
+    };
+    const tileB = {
+      x: 1, y: 0, rotation: 0, tile: rfrTile,
+      northTileIndex: undefined, eastTileIndex: 2,
+      southTileIndex: undefined, westTileIndex: 0,
+      meeples: [],
+    };
+    const tileC = {
+      x: 2, y: 0, rotation: 0, tile: rfrTile,
+      northTileIndex: undefined, eastTileIndex: undefined,
+      southTileIndex: undefined, westTileIndex: 1,
+      meeples: [],
+    };
+
+    const placedTiles = [tileA, tileB, tileC];
+
+    // Check C farm[0] → should traverse to A farm[0]
+    const result = getFeatureMeeples(tileC, 0, 'farm', placedTiles);
+    expect(result.tilesWithMeeples).toHaveLength(1);
+    expect(result.tilesWithMeeples[0].placedTile).toBe(tileA);
+  });
+
+  it('calculateValidPlacements detects farm meeple through 4-tile chain', () => {
+    // Four RFr tiles in a horizontal line, all rotation=0.
+    // Farm[1] on every tile connects E↔W (bottom farm, below the road).
+    // Tile A has a meeple on farm[1]; B, C have none.
+    // When placing tile D at (3,0) adjacent to C, the farm validation must
+    // traverse D → C → B → A and detect the meeple, blocking normal farm
+    // meeple placement on D's farm[1].
+    const rfrTile = tile('base-game/RFr');
+
+    const tileA = { x: 0, y: 0, rotation: 0, tile: rfrTile,
+      northTileIndex: undefined, eastTileIndex: 1, southTileIndex: undefined, westTileIndex: undefined,
+      meeples: [{ playerIndex: 0, placement: { locationType: 'farm', index: 1 }, meepleType: 'normal', scored: false }] };
+    const tileB = { x: 1, y: 0, rotation: 0, tile: rfrTile,
+      northTileIndex: undefined, eastTileIndex: 2, southTileIndex: undefined, westTileIndex: 0,
+      meeples: [] };
+    const tileC = { x: 2, y: 0, rotation: 0, tile: rfrTile,
+      northTileIndex: undefined, eastTileIndex: undefined, southTileIndex: undefined, westTileIndex: 1,
+      meeples: [] };
+
+    const placedTiles = [tileA, tileB, tileC];
+    const players = [{ active: true, remainingMeeples: 7 }];
+
+    const result = calculateValidPlacements(rfrTile, placedTiles, players, []);
+
+    // Find placement at (3,0) — east of C
+    const eastP = result.find((p) => p.x === 3 && p.y === 0);
+    expect(eastP).toBeDefined();
+    const rot0 = eastP.rotations.find((r) => r.rotation === 0);
+    expect(rot0).toBeDefined();
+
+    // farm[1] should NOT have a normal meeple — the 4-tile chain has a meeple on A
+    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'normal' && m.index === 1)).toBe(false);
+    // farm[0] should still allow normal meeple — no meeple on farm[0] anywhere in chain
+    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'normal' && m.index === 0)).toBe(true);
+  });
+
   it('handles players with inactive status without crashing', () => {
     const placed = [{
       x: 0, y: 0, rotation: 0,
@@ -804,5 +971,100 @@ describe('calculateValidPlacements()', () => {
         // considered "free" from the perspective of the new tile
       }
     }
+  });
+
+  // -----------------------------------------------------------------------
+  // N-direction farm pair mapping (bugfix: NNW↔SSE, NNE↔SSW were swapped)
+  // -----------------------------------------------------------------------
+
+  it('maps NNW→SSE (not SSW) when checking N-direction farm connection', () => {
+    // When directionToSource='N' the new tile is SOUTH of source (source south face open).
+    // Source Rr at (0,0) rot=0: southEdge='road', farm[0]=['...','SSE'], farm[1]=['SSW','WSW']
+    // Active RRRR rot=0:         northEdge='road', farm[0]=['WNW','NNW']; farm[1]=['NNE','ENE']
+    //
+    // RRRR farm[0] has 'NNW' (but NOT 'NNE') → only one N-direction check runs.
+    // NNW must map to SSE (Rr farm[0]) via flipBase, NOT SSW (Rr farm[1]).
+    //
+    // BUGGY code: 'NNW'→'SSW' → Rr farm[1] (no meeple) → wrong — allows normal meeple
+    // FIXED code: 'NNW'→'SSE' → Rr farm[0] (has meeple) → correct — blocks normal meeple
+    const rrTile = tile('base-game/Rr');
+    const rrrrTile = tile('base-game/RRRR');
+
+    const sourceTile = {
+      x: 0, y: 0, rotation: 0,
+      tile: rrTile,
+      northTileIndex: undefined,
+      eastTileIndex: undefined,
+      southTileIndex: undefined,
+      westTileIndex: undefined,
+      meeples: [{
+        playerIndex: 0,
+        placement: { locationType: 'farm', index: 0 },
+        meepleType: 'normal',
+        scored: false,
+      }],
+    };
+
+    const placedTiles = [sourceTile];
+    const players = [{ active: true, remainingMeeples: 7 }];
+
+    const result = calculateValidPlacements(rrrrTile, placedTiles, players, []);
+    // directionToSource='N' → new tile at (source.x, source.y + 1) = (0, 1)
+    const southP = result.find((p) => p.x === 0 && p.y === 1);
+    expect(southP).toBeDefined();
+
+    const rot0 = southP.rotations.find((r) => r.rotation === 0);
+    expect(rot0).toBeDefined();
+
+    // farm[0] (has 'NNW') connects to source farm[0] via SSE → meeple found
+    // → normal farm meeple on farm[0] must be BLOCKED
+    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'normal' && m.index === 0)).toBe(false);
+
+    // Active player's meeple on the connected farm → pig meeple must be available
+    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'pig')).toBe(true);
+  });
+
+  it('maps NNE→SSW (not SSE) when checking N-direction farm connection', () => {
+    // Same layout but meeple on Rr farm[1] (the 'SSW' farm).
+    // RRRR farm[1] has 'NNE' (but NOT 'NNW').
+    // The N→farm check only runs for 'NNE', which must map to 'SSW' (Rr farm[1]).
+    //
+    // BUGGY code: 'NNE'→'SSE' → Rr farm[0] (no meeple) → wrong — allows normal meeple
+    // FIXED code: 'NNE'→'SSW' → Rr farm[1] (has meeple) → correct — blocks normal meeple
+    const rrTile = tile('base-game/Rr');
+    const rrrrTile = tile('base-game/RRRR');
+
+    const sourceTile = {
+      x: 0, y: 0, rotation: 0,
+      tile: rrTile,
+      northTileIndex: undefined,
+      eastTileIndex: undefined,
+      southTileIndex: undefined,
+      westTileIndex: undefined,
+      meeples: [{
+        playerIndex: 0,
+        placement: { locationType: 'farm', index: 1 },
+        meepleType: 'normal',
+        scored: false,
+      }],
+    };
+
+    const placedTiles = [sourceTile];
+    const players = [{ active: true, remainingMeeples: 7 }];
+
+    const result = calculateValidPlacements(rrrrTile, placedTiles, players, []);
+    // directionToSource='N' → new tile at (source.x, source.y + 1) = (0, 1)
+    const southP = result.find((p) => p.x === 0 && p.y === 1);
+    expect(southP).toBeDefined();
+
+    const rot0 = southP.rotations.find((r) => r.rotation === 0);
+    expect(rot0).toBeDefined();
+
+    // farm[1] (has 'NNE') connects to source farm[1] via SSW → meeple found
+    // → normal farm meeple on farm[1] must be BLOCKED
+    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'normal' && m.index === 1)).toBe(false);
+
+    // Active player's meeple on the connected farm → pig meeple must be available
+    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'pig')).toBe(true);
   });
 });

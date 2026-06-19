@@ -241,6 +241,9 @@ function getFeatureMeeples(tile, featureIndex, featureType, placedTiles, checked
 	return results;
 }
 
+// Exported for unit testing
+export { getFeatureMeeples, getFeatureIndex };
+
 // ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
@@ -583,12 +586,13 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 				return FARM_DIRECTIONS[(FARM_DIRECTIONS.indexOf(dir) + currentPlacement.rotation * 2) % 8];
 			});
 
-			// N → check NNW (connects to adjacent SSW) and NNE (connects to SSE)
+			// N → check NNW (connects to adjacent SSE) and NNE (connects to SSW)
+			// flipBase pairs: NNW↔SSE, NNE↔SSW
 			if (currentPlacement.directionToSource === 'N') {
 				if (rotatedFarmDirs.indexOf('NNW') !== -1) {
-					const adjSSWIndex = getFeatureIndex(adjacentTile, 'farm', 'SSW');
-					if (adjSSWIndex !== -1) {
-						const ffNNW = getFeatureMeeples(adjacentTile, adjSSWIndex, 'farm', placedTiles);
+					const adjSSEIndex = getFeatureIndex(adjacentTile, 'farm', 'SSE');
+					if (adjSSEIndex !== -1) {
+						const ffNNW = getFeatureMeeples(adjacentTile, adjSSEIndex, 'farm', placedTiles);
 						for (let mNNW = 0; mNNW < ffNNW.tilesWithMeeples.length; mNNW++) {
 							const mepNNW = ffNNW.tilesWithMeeples[mNNW];
 							const pNNW = mepNNW.placedTile.meeples[mepNNW.meepleIndex].playerIndex;
@@ -605,9 +609,9 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 					}
 				}
 				if (rotatedFarmDirs.indexOf('NNE') !== -1) {
-					const adjSSEIndex = getFeatureIndex(adjacentTile, 'farm', 'SSE');
-					if (adjSSEIndex !== -1) {
-						const ffNNE = getFeatureMeeples(adjacentTile, adjSSEIndex, 'farm', placedTiles);
+					const adjSSWIndex = getFeatureIndex(adjacentTile, 'farm', 'SSW');
+					if (adjSSWIndex !== -1) {
+						const ffNNE = getFeatureMeeples(adjacentTile, adjSSWIndex, 'farm', placedTiles);
 						for (let mNNE = 0; mNNE < ffNNE.tilesWithMeeples.length; mNNE++) {
 							const mepNNE = ffNNE.tilesWithMeeples[mNNE];
 							const pNNE = mepNNE.placedTile.meeples[mepNNE.meepleIndex].playerIndex;
