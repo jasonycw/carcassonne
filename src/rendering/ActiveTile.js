@@ -525,8 +525,6 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
  */
 export function updateBoardPosition() {
   if (!_isPinned) return;
-  // Don't interrupt a running transition (Bug 2).
-  if (_transitioning) return;
   const groups = getActiveTileGroups();
   if (!groups) return;
 
@@ -537,6 +535,15 @@ export function updateBoardPosition() {
   const t = metrics.transform;
   const screenCenterX = t.applyX(centerX);
   const screenCenterY = t.applyY(centerY);
+
+  // Bug 1: If a D3 transition is in progress, interrupt it so the tile
+  // immediately snaps to the correct position instead of landing at the
+  // original target after the animation completes.
+  if (_transitioning) {
+    groups.activeTileTransGroup.interrupt();
+    groups.activeTileRotGroup.interrupt();
+    _transitioning = false;
+  }
 
   groups.activeTileTransGroup
     .attr('transform', `translate(${screenCenterX},${screenCenterY})`);
@@ -595,6 +602,10 @@ export function resetActiveTile(svgElement, animated = false) {
       .transition()
       .duration(TRANSITION_DURATION)
       .attr('opacity', 0);
+    groups.activeTileRotGroup.select('.active-tile-rotation-indicator-bg')
+      .transition()
+      .duration(TRANSITION_DURATION)
+      .attr('opacity', 0);
   } else {
     groups.activeTileGroup.attr('visibility', 'hidden');
     groups.activeTileTransGroup
@@ -630,13 +641,20 @@ export function updateMeeplePlacements(validMeeplesIn, meepleTypeIn, svgElement)
     currentMeepleType = meepleTypeIn;
   }
 
-  // Bug 4: Update outline sizes to match the current meeple type.
+  // Bug 4/7: Update outline sizes AND href to match the current meeple type.
   const groups = getActiveTileGroups();
   if (groups) {
     const size = meepleSize(currentMeepleType);
+    const mt = currentMeepleType;
     groups.meeplePlacementsGroup.selectAll('image.meeple-outline')
       .attr('width', size)
-      .attr('height', size);
+      .attr('height', size)
+      .attr('href', (d) => {
+        if (mt === 'builder') return img('/images/meeples/outline_builder.png');
+        if (mt === 'pig') return img('/images/meeples/outline_pig.png');
+        const suffix = d.locationType === 'farm' ? 'lying' : 'standing';
+        return img(`/images/meeples/outline_${suffix}.png`);
+      });
 
     // Bug 4: Re-filter outline visibility based on the new meeple type.
     // (Harmless when the group is still hidden pre-confirm; group visibility
@@ -814,6 +832,11 @@ function hideRotationIndicator() {
     indicator.interrupt();
     indicator.attr('opacity', 0);
   }
+  const bg = groups.activeTileRotGroup.select('circle.active-tile-rotation-indicator-bg');
+  if (!bg.empty()) {
+    bg.interrupt();
+    bg.attr('opacity', 0);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -857,14 +880,20 @@ function _updateRotationIndicator() {
   const groups = getActiveTileGroups();
   if (!groups) return;
   const indicator = groups.activeTileRotGroup.select('use.active-tile-rotation-indicator');
+  const bg = groups.activeTileRotGroup.select('circle.active-tile-rotation-indicator-bg');
   if (indicator.empty()) return;
   const hasMultipleRotations =
     selectedMove &&
     selectedMove.placement &&
     selectedMove.placement.rotations &&
     selectedMove.placement.rotations.length > 1;
+  const opacity = hasMultipleRotations ? 1 : 0;
   indicator.interrupt();
-  indicator.attr('opacity', hasMultipleRotations ? 1 : 0);
+  indicator.attr('opacity', opacity);
+  if (!bg.empty()) {
+    bg.interrupt();
+    bg.attr('opacity', opacity);
+  }
 }
 
 /** Force-set rotation (e.g. when restoring game state). */
