@@ -48,6 +48,18 @@ function resolve() {
     }
   }
 
+  // Also merge query params from the browser's location.search.
+  // This handles direct URLs like /?room=XXXX (without hash prefix).
+  if (window.location.search) {
+    const sp = new URLSearchParams(window.location.search);
+    for (const [k, v] of sp.entries()) {
+      // Hash-based params take priority over search params.
+      if (!(k in params)) {
+        params[k] = v;
+      }
+    }
+  }
+
   const handler = routes[path];
   if (handler) {
     if (currentView && currentView.destroy) {

@@ -146,7 +146,7 @@ export class LobbyView extends EventEmitter {
     this.localPlayerIndex = 0;
   }
 
-  mount() {
+  mount(routerParams) {
     this.container.innerHTML = LOBBY_HTML;
     
     // Set background image for lobby with tiling pattern
@@ -185,36 +185,47 @@ export class LobbyView extends EventEmitter {
     const saved = localStorage.getItem('carcassonne_player_name');
     if (saved) this.dom.playerName.value = saved;
 
-    // Extra robust check: directly parse search params early.
-    const directParams = new URLSearchParams(window.location.search);
-    const directRoom = directParams.get('room');
-    if (directRoom) {
-      console.log('[LobbyView] Direct room param found in search:', directRoom);
-      this.dom.roomCodeInput.value = directRoom.toUpperCase();
-      this._joinGame();
-      return;
+    // ── Room code detection (priority order) ────────────────────────
+    // 1. Router params (parsed from hash or window.location.search by Router.js).
+    // 2. Direct window.location.search parsing.
+    // 3. Hash fallback (for hash-based SPA routing like #/?room=XXXX).
+    let roomCode = null;
+
+    if (routerParams && routerParams.room) {
+      roomCode = routerParams.room;
+      console.log('[LobbyView] Room param from router:', roomCode);
     }
 
-    // Check URL for room code (joining) — fall back to hash params
-    // (for hash-based SPA routing like #/?room=XXXX).
-    console.log('[LobbyView] mount() hash:', window.location.hash);
-    let roomParam = null;
-    const hash = window.location.hash;
-    const qm = hash.indexOf('?');
-    if (qm !== -1) {
-      const afterQM = hash.slice(qm + 1);
-      try {
-        roomParam = new URLSearchParams(afterQM).get('room');
-        console.log('[LobbyView] Found room param in hash:', roomParam);
-      } catch (e) {
-        // fallback to regex
-        const match = hash.match(/[?&]room=([^&]+)/i);
-        if (match) roomParam = match[1];
+    // 2. Direct search params.
+    if (!roomCode) {
+      const directParams = new URLSearchParams(window.location.search);
+      const directRoom = directParams.get('room');
+      if (directRoom) {
+        roomCode = directRoom;
+        console.log('[LobbyView] Room param from window.location.search:', roomCode);
       }
     }
-    if (roomParam) {
-      this.dom.roomCodeInput.value = roomParam.toUpperCase();
-      console.log('[LobbyView] Auto-joining room:', roomParam.toUpperCase());
+
+    // 3. Hash fallback.
+    if (!roomCode) {
+      console.log('[LobbyView] mount() hash:', window.location.hash);
+      const hash = window.location.hash;
+      const qm = hash.indexOf('?');
+      if (qm !== -1) {
+        const afterQM = hash.slice(qm + 1);
+        try {
+          roomCode = new URLSearchParams(afterQM).get('room');
+          if (roomCode) console.log('[LobbyView] Room param from hash:', roomCode);
+        } catch (e) {
+          const match = hash.match(/[?&]room=([^&]+)/i);
+          if (match) roomCode = match[1];
+        }
+      }
+    }
+
+    if (roomCode) {
+      this.dom.roomCodeInput.value = roomCode.toUpperCase();
+      console.log('[LobbyView] Auto-joining room:', roomCode.toUpperCase());
       this._joinGame();
       return; // _joinGame continues from here
     }
@@ -484,11 +495,15 @@ export class LobbyView extends EventEmitter {
       // Add a cancel/back button for joiners.
       const cancelBtn = document.createElement('button');
       cancelBtn.textContent = 'Leave Lobby';
-      cancelBtn.style.cssText = 'margin-top:8px; padding:8px; border-radius:6px; border:1px solid #e57373; background:transparent; color:#e57373; cursor:pointer; font-size:0.85rem;';
+      cancelBtn.style.cssText = 'margin-top:8px; padding:8px; border-radius:6px; border:1px solid #e57373; background:transparent; color:#e57373; cursor:pointer; font-size:0.85rem; pointer-events:auto;';
       cancelBtn.addEventListener('click', () => {
         this.destroy();
         this.emit('navigate', 'lobby');
-        navigate('');
+        // Clean the URL completely (both search params and hash) so mount()
+        // does not re-parse the room code when the new LobbyView is created.
+        // Using replaceState avoids a page reload.
+        history.replaceState(null, '', window.location.pathname);
+        navigate('/');
       });
       const statusContainer = this.dom.status.parentNode;
       statusContainer.appendChild(cancelBtn);
@@ -886,7 +901,10 @@ export class LobbyView extends EventEmitter {
 
   _copyInviteLink() {
     // Use hash-based URL so the SPA Router can resolve the room param.
-    const url = `${window.location.origin}${window.location.pathname}#/?room=${this.roomCode}`;
+    // Also append the room as a plain search param so the direct
+    // ?room=XXXX code path in mount() works without the hash prefix.
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    const url = `${baseUrl}?room=${this.roomCode}#/?room=${this.roomCode}`;
     navigator.clipboard.writeText(url).then(() => {
       this._setStatus('Invite link copied!');
     }).catch(() => {

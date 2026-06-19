@@ -409,7 +409,23 @@ export class HostPeerManager extends PeerManager {
       })),
       currentPlayerIndex: state.currentPlayerIndex,
       activeTile: state.activeTile
-        ? { tileId: state.activeTile.tile.id, validPlacements: state.activeTile.validPlacements }
+        ? {
+            tileId: state.activeTile.tile.id,
+            validPlacements: state.activeTile.validPlacements
+              ? state.activeTile.validPlacements.map((vp) => ({
+                  x: vp.x,
+                  y: vp.y,
+                  rotations: vp.rotations.map((r) => ({
+                    rotation: r.rotation,
+                    meeples: r.meeples ? r.meeples.map((m) => ({
+                      meepleType: m.meepleType,
+                      locationType: m.locationType,
+                      index: m.index,
+                    })) : [],
+                  })),
+                }))
+              : [],
+          }
         : null,
       unusedTilesCount: (state.unusedTiles || []).length,
       step: state.step,

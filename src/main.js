@@ -24,7 +24,7 @@ initSettings();
 // Lobby (default route).
 register('/', (params) => {
   const view = new LobbyView(app);
-  view.mount();
+  view.mount(params);
 
   // Listen for game start.
   view.on('start-game', (config) => {
