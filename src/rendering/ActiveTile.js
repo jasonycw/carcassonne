@@ -303,8 +303,11 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
         // Hide ALL placed meeples first (only one at a time)
         meeplePlacementsGroup.selectAll('g.outline-group image.placed-meeple')
           .attr('visibility', 'hidden');
+        // Bug 4: Re-apply the valid-position filter BEFORE showing outlines
+        // so only valid positions become visible (not ALL outlines).
         meeplePlacementsGroup.selectAll('g.outline-group image.meeple-outline')
           .attr('visibility', null);
+        _applyOutlineFilter(meeplePlacementsGroup);
 
         // Place this meeple
         const colorIdent = playerState ? (playerState.color || 'blue') : 'blue';
@@ -659,28 +662,7 @@ export function updateMeeplePlacements(validMeeplesIn, meepleTypeIn, svgElement)
     // Bug 4: Re-filter outline visibility based on the new meeple type.
     // (Harmless when the group is still hidden pre-confirm; group visibility
     //  takes precedence over individual visibility in SVG.)
-    const meepleGroup = groups.meeplePlacementsGroup;
-    if (selectedMove && selectedMove.placement && selectedMove.rotationIndex != null) {
-      const rotationEntry = selectedMove.placement.rotations[selectedMove.rotationIndex];
-      const validMeeples = rotationEntry ? rotationEntry.meeples : [];
-      let mType = currentMeepleType; if (mType === 'large') mType = 'normal';
-      // Bug 20: Check availability of the specific meeple type, not just normal meeples
-      const hasMeeples = _playerState && (function() {
-        if (currentMeepleType === 'normal') return (_playerState.remainingMeeples || 0) > 0;
-        if (currentMeepleType === 'large') return (_playerState.remainingMeeples || 0) > 0; // large uses normal pool
-        if (currentMeepleType === 'builder') return !!_playerState.hasBuilderMeeple;
-        if (currentMeepleType === 'pig') return !!_playerState.hasPigMeeple;
-        return false;
-      })();
-      meepleGroup.selectAll('image.meeple-outline')
-        .attr('visibility', (d) => {
-          if (!hasMeeples) return 'hidden';
-          const isValid = validMeeples.some(
-            (m) => m.meepleType === mType && m.locationType === d.locationType && m.index === d.index
-          );
-          return isValid ? null : 'hidden';
-        });
-    }
+    _applyOutlineFilter(groups.meeplePlacementsGroup);
   }
 
   updateMeeplePlacementsInternal(validMeeplesIn);
@@ -747,15 +729,9 @@ export function showMeeplePlacements() {
   // Rotation indicator is no longer needed — meeple outlines are shown.
   hideRotationIndicator();
 
-  // Bug 3: Filter outlines to only show positions valid for this rotation.
-  meepleGroup.selectAll('image.meeple-outline')
-    .attr('visibility', (d) => {
-      if (!hasMeeples) return 'hidden';
-      const isValid = validMeeples.some(
-        (m) => m.meepleType === mType && m.locationType === d.locationType && m.index === d.index
-      );
-      return isValid ? null : 'hidden';
-    });
+  // Bug 3/4: Filter outlines to only show positions valid for this rotation
+  // and current meeple type.
+  _applyOutlineFilter(meepleGroup);
 
   // Update placed-meeple visibility.
   meepleGroup.selectAll('image.placed-meeple')
@@ -787,6 +763,40 @@ export function hideMeeplePlacements() {
 // ---------------------------------------------------------------------------
 // updatePlacedMeeple  (internal)
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// _applyOutlineFilter  (internal helper)
+// ---------------------------------------------------------------------------
+
+/**
+ * Filter meeple-outline element visibility to show only positions that are
+ * valid for the current rotation AND the current meeple type AND available.
+ *
+ * Called from showMeeplePlacements(), updateMeeplePlacements(), and the
+ * outline-group click handler to keep outlines consistently filtered after
+ * any state change.
+ */
+function _applyOutlineFilter(meepleGroup) {
+  if (!selectedMove || !selectedMove.placement || selectedMove.rotationIndex == null) return;
+  const rotationEntry = selectedMove.placement.rotations[selectedMove.rotationIndex];
+  const validMeeples = rotationEntry ? rotationEntry.meeples : [];
+  let mType = currentMeepleType; if (mType === 'large') mType = 'normal';
+  const hasMeeples = _playerState && (function() {
+    if (currentMeepleType === 'normal') return (_playerState.remainingMeeples || 0) > 0;
+    if (currentMeepleType === 'large') return (_playerState.remainingMeeples || 0) > 0;
+    if (currentMeepleType === 'builder') return !!_playerState.hasBuilderMeeple;
+    if (currentMeepleType === 'pig') return !!_playerState.hasPigMeeple;
+    return false;
+  })();
+  meepleGroup.selectAll('image.meeple-outline')
+    .attr('visibility', (d) => {
+      if (!hasMeeples) return 'hidden';
+      const isValid = validMeeples.some(
+        (m) => m.meepleType === mType && m.locationType === d.locationType && m.index === d.index
+      );
+      return isValid ? null : 'hidden';
+    });
+}
 
 /** Render a "placed" meeple image on the active tile (before confirm). */
 function updatePlacedMeeple(data, playerState) {
