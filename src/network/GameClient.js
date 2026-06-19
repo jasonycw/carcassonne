@@ -161,7 +161,7 @@ export class GameClient extends EventEmitter {
           meepleType: m.meepleType,
           scored: m.scored !== false,
         })),
-        tower: pt.towerHeight != null ? { height: pt.towerHeight } : undefined,
+        tower: (pt.towerHeight != null || pt.completed != null) ? { height: pt.towerHeight, completed: pt.completed } : undefined,
         features: { cities: [], roads: [], farms: [], cloister: null },
         northTileIndex: undefined,
         southTileIndex: undefined,

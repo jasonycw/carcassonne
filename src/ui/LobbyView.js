@@ -453,9 +453,14 @@ export class LobbyView extends EventEmitter {
     this.dom.joinForm.style.display = show ? 'flex' : 'none';
     if (show) {
       this.dom.roomCodeInput.focus();
-      this.dom.roomCodeInput.addEventListener('keydown', (e) => {
+      // Remove any previous listener to avoid leaks, then re-attach.
+      if (this._joinKeydownHandler) {
+        this.dom.roomCodeInput.removeEventListener('keydown', this._joinKeydownHandler);
+      }
+      this._joinKeydownHandler = (e) => {
         if (e.key === 'Enter') this._joinGame();
-      });
+      };
+      this.dom.roomCodeInput.addEventListener('keydown', this._joinKeydownHandler);
     }
   }
 
@@ -477,6 +482,16 @@ export class LobbyView extends EventEmitter {
     try {
       console.log('[LobbyView] Creating ClientPeerManager for room:', code);
       this.peerManager = new ClientPeerManager(code);
+
+      // Register game_starting listener BEFORE connectToHost to avoid a race
+      // where the host sends game_starting before we are listening.
+      let gameStartingReceived = false;
+      let gameStartingPayload = null;
+      this.peerManager.on('msg:game_starting', (payload) => {
+        gameStartingReceived = true;
+        gameStartingPayload = payload;
+      });
+
       const result = await this.peerManager.connectToHost(name);
       console.log('[LobbyView] Connected to host! Player index:', result.playerIndex, 'players:', result.players);
 
@@ -548,7 +563,9 @@ export class LobbyView extends EventEmitter {
         this._updatePlayerList();
       });
 
-      // Listen for game start.
+      // Listen for game start. If game_starting was already received before this
+      // point (pre-registered listener captured it), process the stored payload now.
+      this.peerManager.off('msg:game_starting');
       this.peerManager.on('msg:game_starting', (payload) => {
         console.log('[LobbyView] Received game_starting from host!', payload);
         // Remove cancel button if present.
@@ -645,6 +662,12 @@ export class LobbyView extends EventEmitter {
           navigate('');
         }, 2000);
       });
+
+      // If game_starting was received before the listener above was registered,
+      // process the stored payload now.
+      if (gameStartingReceived) {
+        this.peerManager.emit('msg:game_starting', gameStartingPayload);
+      }
 
       // Listen for host disconnect.
       this.peerManager.on('peer-disconnected', () => {
