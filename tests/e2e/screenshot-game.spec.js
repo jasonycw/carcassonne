@@ -8,41 +8,74 @@
 import { test } from '@playwright/test';
 
 /**
- * Place a tile for the current player, optionally placing a meeple if
- * outlines are visible.  Uses dispatchEvent to avoid viewport boundaries
- * on the zoom/pan SVG.  Returns true when a tile was successfully placed.
+ * Handle the current game step: place tile, skip tower/capture, or click
+ * through the confirm flow.  Uses dispatchEvent to avoid viewport boundaries
+ * on the zoom/pan SVG.  Returns true when a move was committed.
  */
 async function tryPlaceTile(page) {
-  const placement = page.locator('#game-svg image.tile-placement').first();
-  const hasPlacement = await placement.isVisible({ timeout: 3000 }).catch(() => false);
-  if (!hasPlacement) return false;
+  // Check for game-over banner.
+  const banner = page.locator('#game-over-banner');
+  if (await banner.isVisible({ timeout: 300 }).catch(() => false)) return false;
 
-  // Use dispatchEvent so we don't trip viewport boundary checks on the
-  // zoom/pan SVG.  The native click fires the same D3 event handler.
+  // Check the HUD confirm button text to know what phase we're in.
+  const btn = page.locator('#hud-confirm');
+  const btnText = await btn.textContent({ timeout: 500 }).catch(() => '');
+
+  // Tower step: press the confirm button (labeled "Place Tower" / "Skip").
+  if (btnText.includes('Tower') || btnText.includes('Skip')) {
+    await btn.click();
+    await page.waitForTimeout(500);
+    return true;
+  }
+
+  // Capture step: just skip it.
+  const captureBtn = page.locator('button', { hasText: 'Skip' });
+  if (await captureBtn.isVisible({ timeout: 300 }).catch(() => false)) {
+    await captureBtn.click();
+    await page.waitForTimeout(500);
+    return true;
+  }
+
+  // Normal placement phase: look for valid tile placement on the board.
+  const placement = page.locator('#game-svg image.tile-placement').first();
+  const hasPlacement = await placement.isVisible({ timeout: 2000 }).catch(() => false);
+  if (!hasPlacement) {
+    // No placement found — maybe it's another player's turn (hot-seat).
+    // The HUD might show for a non-active player; wait for it to pass.
+    await page.waitForTimeout(1000);
+    return false;
+  }
+
+  // Click a valid placement on the board.
   await placement.dispatchEvent('click');
   await page.waitForTimeout(300);
 
-  const btn = page.locator('#hud-confirm');
-  const bv = await btn.isVisible({ timeout: 2000 }).catch(() => false);
-  if (!bv) return false;
-
-  // Phase 1: Click "Place Tile" → confirms rotation, shows meeple outlines.
-  await btn.click();
-  await page.waitForTimeout(300);
+  // Phase 1: confirm rotation — button says "Place Tile".
+  const btn1 = page.locator('#hud-confirm');
+  const b1v = await btn1.isVisible({ timeout: 2000 }).catch(() => false);
+  if (!b1v) return false;
+  const b1Text = await btn1.textContent().catch(() => '');
+  if (b1Text.includes('Place')) {
+    await btn1.click();
+    await page.waitForTimeout(300);
+  }
 
   // Try to place a meeple if outlines are visible.
   const meepleOutline = page.locator('#game-svg image.meeple-outline').first();
-  if (await meepleOutline.isVisible({ timeout: 1000 }).catch(() => false)) {
+  if (await meepleOutline.isVisible({ timeout: 800 }).catch(() => false)) {
     await meepleOutline.dispatchEvent('click');
     await page.waitForTimeout(200);
   }
 
-  // Phase 2: Click "Send Move" → finalises the placement.
+  // Phase 2: confirm meeple — button says "Send Move".
   const btn2 = page.locator('#hud-confirm');
   if (await btn2.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await btn2.click();
-    await page.waitForTimeout(500);
-    return true;
+    const b2Text = await btn2.textContent().catch(() => '');
+    if (b2Text.includes('Send') || b2Text.includes('Move')) {
+      await btn2.click();
+      await page.waitForTimeout(500);
+      return true;
+    }
   }
   return false;
 }
