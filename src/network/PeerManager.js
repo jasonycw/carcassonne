@@ -483,14 +483,14 @@ export class ClientPeerManager extends PeerManager {
 
         if (message.type === MessageType.JOIN_ACCEPT) {
           this.playerIndex = message.payload.playerIndex;
-          this.removeListener('message', onJoinResult);
+          this.off('message', onJoinResult);
           resolve({
             playerIndex: this.playerIndex,
             players: message.payload.players || [],
             settings: message.payload.settings || {},
           });
         } else if (message.type === MessageType.JOIN_REJECT) {
-          this.removeListener('message', onJoinResult);
+          this.off('message', onJoinResult);
           reject(new Error(message.payload.reason || 'Join rejected'));
         }
       };
@@ -499,7 +499,7 @@ export class ClientPeerManager extends PeerManager {
 
       // Timeout.
       setTimeout(() => {
-        this.removeListener('message', onJoinResult);
+        this.off('message', onJoinResult);
         reject(new Error('Connection timed out'));
       }, 15000);
     });
