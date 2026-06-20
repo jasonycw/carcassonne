@@ -25,7 +25,7 @@ To migrate the Carcassonne board game to a static GitHub Pages on https://jasony
 - All extensions must be fully working, with any combination
 - No deadlink, dead image or error after it's built on GitHub Page, no exception
 - Multiplayer must be working
-- README must has the latest screenshot of the game running with more multiple players with meeples placed and scoring, showing the beginning, middle of the game, end of the game
+- README must has the latest screenshot of the game running with multiple players, meeples placed and scoring working, showing the beginning, middle of the game, end of the game
 - When verify, everything must be check locally first and then also check after GitHub Page is built
 
 # VERIFICATION & DEFINITION OF DONE
