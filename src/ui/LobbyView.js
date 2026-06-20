@@ -410,6 +410,17 @@ export class LobbyView extends EventEmitter {
             this._updatePlayerList();
             this._setStatus(`${message.payload.playerName} joined!`);
           }
+        } else if (message.type === MessageType.NAME_CHANGE) {
+          // Client changed name — update slot and broadcast to all.
+          const slotIdx = this._connToSlot.get(conn);
+          if (slotIdx != null && this.slots[slotIdx]) {
+            this.slots[slotIdx].name = message.payload.name;
+            this._updatePlayerList();
+            this.peerManager.broadcast(createMessage(MessageType.PLAYER_NAME_UPDATED, {
+              playerIndex: slotIdx,
+              name: message.payload.name,
+            }));
+          }
         }
       });
 
@@ -437,6 +448,13 @@ export class LobbyView extends EventEmitter {
           this.peerManager.setHostName(newName);
         }
         this._updatePlayerList();
+        // Broadcast name change to connected clients.
+        if (this.peerManager && typeof this.peerManager.broadcast === 'function') {
+          this.peerManager.broadcast(createMessage(MessageType.PLAYER_NAME_UPDATED, {
+            playerIndex: 0,
+            name: newName,
+          }));
+        }
       });
 
       this._setStatus('Waiting for players...');
@@ -538,6 +556,26 @@ export class LobbyView extends EventEmitter {
       this._updatePlayerList();
       this._setStatus('Joined! Waiting for host to start the game...');
 
+      // Name change listener for joined client.
+      this.dom.playerName.addEventListener('input', () => {
+        const newName = this.dom.playerName.value.trim() || 'Player';
+        localStorage.setItem('carcassonne_player_name', newName);
+        if (this.peerManager && typeof this.peerManager.sendMove === 'function') {
+          this.peerManager.sendMove(createMessage(MessageType.NAME_CHANGE, { name: newName }));
+        }
+        // Update own player entry optimistically.
+        const ownEntry = this.players.find((p) => p.playerIndex === this.localPlayerIndex);
+        if (ownEntry) ownEntry.name = newName;
+        this._updatePlayerList();
+      });
+
+      // Listen for host-propagated name updates.
+      this.peerManager.on('msg:player_name_updated', (payload) => {
+        const entry = this.players.find((p) => p.playerIndex === payload.playerIndex);
+        if (entry) entry.name = payload.name;
+        this._updatePlayerList();
+      });
+
       // Listen for lobby updates (new players joining / leaving).
       this.peerManager.on('msg:player_joined', (payload) => {
         // Avoid duplicates.
@@ -561,6 +599,85 @@ export class LobbyView extends EventEmitter {
           playerIndex: p.playerIndex,
         }));
         this._updatePlayerList();
+      });
+
+      // When reconnecting to an already-running game, the host sends
+      // GAME_STATE_SYNC instead of GAME_STARTING.  Reconstruct the state
+      // and transition into the game view (same as game_starting).
+      this.peerManager.on('msg:game_state_sync', (payload) => {
+        console.log('[LobbyView] Reconnected — received game_state_sync', payload);
+        const init = payload.state || payload;
+        if (!init || !init.players) return;
+        const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'gray'];
+        const placedTiles = (init.placedTiles || []).map((pt) => {
+          const tileDef = TILE_DATA.find((t) => t.id === pt.tileId) || {};
+          return {
+            tile: tileDef,
+            rotation: pt.rotation || 0,
+            x: pt.x, y: pt.y,
+            playerIndex: pt.playerIndex,
+            meeples: (pt.meeples || []).map((m) => ({
+              playerIndex: m.playerIndex,
+              placement: m.placement || {},
+              meepleType: m.meepleType || 'normal',
+              scored: m.scored !== false,
+            })),
+            tower: pt.towerHeight != null ? { height: pt.towerHeight, completed: false } : undefined,
+            features: { cities: [], roads: [], farms: [], cloister: null },
+            northTileIndex: undefined, southTileIndex: undefined,
+            eastTileIndex: undefined, westTileIndex: undefined,
+          };
+        });
+        for (let i = 0; i < placedTiles.length; i++) {
+          const pt = placedTiles[i];
+          for (let j = 0; j < placedTiles.length; j++) {
+            if (i === j) continue;
+            const ot = placedTiles[j];
+            if (ot.x === pt.x && ot.y === pt.y - 1) pt.northTileIndex = j;
+            if (ot.x === pt.x && ot.y === pt.y + 1) pt.southTileIndex = j;
+            if (ot.y === pt.y && ot.x === pt.x - 1) pt.westTileIndex = j;
+            if (ot.y === pt.y && ot.x === pt.x + 1) pt.eastTileIndex = j;
+          }
+        }
+        const activeTile = init.activeTile && init.activeTile.tileId
+          ? { tile: TILE_DATA.find((t) => t.id === init.activeTile.tileId) || {},
+              validPlacements: init.activeTile.validPlacements || [] }
+          : null;
+        const clientExpansions = init.expansions || ['base-game'];
+        const clientState = {
+          players: (init.players || []).map((p, i) => ({
+            user: { username: p.username || `Player ${i}`, _id: `client-player-${i}` },
+            color: p.color || colors[i % colors.length],
+            points: p.points || 0,
+            remainingMeeples: p.remainingMeeples != null ? p.remainingMeeples : 7,
+            active: p.active || false,
+            hasLargeMeeple: clientExpansions.includes('inns-and-cathedrals'),
+            hasBuilderMeeple: clientExpansions.includes('traders-and-builders'),
+            hasPigMeeple: clientExpansions.includes('traders-and-builders'),
+            goods: p.goods || {},
+            towers: p.towers || 0,
+            capturedMeeples: [],
+            acknowledgedGameEnd: false,
+          })),
+          currentPlayerIndex: init.currentPlayerIndex != null ? init.currentPlayerIndex : 0,
+          placedTiles, activeTile,
+          unusedTiles: new Array(init.unusedTilesCount || 0),
+          step: init.step || 'place',
+          finished: init.finished || false,
+          expansions: clientExpansions,
+          messages: init.messages || [],
+          featureScores: init.featureScores || [],
+        };
+        // Remove cancel button if present.
+        if (cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
+        this._transitionToGame({
+          isHost: false,
+          isLocalGame: false,
+          peerManager: this.peerManager,
+          localState: clientState,
+          playerIndex: this.peerManager.playerIndex || 1,
+          localPlayers: init.players || [],
+        });
       });
 
       // Listen for game start. If game_starting was already received before this
@@ -930,11 +1047,10 @@ export class LobbyView extends EventEmitter {
   }
 
   _copyInviteLink() {
-    // Use hash-based URL so the SPA Router can resolve the room param.
-    // Also append the room as a plain search param so the direct
-    // ?room=XXXX code path in mount() works without the hash prefix.
+    // Share a clean URL with ?room=XXXX as the search param. Router.js
+    // reads window.location.search and auto-joins the room on mount.
     const baseUrl = `${window.location.origin}${window.location.pathname}`;
-    const url = `${baseUrl}?room=${this.roomCode}#/?room=${this.roomCode}`;
+    const url = `${baseUrl}?room=${this.roomCode}`;
     navigator.clipboard.writeText(url).then(() => {
       this._setStatus('Invite link copied!');
     }).catch(() => {
