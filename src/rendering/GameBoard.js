@@ -194,7 +194,7 @@ export function initializeBoard(svgElement, options = {}) {
   defs.append('symbol')
     .attr('id', 'svgicon-repeat-payment')
     .attr('viewBox', '0 0 24 24')
-    .html('<path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>');
+    .html('<path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>');
 
   // Glow filter for capturable meeples (The Tower capture step).
   defs.append('filter')
@@ -686,7 +686,7 @@ export function clearBoard() {
       .attr('r', TILE_SIZE * 0.18)
       .attr('cx', 0)
       .attr('cy', 0)
-      .attr('fill', 'rgba(0,0,0,0.6)')
+    .attr('fill', 'rgba(0,0,0,0.85)')
       .attr('stroke', '#ffffff')
       .attr('stroke-width', 1.5)
       .attr('opacity', 0)
