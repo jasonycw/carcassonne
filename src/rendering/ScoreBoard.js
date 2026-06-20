@@ -20,8 +20,9 @@ import { img } from '../utils/AssetPaths.js';
  * @param {object}      gamestate  Current game state
  * @param {number}      currentPlayerIndex  Index of the active player
  * @param {boolean}     [gameOver]  Whether the game has ended
+ * @param {Set<number>} [connectedPlayers]  Set of player indices with active P2P connections
  */
-export function renderScoreboard(container, gamestate, currentPlayerIndex, gameOver) {
+export function renderScoreboard(container, gamestate, currentPlayerIndex, gameOver, connectedPlayers) {
   if (!container || !gamestate || !gamestate.players) return;
 
   const players = gamestate.players;
@@ -51,6 +52,10 @@ export function renderScoreboard(container, gamestate, currentPlayerIndex, gameO
     const color = player.color || getPlayerColor(i);
     const isActive = i === currentPlayerIndex && !gameOver;
     const colorHex = getColorHex(color);
+    // Connection status: host (index 0) is always connected; remote players
+    // show green dot when connected, red when disconnected.
+    const isConnected = i === 0 || (connectedPlayers && connectedPlayers.has(i));
+    const connColor = isConnected ? '#4caf50' : '#e57373';
 
     html += `
       <div class="sb-player ${isActive ? 'sb-active' : ''}" style="
@@ -63,6 +68,10 @@ export function renderScoreboard(container, gamestate, currentPlayerIndex, gameO
         <span style="
           display:inline-block; width:10px; height:10px; border-radius:50%;
           background:${colorHex}; flex-shrink:0;
+        "></span>
+        <span title="${i === 0 ? 'Host' : (isConnected ? 'Connected' : 'Disconnected')}" style="
+          display:inline-block; width:8px; height:8px; border-radius:50%;
+          background:${connColor}; flex-shrink:0;
         "></span>
         <span style="font-weight:${isActive ? 'bold' : 'normal'}; flex-shrink:0; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
           ${escapeHtml(player.user?.username || `Player ${i + 1}`)}
