@@ -647,6 +647,7 @@ export class LobbyView extends EventEmitter {
 
         this._transitionToGame({
           isHost: false,
+          isLocalGame: false,
           peerManager: this.peerManager,
           localState: clientState,
           playerIndex: result.playerIndex,
