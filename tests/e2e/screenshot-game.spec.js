@@ -1,7 +1,8 @@
 /**
- * screenshot-game.spec.js — Play a 2-player hot-seat game and take screenshots.
+ * screenshot-game.spec.js — Play a 4-player hot-seat game with all expansions
+ * and take screenshots showing beginning, middle, and end of the game
+ * with meeples placed and scoring visible.
  *
- * Flows through the full lifecycle: lobby → start → mid-game → game-over.
  * Screenshots are written to screenshots/*.png for the README.
  */
 import { test } from '@playwright/test';
@@ -47,22 +48,28 @@ async function tryPlaceTile(page) {
 }
 
 test.describe('Screenshot Game', () => {
-  test('play 2-player game with meeples and capture all 4 screenshots', async ({ page }) => {
+  test('play 4-player game with expansions and capture all 4 screenshots', async ({ page }) => {
     test.setTimeout(600000); // 10 minutes
 
-    // Use a tall viewport so tile placements stay visible.
+    // Use a wide tall viewport so tile placements stay visible.
     await page.setViewportSize({ width: 1280, height: 1000 });
 
-    // ── 1. Lobby (2-player slots) ─────────────────────────────────────
+    // ── 1. Lobby (4-player slots with all expansions) ────────────────
     await page.goto('/');
     await page.waitForSelector('#lobby-container', { timeout: 10000 });
     await page.locator('#player-name').fill('Alice');
-    await page.locator('#player-count').selectOption('2');
+    await page.locator('#player-count').selectOption('4');
+
+    // Enable all three expansions
+    await page.locator('input[value="inns-and-cathedrals"]').check();
+    await page.locator('input[value="traders-and-builders"]').check();
+    await page.locator('input[value="the-tower"]').check();
+
     await page.locator('#create-game-btn').click();
     await page.waitForSelector('#lobby-players[style*="block"]', { timeout: 10000 });
     await page.waitForTimeout(300);
     await page.screenshot({ path: 'screenshots/01-lobby.png', fullPage: true });
-    console.log('✓ Screenshot 1: lobby');
+    console.log('✓ Screenshot 1: lobby (4 players, all expansions)');
 
     // ── 2. Start game ─────────────────────────────────────────────────
     await page.locator('#start-game-btn').click();
@@ -71,7 +78,9 @@ test.describe('Screenshot Game', () => {
     await page.screenshot({ path: 'screenshots/02-game-started.png', fullPage: true });
     console.log('✓ Screenshot 2: game started');
 
-    // ── 3. Place ~30 tiles (with meeples when possible) ────────────────
+    // ── 3. Place tiles ────────────────────────────────────────────────
+    // With 4 players we need ~36 tiles per cycle to show everyone's moves.
+    // Take mid-game at tile 20 where more meeples and scoring are visible.
     let totalPlaced = 0;
     let midGameDone = false;
     let gameOver = false;
@@ -82,7 +91,9 @@ test.describe('Screenshot Game', () => {
         totalPlaced++;
         if (totalPlaced % 10 === 0) console.log(`Placed ${totalPlaced} tiles`);
 
-        if (!midGameDone && totalPlaced >= 12) {
+        // Take mid-game screenshot when there's enough on the board
+        // to show meeples placed and some scoring activity.
+        if (!midGameDone && totalPlaced >= 20) {
           await page.waitForTimeout(500);
           await page.screenshot({ path: 'screenshots/03-mid-game.png', fullPage: true });
           console.log('✓ Screenshot 3: mid-game');
@@ -103,8 +114,6 @@ test.describe('Screenshot Game', () => {
 
     // ── 4. Game over screenshot ───────────────────────────────────────
     if (!gameOver) {
-      // If the banner never appeared, the loop ended because we hit the
-      // tile limit.  Wait a bit for any late banner render.
       await page.waitForTimeout(2000);
     }
     await page.waitForTimeout(1000);
