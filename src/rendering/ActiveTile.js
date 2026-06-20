@@ -223,9 +223,12 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
   // re-appending the container to the end of activeTileRotGroup.
   activeTileRotGroup.node().appendChild(meeplePlacementsGroup.node());
 
-  // Clear meeplePlacementsGroup content
+  // Clear meeplePlacementsGroup content.
+  // Use display: none (not visibility: hidden) so SVG elements are completely
+  // removed from the rendering tree and cannot intercept pointer events
+  // on the tile image or board below (Bug 3).
   meeplePlacementsGroup
-    .attr('visibility', 'hidden')
+    .attr('display', 'none')
     .style('pointer-events', 'none')
     .selectAll('*').remove();
 
@@ -558,18 +561,27 @@ export function updateBoardPosition() {
   const screenCenterX = t.applyX(centerX);
   const screenCenterY = t.applyY(centerY);
 
-  // Bug 1: If a D3 transition is in progress, interrupt it so the tile
-  // immediately snaps to the correct position instead of landing at the
-  // original target after the animation completes.
+  // Bug 1: If a D3 transition is in progress, interrupt it and start a smooth
+  // follow transition so the tile tracks the map transform without snapping.
   if (_transitioning) {
     groups.activeTileTransGroup.interrupt();
     groups.activeTileRotGroup.interrupt();
-    _transitioning = false;
+    // Start a new smooth transition to the corrected target position so the
+    // tile doesn't snap but smoothly follows the board.
+    groups.activeTileTransGroup
+      .transition()
+      .duration(100)
+      .attr('transform', `translate(${screenCenterX},${screenCenterY})`);
+    groups.activeTileRotGroup
+      .transition()
+      .duration(100)
+      .attr('transform', `rotate(${currentRotation * 90}) scale(${t.k})`);
     // Resolve the pending animation promise so it doesn't hang.
     if (_pendingAnimationResolve) {
       _pendingAnimationResolve();
       _pendingAnimationResolve = null;
     }
+    return;
   }
 
   groups.activeTileTransGroup
@@ -605,7 +617,7 @@ export function resetActiveTile(svgElement, animated = false) {
 
   // Hide meeple placements and prevent click interception.
   groups.meeplePlacementsGroup
-    .attr('visibility', 'hidden')
+    .attr('display', 'none')
     .style('pointer-events', 'none')
     .selectAll('image').attr('visibility', 'hidden');
 
@@ -700,7 +712,7 @@ function updateMeeplePlacementsInternal() {
 
   // If no placement is selected, keep meeple group hidden.
   if (!selectedMove || !selectedMove.placement) {
-    meepleGroup.attr('visibility', 'hidden');
+    meepleGroup.attr('display', 'none');
     return;
   }
 
@@ -735,17 +747,18 @@ export function showMeeplePlacements() {
   const rotationEntry = selectedMove.placement.rotations[selectedMove.rotationIndex];
   const validMeeples = rotationEntry ? rotationEntry.meeples : [];
   let mType = currentMeepleType; if (mType === 'large') mType = 'normal';
-  // Bug 20: Check availability of the specific meeple type, not just normal meeples
+  // Bug 20: Check availability of the specific meeple type, not just normal meeples.
+  // Large meeples are tracked by hasLargeMeeple (not remainingMeeples which is only for normal).
   const hasMeeples = _playerState && (function() {
     if (currentMeepleType === 'normal') return (_playerState.remainingMeeples || 0) > 0;
-    if (currentMeepleType === 'large') return (_playerState.remainingMeeples || 0) > 0;
+    if (currentMeepleType === 'large') return !!_playerState.hasLargeMeeple;
     if (currentMeepleType === 'builder') return !!_playerState.hasBuilderMeeple;
     if (currentMeepleType === 'pig') return !!_playerState.hasPigMeeple;
     return false;
   })();
 
   // Show the meeple group and allow pointer events for meeple selection.
-  meepleGroup.attr('visibility', null);
+  meepleGroup.attr('display', null);
   meepleGroup.style('pointer-events', null);
   meepleGroup.selectAll('g.outline-group').style('pointer-events', null);
   meepleGroup.selectAll('image.meeple-outline').style('pointer-events', null);
@@ -780,7 +793,7 @@ export function hideMeeplePlacements() {
   const groups = getActiveTileGroups();
   if (!groups) return;
   const meepleGroup = groups.meeplePlacementsGroup;
-  meepleGroup.attr('visibility', 'hidden');
+  meepleGroup.attr('display', 'none');
   meepleGroup.style('pointer-events', 'none');
 }
 
@@ -807,7 +820,7 @@ function _applyOutlineFilter(meepleGroup) {
   let mType = currentMeepleType; if (mType === 'large') mType = 'normal';
   const hasMeeples = _playerState && (function() {
     if (currentMeepleType === 'normal') return (_playerState.remainingMeeples || 0) > 0;
-    if (currentMeepleType === 'large') return (_playerState.remainingMeeples || 0) > 0;
+    if (currentMeepleType === 'large') return !!_playerState.hasLargeMeeple;
     if (currentMeepleType === 'builder') return !!_playerState.hasBuilderMeeple;
     if (currentMeepleType === 'pig') return !!_playerState.hasPigMeeple;
     return false;
