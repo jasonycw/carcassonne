@@ -63,8 +63,54 @@ export class GameHost extends EventEmitter {
         case MessageType.CAPTURE_MEEPLE:
           this._handleCaptureMeeple(message.payload, conn);
           break;
+        case MessageType.JOIN_REQUEST:
+          this._handleJoinRequest(message.payload, conn);
+          break;
       }
     });
+  }
+
+  /**
+   * Handle a JOIN_REQUEST during an active game (client reconnection).
+   * Accepts the connection, assigns the first available non-host slot,
+   * then broadcasts the current game state so the reconnecting client
+   * can reconstruct the board and resume play.
+   */
+  _handleJoinRequest(payload, conn) {
+    const playerName = (payload && payload.playerName) || 'Reconnecting Player';
+    console.log('[GameHost] Reconnection attempt by:', playerName);
+
+    // Find the first player slot not held by a currently connected remote.
+    // Slot 0 is always the host — skip it.
+    let targetSlot = -1;
+    const connectedIndices = this.hostPeerManager.connectedPlayers.map(p => p.playerIndex);
+    for (let i = 1; i < this.gamestate.players.length; i++) {
+      if (!connectedIndices.includes(i)) {
+        targetSlot = i;
+        break;
+      }
+    }
+    if (targetSlot === -1) {
+      // All slots are held by connected clients — assign the next available index.
+      targetSlot = this.gamestate.players.length;
+    }
+
+    // Accept the join on the host PeerManager side.
+    const result = this.hostPeerManager.acceptJoin(conn, playerName, targetSlot);
+    if (result && result.accepted) {
+      console.log('[GameHost] Reconnection accepted for', playerName, 'as player', targetSlot);
+      // Send the full current state to the reconnecting client.
+      const sanitized = this.hostPeerManager._sanitizeState(this.gamestate);
+      this.hostPeerManager.send(conn, createMessage(MessageType.GAME_STATE_SYNC, { state: sanitized }));
+      // Broadcast a player-joined notification so other clients know.
+      this.hostPeerManager.broadcast(createMessage(MessageType.PLAYER_JOINED, {
+        id: conn.peer,
+        name: playerName,
+        playerIndex: targetSlot,
+      }));
+    } else {
+      console.log('[GameHost] Reconnection rejected for', playerName, result ? result.reason : 'unknown');
+    }
   }
 
   /**
