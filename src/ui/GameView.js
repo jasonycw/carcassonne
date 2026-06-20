@@ -172,12 +172,33 @@ export class GameView {
     this.settingsPanel.mount();
     initSettings();
 
+    // Track which remote players currently have an active P2P connection
+    // so the scoreboard can show connection status indicators.
+    this._connectedPlayers = new Set();
+
     // Wire up P2P orchestration layer FIRST so that _getRemotePlayerIndices()
     // works correctly during the initial render (especially for Fix 3/4).
     if (this.peerManager && !this.isLocalGame) {
       if (this.isHost) {
         console.log('[GameView] Creating GameHost for P2P host');
         this.gameHost = new GameHost(this.peerManager, this.gamestate);
+
+        // Track connection status for remote players.
+        const hostPM = this.peerManager;
+        this._connectedPlayers = new Set(
+          hostPM.connectedPlayers ? hostPM.connectedPlayers.map(p => p.playerIndex) : []
+        );
+        hostPM.on('peer-connected', (conn) => {
+          const entry = hostPM.connectedPlayers?.find(p => p.conn === conn);
+          if (entry) this._connectedPlayers.add(entry.playerIndex);
+          this._updateScoreboard();
+        });
+        hostPM.on('peer-disconnected', (conn) => {
+          const entry = hostPM.connectedPlayers?.find(p => p.conn === conn);
+          if (entry) this._connectedPlayers.delete(entry.playerIndex);
+          this._updateScoreboard();
+        });
+
         this.gameHost.on('state-changed', () => {
           console.log('[GameView] Host state changed, re-rendering');
           this._renderBoard();
@@ -372,6 +393,23 @@ export class GameView {
         this.gamestate,
         this.gamestate.currentPlayerIndex,
         this.gamestate.finished,
+        this._connectedPlayers,
+      );
+    }
+  }
+
+  /**
+   * Re-render just the scoreboard (useful when connection status changes
+   * without a full state change).
+   */
+  _updateScoreboard() {
+    if (this.dom && this.dom.scoreboard && this.gamestate) {
+      renderScoreboard(
+        this.dom.scoreboard,
+        this.gamestate,
+        this.gamestate.currentPlayerIndex,
+        this.gamestate.finished,
+        this._connectedPlayers,
       );
     }
   }
@@ -488,6 +526,9 @@ export class GameView {
     // Animate the active tile from corner to the board position.
     moveToBoardPosition(x, y, targetRotation);
 
+    // Save the pending placement so _confirmPlacement() can proceed.
+    this._pendingPlacement = { x, y, rotation: targetRotation };
+
     // Do NOT show meeple outlines yet — they show only after the player
     // clicks "Place Tile" (confirm step) to lock in the rotation.
     hideMeeplePlacements();
@@ -508,7 +549,7 @@ export class GameView {
       this.gameClient.placeTile(x, y, rotation, meeple);
       // Show a brief "waiting for host" state
       if (this.dom) this.dom.hud.style.display = 'none';
-      resetActiveTile(this.dom.svg, true);
+      resetActiveTile(this.dom.svg, false);
       return true;
     }
 
