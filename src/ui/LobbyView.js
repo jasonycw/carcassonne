@@ -642,6 +642,7 @@ export class LobbyView extends EventEmitter {
           finished: init.finished || false,
           expansions: init.expansions || ['base-game'],
           messages: init.messages || [],
+          featureScores: init.featureScores || [],
         };
 
         this._transitionToGame({

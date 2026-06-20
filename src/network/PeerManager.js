@@ -381,6 +381,7 @@ export class HostPeerManager extends PeerManager {
       name: state.name,
       expansions: state.expansions,
       finished: state.finished,
+      featureScores: state.featureScores || [],
       players: state.players.map((p) => ({
         username: p.user?.username || 'Player',
         color: p.color,

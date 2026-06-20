@@ -141,6 +141,7 @@ export class GameClient extends EventEmitter {
     gs.step = sanitized.step;
     gs.finished = sanitized.finished;
     gs.messages = sanitized.messages || [];
+    gs.featureScores = sanitized.featureScores || [];
 
     // Update unused tile count for display (actual tiles stay on host).
     const count = sanitized.unusedTilesCount != null ? sanitized.unusedTilesCount : 0;
