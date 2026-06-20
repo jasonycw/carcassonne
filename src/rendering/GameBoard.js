@@ -269,18 +269,14 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('class', 'active-tile-rotation');
   // Rotation indicator (hidden by default — only shown when tile is pinned
   // on board and the placement has more than 1 valid rotation).
-  // Bug 2: Use a semi-transparent circular background pill so the icon
-  // is clearly visible on top of any tile artwork, and set a high-contrast
-  // fill/stroke combination.
+  // Shows a repeat/reload arrow icon with a dark opaque background pill so
+  // it is clearly visible on top of any tile artwork.
   activeTileRotGroup.append('use')
     .attr('class', 'active-tile-rotation-indicator')
     .attr('href', '#svgicon-repeat-payment')
     .attr('x', -16)
     .attr('y', -16)
     .attr('transform', `scale(${TILE_SIZE / 32})`)
-    .attr('fill', '#ffffff')
-    .attr('stroke', '#222222')
-    .attr('stroke-width', 3)
     .attr('opacity', 0)
     .attr('pointer-events', 'none');
   // Add a circular background pill behind the indicator so it's visible
@@ -290,9 +286,9 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('r', TILE_SIZE * 0.18)
     .attr('cx', 0)
     .attr('cy', 0)
-    .attr('fill', 'rgba(0,0,0,0.6)')
+    .attr('fill', 'rgba(0,0,0,0.9)')
     .attr('stroke', '#ffffff')
-    .attr('stroke-width', 1.5)
+    .attr('stroke-width', 2)
     .attr('opacity', 0)
     .attr('pointer-events', 'none');
   // Meeple-placements sub-group (hidden by default).
@@ -676,8 +672,6 @@ export function clearBoard() {
       .attr('x', -16)
       .attr('y', -16)
       .attr('transform', `scale(${TILE_SIZE / 32})`)
-      .attr('fill', 'white')
-      .attr('stroke', 'black')
       .attr('opacity', 0)
       .attr('pointer-events', 'none');
     // Re-create the background circle pill (mirrors create() in initializeBoard).
@@ -686,9 +680,9 @@ export function clearBoard() {
       .attr('r', TILE_SIZE * 0.18)
       .attr('cx', 0)
       .attr('cy', 0)
-    .attr('fill', 'rgba(0,0,0,0.85)')
+      .attr('fill', 'rgba(0,0,0,0.9)')
       .attr('stroke', '#ffffff')
-      .attr('stroke-width', 1.5)
+      .attr('stroke-width', 2)
       .attr('opacity', 0)
       .attr('pointer-events', 'none');
     meeplePlacementsGroup = activeTileRotGroup.append('g')
