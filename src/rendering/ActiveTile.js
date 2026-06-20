@@ -561,20 +561,15 @@ export function updateBoardPosition() {
   const screenCenterX = t.applyX(centerX);
   const screenCenterY = t.applyY(centerY);
 
-  // Bug 1: If a D3 transition is in progress, interrupt it and start a smooth
-  // follow transition so the tile tracks the map transform without snapping.
+  // If a D3 transition is in progress, interrupt it and immediately snap
+  // the tile to the correct position so it tracks the board in real time
+  // without lagging behind during rapid zoom/pan gestures.
   if (_transitioning) {
     groups.activeTileTransGroup.interrupt();
     groups.activeTileRotGroup.interrupt();
-    // Start a new smooth transition to the corrected target position so the
-    // tile doesn't snap but smoothly follows the board.
     groups.activeTileTransGroup
-      .transition()
-      .duration(100)
       .attr('transform', `translate(${screenCenterX},${screenCenterY})`);
     groups.activeTileRotGroup
-      .transition()
-      .duration(100)
       .attr('transform', `rotate(${currentRotation * 90}) scale(${t.k})`);
     // Resolve the pending animation promise so it doesn't hang.
     if (_pendingAnimationResolve) {
