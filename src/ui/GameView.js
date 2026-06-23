@@ -214,6 +214,11 @@ export class GameView {
         });
       } else {
         console.log('[GameView] Creating GameClient for P2P client, playerIndex:', this.playerIndex);
+        // Issue 7: For P2P clients, all active game players are tracked by the host
+        // and state wouldn't arrive if they were disconnected.  Initialize
+        // _connectedPlayers with ALL player indices so the scoreboard shows
+        // green (connected) dots for all participants.
+        this._connectedPlayers = new Set(this.gamestate.players.map((_, i) => i));
         this.gameClient = new GameClient(this.peerManager, this.gamestate);
         this.gameClient.on('state-update', () => {
           console.log('[GameView] Client state update, re-rendering');
@@ -995,11 +1000,13 @@ export class GameView {
     if (!detailed || !detailed.players) return '';
 
     // Category definitions in display order
+    // NOTE: keys must match event.type from Scoring.js featureScores,
+    // which uses singular: 'city', 'road', 'farm', 'cloister'.
     const categories = [
-      { key: 'cities', label: 'Cities' },
-      { key: 'roads', label: 'Roads' },
-      { key: 'farms', label: 'Farms' },
-      { key: 'cloisters', label: 'Cloisters' },
+      { key: 'city', label: 'Cities' },
+      { key: 'road', label: 'Roads' },
+      { key: 'farm', label: 'Farms' },
+      { key: 'cloister', label: 'Cloisters' },
     ];
     if (hasGoods) {
       categories.push({ key: 'goods', label: 'Goods' });
