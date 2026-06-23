@@ -613,6 +613,7 @@ export function resetActiveTile(svgElement, animated = false) {
   // Hide meeple placements and prevent click interception.
   groups.meeplePlacementsGroup
     .attr('display', 'none')
+    .attr('visibility', 'hidden')
     .style('pointer-events', 'none')
     .selectAll('image').attr('visibility', 'hidden');
 
@@ -753,7 +754,10 @@ export function showMeeplePlacements() {
   })();
 
   // Show the meeple group and allow pointer events for meeple selection.
+  // Bug 3: Must clear BOTH display AND visibility — visibility:hidden is set
+  // in initializeBoard() / clearBoard() and persists even after display is restored.
   meepleGroup.attr('display', null);
+  meepleGroup.attr('visibility', null);
   meepleGroup.style('pointer-events', null);
   meepleGroup.selectAll('g.outline-group').style('pointer-events', null);
   meepleGroup.selectAll('image.meeple-outline').style('pointer-events', null);
@@ -789,6 +793,7 @@ export function hideMeeplePlacements() {
   if (!groups) return;
   const meepleGroup = groups.meeplePlacementsGroup;
   meepleGroup.attr('display', 'none');
+  meepleGroup.attr('visibility', 'hidden');
   meepleGroup.style('pointer-events', 'none');
 }
 

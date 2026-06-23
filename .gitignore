@@ -34,5 +34,6 @@ dist/
 test-results/
 test-dist/
 playwright-report/
+gh-pages-verify-*.png
 .antigravitycli/
 .playwright-mcp/
