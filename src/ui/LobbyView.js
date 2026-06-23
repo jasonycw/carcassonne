@@ -24,7 +24,7 @@ import {
 } from '../network/Protocol.js';
 import { createGameState, initializeNewGame } from '../game/GameLogic.js';
 import { ALL_TILES as TILE_DATA } from '../game/TileData.js';
-import { hasRecoverableGame, getSavedGameInfo, loadGame, removeGame } from '../network/StateSync.js';
+import { hasRecoverableGame, getSavedGameInfo, loadGame, removeGame, saveP2pInfo } from '../network/StateSync.js';
 import { img } from '../utils/AssetPaths.js';
 
 // ---------------------------------------------------------------------------
@@ -670,6 +670,8 @@ export class LobbyView extends EventEmitter {
         };
         // Remove cancel button if present.
         if (cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
+        // Save P2P metadata so page refresh can reconnect (Issue 5).
+        saveP2pInfo({ room: this.roomCode, playerIndex: this.peerManager.playerIndex || 1 });
         this._transitionToGame({
           isHost: false,
           isLocalGame: false,
@@ -1042,6 +1044,10 @@ export class LobbyView extends EventEmitter {
     // close all WebRTC connections before GameHost/GameClient can use them.
     config.transferPeerManager = this.peerManager;
     this.peerManager = null;
+    // Issue 5: Save P2P metadata so a page refresh can reconnect the client.
+    if (this.roomCode && config.isLocalGame === false && config.isHost === false) {
+      saveP2pInfo({ room: this.roomCode, playerIndex: config.playerIndex });
+    }
     this.container.innerHTML = '';
     this.emit('start-game', config);
   }
