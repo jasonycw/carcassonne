@@ -561,21 +561,21 @@ export function updateBoardPosition() {
   const screenCenterX = t.applyX(centerX);
   const screenCenterY = t.applyY(centerY);
 
-  // If a D3 transition is in progress, interrupt it and immediately snap
-  // the tile to the correct position so it tracks the board in real time
-  // without lagging behind during rapid zoom/pan gestures.
+  // If a D3 transition is in progress, start a NEW transition from the
+  // current interpolated position toward the updated board coordinates.
+  // This keeps the tile smoothly animated instead of snapping (Issue 1).
+  // D3 handles this correctly: calling .transition() on an element that is
+  // already transitioning cancels the old one and interpolates from the
+  // current visual state to the new target.
   if (_transitioning) {
-    groups.activeTileTransGroup.interrupt();
-    groups.activeTileRotGroup.interrupt();
     groups.activeTileTransGroup
+      .transition()
+      .duration(TRANSITION_DURATION)
       .attr('transform', `translate(${screenCenterX},${screenCenterY})`);
     groups.activeTileRotGroup
+      .transition()
+      .duration(TRANSITION_DURATION)
       .attr('transform', `rotate(${currentRotation * 90}) scale(${t.k})`);
-    // Resolve the pending animation promise so it doesn't hang.
-    if (_pendingAnimationResolve) {
-      _pendingAnimationResolve();
-      _pendingAnimationResolve = null;
-    }
     return;
   }
 

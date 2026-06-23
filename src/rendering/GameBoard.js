@@ -194,7 +194,7 @@ export function initializeBoard(svgElement, options = {}) {
   defs.append('symbol')
     .attr('id', 'svgicon-repeat-payment')
     .attr('viewBox', '0 0 24 24')
-    .html('<path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>');
+    .html('<path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>');
 
   // Glow filter for capturable meeples (The Tower capture step).
   defs.append('filter')
@@ -269,8 +269,8 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('class', 'active-tile-rotation');
   // Rotation indicator (hidden by default — only shown when tile is pinned
   // on board and the placement has more than 1 valid rotation).
-  // Shows a repeat/reload arrow icon with a dark opaque background pill so
-  // it is clearly visible on top of any tile artwork.
+  // Shows a repeat/reload arrow icon with a fully opaque black background
+  // pill and thick white border so it is clearly visible on any tile art.
   activeTileRotGroup.append('use')
     .attr('class', 'active-tile-rotation-indicator')
     .attr('href', '#svgicon-repeat-payment')
@@ -279,16 +279,16 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('transform', `scale(${TILE_SIZE / 32})`)
     .attr('opacity', 0)
     .attr('pointer-events', 'none');
-  // Add a circular background pill behind the indicator so it's visible
-  // on busy tile art without blending in.
+  // Fully opaque black circular background so the indicator never blends
+  // into busy tile artwork (Issue 2).
   activeTileRotGroup.insert('circle', '.active-tile-rotation-indicator')
     .attr('class', 'active-tile-rotation-indicator-bg')
-    .attr('r', TILE_SIZE * 0.18)
+    .attr('r', TILE_SIZE * 0.28)
     .attr('cx', 0)
     .attr('cy', 0)
-    .attr('fill', 'rgba(0,0,0,0.9)')
+    .attr('fill', '#000000')
     .attr('stroke', '#ffffff')
-    .attr('stroke-width', 2)
+    .attr('stroke-width', 4)
     .attr('opacity', 0)
     .attr('pointer-events', 'none');
   // Meeple-placements sub-group (hidden by default).
@@ -677,12 +677,12 @@ export function clearBoard() {
     // Re-create the background circle pill (mirrors create() in initializeBoard).
     activeTileRotGroup.insert('circle', '.active-tile-rotation-indicator')
       .attr('class', 'active-tile-rotation-indicator-bg')
-      .attr('r', TILE_SIZE * 0.18)
+      .attr('r', TILE_SIZE * 0.28)
       .attr('cx', 0)
       .attr('cy', 0)
-      .attr('fill', 'rgba(0,0,0,0.9)')
+      .attr('fill', '#000000')
       .attr('stroke', '#ffffff')
-      .attr('stroke-width', 2)
+      .attr('stroke-width', 4)
       .attr('opacity', 0)
       .attr('pointer-events', 'none');
     meeplePlacementsGroup = activeTileRotGroup.append('g')
