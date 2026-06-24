@@ -20,6 +20,7 @@ import {
   updateBoardPosition, updateMeeplePlacements,
   showMeeplePlacements, hideMeeplePlacements,
   onTilePlaced, onRotationChanged,
+  setIsConfirmed, getIsConfirmed, onRevertToPlacement,
 } from '../rendering/ActiveTile.js';
 import { img } from '../utils/AssetPaths.js';
 import { placeTile, placeTowerPiece, captureMeeple, skipTowerStep, skipCapture } from '../game/GameLogic.js';
@@ -157,6 +158,18 @@ export class GameView {
       // "Place Tile" again before placing a meeple (Issue 3).
       if (this._confirmPhase === 'confirmed') {
         showMeeplePlacements();
+      }
+    });
+
+    // When the user clicks the tile image during confirmed phase (non-outline
+    // area), revert to placement-selected: hide meeple outlines, show rotation
+    // indicator.
+    onRevertToPlacement(() => {
+      if (this._confirmPhase === 'confirmed') {
+        hideMeeplePlacements();
+        this._confirmPhase = 'placement-selected';
+        this._updateHUD('placement-selected');
+        // setIsConfirmed(false) is already called inside hideMeeplePlacements()
       }
     });
 
@@ -321,6 +334,25 @@ export class GameView {
       if (e.ctrlKey && e.shiftKey && e.key === 'S') {
         e.preventDefault();
         this.settingsPanel.show();
+      }
+    });
+
+    // Click on empty SVG space (not a valid-placement indicator) → cancel
+    // the current placement and return the active tile to the corner.
+    this.dom.svg.addEventListener('click', (event) => {
+      // Don't interfere if no placement is pending.
+      if (!this._pendingPlacement) return;
+      // Valid-placement indicator clicks are handled by GameBoard;
+      // they do NOT stop propagation, so we must explicitly skip them.
+      if (event.target.closest('.tile-placement')) return;
+      // Ignore clicks on the active tile itself (it stops propagation, but
+      // be defensive).
+      if (event.target.closest('.active-tile')) return;
+      // Meeple placement outlines stop propagation — defensive check.
+      if (event.target.closest('.meeple-placements')) return;
+
+      if (this._confirmPhase === 'placement-selected' || this._confirmPhase === 'confirmed') {
+        this._cancelPlacement();
       }
     });
   }
@@ -650,6 +682,22 @@ export class GameView {
         this._showStatusMessage('Invalid placement! Please try a different position.');
       }
       return;
+    }
+  }
+
+  /**
+   * Cancel the current tile placement: return the active tile to the corner
+   * and reset confirm phase.  Called when the user clicks outside a valid
+   * placement while a placement is pending.
+   */
+  _cancelPlacement() {
+    if (this._confirmPhase === 'placement-selected' || this._confirmPhase === 'confirmed') {
+      this._confirmPhase = '';
+      this._pendingPlacement = null;
+      // Snap the tile back to the corner and re-show it in the default
+      // (placement-awaiting) state.
+      resetActiveTile(this.dom.svg, false);
+      this._showActiveTileIfNeeded();
     }
   }
 

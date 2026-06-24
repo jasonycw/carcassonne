@@ -57,6 +57,12 @@ let onTilePlacedCallback = null;
 let onMeeplePlacedCallback = null;
 let onRotationChangedCallback = null;
 
+// When true, clicking the tile image (non-outline area) should revert
+// to the placement-selected state (hide meeple outlines, show rotation
+// indicator).  Managed by GameView via setIsConfirmed().
+let _isConfirmed = false;
+let onRevertToPlacementCallback = null;
+
 // Original game stores the valid meeple placements for the current rotation
 let _validMeepleForRotation = [];
 
@@ -134,6 +140,7 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
   validPlacements = placements || [];
   selectedMove = null;
   _playerState = playerState;
+  _isConfirmed = false;
 
   const groups = getActiveTileGroups();
   if (!groups || !groups.activeTileGroup) return;
@@ -178,8 +185,18 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
     .style('pointer-events', 'all')
     .on('click', (event) => {
       event.stopPropagation();
-      // Only rotate if a board placement is selected (pinned).
+      // Only process if a board placement is selected (pinned).
       if (!selectedMove || !selectedMove.placement) return;
+
+      // If meeple outlines are shown (confirmed phase), clicking the tile
+      // image (non-outline area) reverts to placement-selected state:
+      // hide outlines, show rotation indicator.  Only "Place Tile" button
+      // should show the outlines.
+      if (_isConfirmed) {
+        if (onRevertToPlacementCallback) onRevertToPlacementCallback();
+        return;
+      }
+
       const placement = selectedMove.placement;
       const validRots = placement.rotations || [];
       if (validRots.length === 0) return;
@@ -468,8 +485,10 @@ function collectValidMeeples(tileData, placements) {
 
 /**
  * Animate the active tile from the corner to a board grid position.
- * Calculates screen-space coordinates from grid coords using the current
- * D3 zoom transform.
+ * Uses a D3 tween that recalculates the target screen position on every
+ * animation frame based on the current zoom transform.  This keeps the
+ * tile "anchored" to the map — zooming/pans during the animation naturally
+ * adjusts the tile's trajectory (matching the original game behavior).
  *
  * @param {number} gridX   Tile grid X coordinate
  * @param {number} gridY   Tile grid Y coordinate
@@ -481,19 +500,17 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
   if (!groups) return Promise.resolve();
 
   // Sync the module-level rotation variable so setSelectedPlacement and
-  // the on('end') callback see the correct value.  Do NOT call
-  // setCurrentRotation() before this — let the transition animate it.
+  // the on('end') callback see the correct value.
   currentRotation = rotation % 4;
 
-  const metrics = getBoardMetrics();
-  // Use the TILE CENTER coordinate, not the corner, to correctly account
-  // for the zoom transform.  The active tile rotation group's (0,0) is the
-  // tile center, so we transform the center point to screen-space.
-  const centerX = metrics.svgWidth / 2 + gridX * TILE_SIZE + TILE_SIZE / 2;
-  const centerY = metrics.svgHeight / 2 + gridY * TILE_SIZE + TILE_SIZE / 2;
-  const t = metrics.transform;
-  const screenCenterX = t.applyX(centerX);
-  const screenCenterY = t.applyY(centerY);
+  // Capture the START position (tile corner in screen coordinates).
+  const startAttr = groups.activeTileTransGroup.attr('transform');
+  const startMatch = startAttr ? startAttr.match(/translate\(([^,]+),([^)]+)\)/) : null;
+  const startScreenX = startMatch ? parseFloat(startMatch[1]) : 0;
+  const startScreenY = startMatch ? parseFloat(startMatch[2]) : 0;
+
+  // The tile in the corner is at scale 1 with rotation 0.
+  const startScale = 1;
 
   // Save pinned state for zoom tracking.
   _isPinned = true;
@@ -503,32 +520,55 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
   // Ensure the tile group is visible.
   groups.activeTileGroup.attr('visibility', null);
 
-  // Scale the active tile to match the board zoom level.
-  const scale = t.k;
-
-  // Mark that a transition is in progress so updateBoardPosition can cancel it
-  // on zoom/pan during the animation.
   _transitioning = true;
-
   _pendingAnimationResolve = null;
+
   return new Promise((resolve) => {
     _pendingAnimationResolve = resolve;
+
+    // ── Translation tween ──────────────────────────────────────────────
+    // Recalculates the target screen position each tick based on the
+    // current zoom transform, then interpolates from the start position
+    // toward that target.  This keeps the tile anchored to the map even
+    // while the user zooms/pans during the animation.
     groups.activeTileTransGroup
       .transition()
       .duration(TRANSITION_DURATION)
-      .attr('transform', `translate(${screenCenterX},${screenCenterY})`);
+      .tween('tracked-position', function () {
+        return function (progress) {
+          if (!_isPinned) return;
+          const m = getBoardMetrics();
+          const targetCX = m.svgWidth / 2 + gridX * TILE_SIZE + TILE_SIZE / 2;
+          const targetCY = m.svgHeight / 2 + gridY * TILE_SIZE + TILE_SIZE / 2;
+          const tr = m.transform;
+          const screenX = startScreenX + (tr.applyX(targetCX) - startScreenX) * progress;
+          const screenY = startScreenY + (tr.applyY(targetCY) - startScreenY) * progress;
+          d3.select(this).attr('transform', `translate(${screenX},${screenY})`);
+        };
+      });
 
+    // ── Scale / rotation tween ─────────────────────────────────────────
+    // Recalculates the target zoom scale each tick so the tile's size
+    // follows the board zoom level.
     groups.activeTileRotGroup
       .transition()
       .duration(TRANSITION_DURATION)
-      .attr('transform', `rotate(${rotation * 90}) scale(${scale})`)
+      .tween('tracked-scale', function () {
+        return function (progress) {
+          if (!_isPinned) return;
+          const m = getBoardMetrics();
+          const targetK = m.transform.k;
+          const currentScale = startScale + (targetK - startScale) * progress;
+          d3.select(this).attr('transform', `rotate(${currentRotation * 90}) scale(${currentScale})`);
+        };
+      })
       .on('end', () => {
         _transitioning = false;
         _pendingAnimationResolve = null;
         resolve();
       });
 
-    // Safety timeout: if the transition is interrupted (e.g., zoom/pan),
+    // Safety timeout: if something prevents the transition from completing,
     // ensure the promise still resolves so callers don't hang forever.
     setTimeout(() => {
       if (_pendingAnimationResolve) {
@@ -548,11 +588,20 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
  * Recalculate the active tile's screen position from its pinned board grid
  * coordinates.  Called on every zoom/pan event so the tile stays aligned
  * with the board even though it lives outside the zoom group.
+ *
+ * When a D3 transition is still in progress (moveToBoardPosition tweens),
+ * we do NOT interrupt it — the tween recalculates the target position on
+ * every tick based on the current zoom transform, keeping the tile anchored
+ * to the map during the animation (matching the original game behavior).
  */
 export function updateBoardPosition() {
   if (!_isPinned) return;
   const groups = getActiveTileGroups();
   if (!groups) return;
+
+  // During an active transition the tweens already account for the current
+  // zoom transform on every frame — nothing to do here.
+  if (_transitioning) return;
 
   const metrics = getBoardMetrics();
   // Use tile CENTER coordinate to correctly account for zoom transform
@@ -561,26 +610,6 @@ export function updateBoardPosition() {
   const t = metrics.transform;
   const screenCenterX = t.applyX(centerX);
   const screenCenterY = t.applyY(centerY);
-
-  // If a D3 transition is in progress, interrupt the old transition and
-  // snap the tile to the updated position using a very short duration.
-  // This prevents rapid zoom/pan events from restarting the full 750ms
-  // animation repeatedly, which would make the tile appear "paused".
-  // The original moveToBoardPosition animation's on('end') handler still
-  // fires via the safety timeout in moveToBoardPosition.
-  if (_transitioning) {
-    groups.activeTileTransGroup
-      .interrupt()
-      .transition()
-      .duration(50)
-      .attr('transform', `translate(${screenCenterX},${screenCenterY})`);
-    groups.activeTileRotGroup
-      .interrupt()
-      .transition()
-      .duration(50)
-      .attr('transform', `rotate(${currentRotation * 90}) scale(${t.k})`);
-    return;
-  }
 
   groups.activeTileTransGroup
     .attr('transform', `translate(${screenCenterX},${screenCenterY})`);
@@ -607,6 +636,7 @@ export function resetActiveTile(svgElement, animated = false) {
 
   _isPinned = false;
   _transitioning = false;
+  _isConfirmed = false;
 
   // Use getBoardMetrics for dimensions instead of DOM queries.
   const metrics = getBoardMetrics();
@@ -619,6 +649,11 @@ export function resetActiveTile(svgElement, animated = false) {
     .attr('visibility', 'hidden')
     .style('pointer-events', 'none')
     .selectAll('image').attr('visibility', 'hidden');
+
+  // Interrupt any ongoing moveToBoardPosition tweens so they don't
+  // conflict with the "return to corner" transitions below.
+  groups.activeTileTransGroup.interrupt();
+  groups.activeTileRotGroup.interrupt();
 
   if (animated) {
     // Animate back to corner, then hide.
@@ -764,6 +799,9 @@ export function showMeeplePlacements() {
   // Rotation indicator is no longer needed — meeple outlines are shown.
   hideRotationIndicator();
 
+  // Track confirmed state so the tile image click can revert.
+  _isConfirmed = true;
+
   // Bug 3/4: Filter outlines to only show positions valid for this rotation
   // and current meeple type.
   _applyOutlineFilter(meepleGroup);
@@ -794,6 +832,7 @@ export function hideMeeplePlacements() {
   meepleGroup.attr('display', 'none');
   meepleGroup.attr('visibility', 'hidden');
   meepleGroup.style('pointer-events', 'none');
+  _isConfirmed = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -951,6 +990,33 @@ export function setCurrentRotation(rotation) {
  */
 export function setRotationState(rotation) {
   currentRotation = rotation % 4;
+}
+
+// ---------------------------------------------------------------------------
+// Confirmed-phase state (used by GameView)
+// ---------------------------------------------------------------------------
+
+/**
+ * Set whether the meeple-placement phase is active ("confirmed").
+ * When true, clicking the tile image reverts to placement-selected
+ * (hides meeple outlines, shows rotation indicator).
+ * @param {boolean} confirmed
+ */
+export function setIsConfirmed(confirmed) {
+  _isConfirmed = !!confirmed;
+}
+
+/** @returns {boolean} Whether meeple outlines are currently shown. */
+export function getIsConfirmed() {
+  return _isConfirmed;
+}
+
+/**
+ * Register callback invoked when the user clicks the tile image during
+ * the confirmed phase, requesting a revert to placement-selected.
+ */
+export function onRevertToPlacement(callback) {
+  onRevertToPlacementCallback = callback;
 }
 
 // ---------------------------------------------------------------------------
