@@ -98,12 +98,19 @@ export function getRotatedFeatureDirections(directions, rotation, isFarm) {
  * e.g. flipBase('NNE') → 'SSW'
  */
 function flipBase(dir) {
-	// Farm direction lookup table (8-point compass pairs)
+	// Farm direction lookup table (8-point compass pairs).
+	// N-S connections: a farm on the north edge of the south tile
+	// connects to the south edge of the north tile.
+	//   NNE (south tile, north edge right) ↔ SSE (north tile, south edge right)
+	//   NNW (south tile, north edge left)  ↔ SSW (north tile, south edge left)
+	// E-W connections:
+	//   ENE (west tile, east edge right) ↔ WNW (east tile, west edge right)
+	//   ESE (west tile, east edge left)  ↔ WSW (east tile, west edge left)
 	const FARM_PAIRS = {
-		'NNE': 'SSW', 'SSW': 'NNE',
+		'NNE': 'SSE', 'SSE': 'NNE',
+		'NNW': 'SSW', 'SSW': 'NNW',
 		'ENE': 'WNW', 'WNW': 'ENE',
 		'ESE': 'WSW', 'WSW': 'ESE',
-		'SSE': 'NNW', 'NNW': 'SSE',
 	};
 	if (FARM_PAIRS[dir]) return FARM_PAIRS[dir];
 
@@ -586,13 +593,15 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 				return FARM_DIRECTIONS[(FARM_DIRECTIONS.indexOf(dir) + currentPlacement.rotation * 2) % 8];
 			});
 
-			// N → check NNW (connects to adjacent SSE) and NNE (connects to SSW)
-			// flipBase pairs: NNW↔SSE, NNE↔SSW
+			// N → the new tile is south of the existing tile.
+			// The new tile's north edge farms connect to the existing tile's south edge.
+			//   NNW (new tile, north edge left)  ↔ SSW (existing tile, south edge left)
+			//   NNE (new tile, north edge right) ↔ SSE (existing tile, south edge right)
 			if (currentPlacement.directionToSource === 'N') {
 				if (rotatedFarmDirs.indexOf('NNW') !== -1) {
-					const adjSSEIndex = getFeatureIndex(adjacentTile, 'farm', 'SSE');
-					if (adjSSEIndex !== -1) {
-						const ffNNW = getFeatureMeeples(adjacentTile, adjSSEIndex, 'farm', placedTiles);
+					const adjSSWIndex = getFeatureIndex(adjacentTile, 'farm', 'SSW');
+					if (adjSSWIndex !== -1) {
+						const ffNNW = getFeatureMeeples(adjacentTile, adjSSWIndex, 'farm', placedTiles);
 						for (let mNNW = 0; mNNW < ffNNW.tilesWithMeeples.length; mNNW++) {
 							const mepNNW = ffNNW.tilesWithMeeples[mNNW];
 							const pNNW = mepNNW.placedTile.meeples[mepNNW.meepleIndex].playerIndex;
@@ -609,9 +618,9 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 					}
 				}
 				if (rotatedFarmDirs.indexOf('NNE') !== -1) {
-					const adjSSWIndex = getFeatureIndex(adjacentTile, 'farm', 'SSW');
-					if (adjSSWIndex !== -1) {
-						const ffNNE = getFeatureMeeples(adjacentTile, adjSSWIndex, 'farm', placedTiles);
+					const adjSSEIndex = getFeatureIndex(adjacentTile, 'farm', 'SSE');
+					if (adjSSEIndex !== -1) {
+						const ffNNE = getFeatureMeeples(adjacentTile, adjSSEIndex, 'farm', placedTiles);
 						for (let mNNE = 0; mNNE < ffNNE.tilesWithMeeples.length; mNNE++) {
 							const mepNNE = ffNNE.tilesWithMeeples[mNNE];
 							const pNNE = mepNNE.placedTile.meeples[mepNNE.meepleIndex].playerIndex;
@@ -669,11 +678,14 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 				}
 
 			} else if (currentPlacement.directionToSource === 'S') {
-				// Bug 12 fix: SSW ↔ NNE, SSE ↔ NNW — the original code had these swapped
+				// The new tile is north of the existing tile.
+				// The new tile's south edge farms connect to the existing tile's north edge.
+				//   SSW (new tile, south edge left)  ↔ NNW (existing tile, north edge left)
+				//   SSE (new tile, south edge right) ↔ NNE (existing tile, north edge right)
 				if (rotatedFarmDirs.indexOf('SSW') !== -1) {
-					const adjNNEIndex = getFeatureIndex(adjacentTile, 'farm', 'NNE');
-					if (adjNNEIndex !== -1) {
-						const ffSSW = getFeatureMeeples(adjacentTile, adjNNEIndex, 'farm', placedTiles);
+					const adjNNWIndex = getFeatureIndex(adjacentTile, 'farm', 'NNW');
+					if (adjNNWIndex !== -1) {
+						const ffSSW = getFeatureMeeples(adjacentTile, adjNNWIndex, 'farm', placedTiles);
 						for (let mSSW = 0; mSSW < ffSSW.tilesWithMeeples.length; mSSW++) {
 							const mepSSW = ffSSW.tilesWithMeeples[mSSW];
 							const pSSW = mepSSW.placedTile.meeples[mepSSW.meepleIndex].playerIndex;
@@ -690,9 +702,9 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 					}
 				}
 				if (rotatedFarmDirs.indexOf('SSE') !== -1) {
-					const adjNNWIndex = getFeatureIndex(adjacentTile, 'farm', 'NNW');
-					if (adjNNWIndex !== -1) {
-						const ffSSE = getFeatureMeeples(adjacentTile, adjNNWIndex, 'farm', placedTiles);
+					const adjNNEIndex = getFeatureIndex(adjacentTile, 'farm', 'NNE');
+					if (adjNNEIndex !== -1) {
+						const ffSSE = getFeatureMeeples(adjacentTile, adjNNEIndex, 'farm', placedTiles);
 						for (let mSSE = 0; mSSE < ffSSE.tilesWithMeeples.length; mSSE++) {
 							const mepSSE = ffSSE.tilesWithMeeples[mSSE];
 							const pSSE = mepSSE.placedTile.meeples[mepSSE.meepleIndex].playerIndex;

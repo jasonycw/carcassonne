@@ -977,60 +977,14 @@ describe('calculateValidPlacements()', () => {
   // N-direction farm pair mapping (bugfix: NNW↔SSE, NNE↔SSW were swapped)
   // -----------------------------------------------------------------------
 
-  it('maps NNW→SSE (not SSW) when checking N-direction farm connection', () => {
+  it('maps NNW→SSW (not SSE) when checking N-direction farm connection', () => {
     // When directionToSource='N' the new tile is SOUTH of source (source south face open).
-    // Source Rr at (0,0) rot=0: southEdge='road', farm[0]=['...','SSE'], farm[1]=['SSW','WSW']
-    // Active RRRR rot=0:         northEdge='road', farm[0]=['WNW','NNW']; farm[1]=['NNE','ENE']
+    // Source Rr at (0,0) rot=0: farm[0]=['WNW','NNW','NNE','ENE','ESE','SSE']; farm[1]=['SSW','WSW']
+    // Active RRRR rot=0:         farm[0]=['WNW','NNE','ESE','WSW'];             farm[1]=['ENE','NNW','SSW','SSE']
     //
-    // RRRR farm[0] has 'NNW' (but NOT 'NNE') → only one N-direction check runs.
-    // NNW must map to SSE (Rr farm[0]) via flipBase, NOT SSW (Rr farm[1]).
-    //
-    // BUGGY code: 'NNW'→'SSW' → Rr farm[1] (no meeple) → wrong — allows normal meeple
-    // FIXED code: 'NNW'→'SSE' → Rr farm[0] (has meeple) → correct — blocks normal meeple
-    const rrTile = tile('base-game/Rr');
-    const rrrrTile = tile('base-game/RRRR');
-
-    const sourceTile = {
-      x: 0, y: 0, rotation: 0,
-      tile: rrTile,
-      northTileIndex: undefined,
-      eastTileIndex: undefined,
-      southTileIndex: undefined,
-      westTileIndex: undefined,
-      meeples: [{
-        playerIndex: 0,
-        placement: { locationType: 'farm', index: 0 },
-        meepleType: 'normal',
-        scored: false,
-      }],
-    };
-
-    const placedTiles = [sourceTile];
-    const players = [{ active: true, remainingMeeples: 7 }];
-
-    const result = calculateValidPlacements(rrrrTile, placedTiles, players, []);
-    // directionToSource='N' → new tile at (source.x, source.y + 1) = (0, 1)
-    const southP = result.find((p) => p.x === 0 && p.y === 1);
-    expect(southP).toBeDefined();
-
-    const rot0 = southP.rotations.find((r) => r.rotation === 0);
-    expect(rot0).toBeDefined();
-
-    // farm[0] (has 'NNW') connects to source farm[0] via SSE → meeple found
-    // → normal farm meeple on farm[0] must be BLOCKED
-    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'normal' && m.index === 0)).toBe(false);
-
-    // Active player's meeple on the connected farm → pig meeple must be available
-    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'pig')).toBe(true);
-  });
-
-  it('maps NNE→SSW (not SSE) when checking N-direction farm connection', () => {
-    // Same layout but meeple on Rr farm[1] (the 'SSW' farm).
-    // RRRR farm[1] has 'NNE' (but NOT 'NNW').
-    // The N→farm check only runs for 'NNE', which must map to 'SSW' (Rr farm[1]).
-    //
-    // BUGGY code: 'NNE'→'SSE' → Rr farm[0] (no meeple) → wrong — allows normal meeple
-    // FIXED code: 'NNE'→'SSW' → Rr farm[1] (has meeple) → correct — blocks normal meeple
+    // RRRR farm[0] has 'NNW' → must map to source 'SSW' (Rr farm[1] where meeple is).
+    // Geom: RRRR's NNW (points north) ↔ Rr's SSW (points south) — correct.
+    // OLD buggy code: 'NNW'→'SSE' → Rr farm[0] (no meeple) → wrongly allowed normal meeple
     const rrTile = tile('base-game/Rr');
     const rrrrTile = tile('base-game/RRRR');
 
@@ -1060,11 +1014,53 @@ describe('calculateValidPlacements()', () => {
     const rot0 = southP.rotations.find((r) => r.rotation === 0);
     expect(rot0).toBeDefined();
 
-    // farm[1] (has 'NNE') connects to source farm[1] via SSW → meeple found
-    // → normal farm meeple on farm[1] must be BLOCKED
+    // RRRR farm[0] (has 'NNW') connects to source farm[1] via SSW → meeple found
+    // → normal farm meeple on RRRR farm[0] must be BLOCKED
+    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'normal' && m.index === 0)).toBe(false);
+
+    // Active player's meeple on the connected farm → pig meeple must be available at farm[0]
+    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'pig' && m.index === 0)).toBe(true);
+  });
+
+  it('maps NNE→SSE (not SSW) when checking N-direction farm connection', () => {
+    // Same layout but meeple on Rr farm[0] (has 'SSE').
+    // RRRR farm[1] has 'NNE' → must map to source 'SSE' (Rr farm[0]).
+    // Geom: RRRR's NNE (points north) ↔ Rr's SSE (points south) — correct.
+    // OLD buggy code: 'NNE'→'SSW' → Rr farm[1] (no meeple) → wrongly allowed normal meeple
+    const rrTile = tile('base-game/Rr');
+    const rrrrTile = tile('base-game/RRRR');
+
+    const sourceTile = {
+      x: 0, y: 0, rotation: 0,
+      tile: rrTile,
+      northTileIndex: undefined,
+      eastTileIndex: undefined,
+      southTileIndex: undefined,
+      westTileIndex: undefined,
+      meeples: [{
+        playerIndex: 0,
+        placement: { locationType: 'farm', index: 0 },
+        meepleType: 'normal',
+        scored: false,
+      }],
+    };
+
+    const placedTiles = [sourceTile];
+    const players = [{ active: true, remainingMeeples: 7 }];
+
+    const result = calculateValidPlacements(rrrrTile, placedTiles, players, []);
+    // directionToSource='N' → new tile at (source.x, source.y + 1) = (0, 1)
+    const southP = result.find((p) => p.x === 0 && p.y === 1);
+    expect(southP).toBeDefined();
+
+    const rot0 = southP.rotations.find((r) => r.rotation === 0);
+    expect(rot0).toBeDefined();
+
+    // RRRR farm[1] (has 'NNE') connects to source farm[0] via SSE → meeple found
+    // → normal farm meeple on RRRR farm[1] must be BLOCKED
     expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'normal' && m.index === 1)).toBe(false);
 
-    // Active player's meeple on the connected farm → pig meeple must be available
-    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'pig')).toBe(true);
+    // Active player's meeple on the connected farm → pig meeple must be available at farm[1]
+    expect(rot0.meeples.some((m) => m.locationType === 'farm' && m.meepleType === 'pig' && m.index === 1)).toBe(true);
   });
 });
