@@ -165,7 +165,8 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
   activeTileRotGroup.selectAll('g.active-tile-controls').remove();
 
   // Tile image — click to cycle rotation (matching original game.ejs behavior).
-  activeTileRotGroup.append('image')
+  // Insert BEFORE the rotation indicator so the indicator renders on top.
+  activeTileRotGroup.insert('image', '.active-tile-rotation-indicator')
     .attr('class', 'active-tile-image')
     .attr('x', -TILE_SIZE / 2)
     .attr('y', -TILE_SIZE / 2)
