@@ -193,8 +193,8 @@ export function initializeBoard(svgElement, options = {}) {
   // Rotation indicator icon (repeat/reload arrow for tile rotation).
   defs.append('symbol')
     .attr('id', 'svgicon-repeat-payment')
-    .attr('viewBox', '0 0 24 24')
-    .html('<path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>');
+    .attr('viewBox', '0 0 32 32')
+    .html('<path d="M19.881,22.62C18.604,23.486,17.07,24,15.411,24c-4.418,0-8-3.582-8-8s3.582-8,8-8c3.727,0,6.849,2.552,7.737,6h-1.84c-0.001,0-0.003,0.001-0.004,0.001c-1.229,0-0.981,1.064-0.011,2.076c0.001,0.001,0,0.001,0.001,0.002l3.118,3.455c0.552,0.611,1.445,0.611,1.997,0l3.525-3.907c0.63-0.854,0.66-1.626-0.387-1.626c-0.001,0-0.003-0.001-0.004-0.001h-2.313c-0.954-5.673-5.876-10-11.82-10c-6.627,0-12,5.373-12,12c0,6.628,5.373,12,12,12c2.69,0,5.163-0.897,7.162-2.396L19.881,22.62z"/>');
 
   // Glow filter for capturable meeples (The Tower capture step).
   defs.append('filter')
@@ -277,6 +277,8 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('x', -16)
     .attr('y', -16)
     .attr('transform', `scale(${TILE_SIZE / 32})`)
+    .attr('fill', 'white')
+    .attr('stroke', 'black')
     .attr('opacity', 0)
     .attr('pointer-events', 'none');
   // Meeple-placements sub-group (hidden by default).
@@ -660,17 +662,8 @@ export function clearBoard() {
       .attr('x', -16)
       .attr('y', -16)
       .attr('transform', `scale(${TILE_SIZE / 32})`)
-      .attr('opacity', 0)
-      .attr('pointer-events', 'none');
-    // Re-create the background circle pill (mirrors create() in initializeBoard).
-    activeTileRotGroup.insert('circle', '.active-tile-rotation-indicator')
-      .attr('class', 'active-tile-rotation-indicator-bg')
-      .attr('r', TILE_SIZE * 0.28)
-      .attr('cx', 0)
-      .attr('cy', 0)
-      .attr('fill', '#000000')
-      .attr('stroke', '#ffffff')
-      .attr('stroke-width', 4)
+      .attr('fill', 'white')
+      .attr('stroke', 'black')
       .attr('opacity', 0)
       .attr('pointer-events', 'none');
     meeplePlacementsGroup = activeTileRotGroup.append('g')

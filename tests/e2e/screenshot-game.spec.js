@@ -161,7 +161,7 @@ test.describe('Screenshot Game', () => {
               const indicatorVisible = await p
                 .locator('#game-svg use.active-tile-rotation-indicator')
                 .getAttribute('opacity')
-                .then((v) => v === '1')
+                .then((v) => v !== null && parseFloat(v) > 0)
                 .catch(() => false);
               if (indicatorVisible) {
                 await p.screenshot({
@@ -169,15 +169,6 @@ test.describe('Screenshot Game', () => {
                   fullPage: true,
                 });
                 console.log('✓ Screenshot 5: tile rotation indicator');
-                rotateScreenshotDone = true;
-              } else if (rotateScreenshotAttempts >= MAX_ROTATION_ATTEMPTS) {
-                // Ran out of attempts — capture a close-up of the
-                // floating tile on the board with HUD controls visible.
-                await p.screenshot({
-                  path: 'screenshots/05-active-tile.png',
-                  fullPage: true,
-                });
-                console.log('✓ Screenshot 5: active tile & HUD');
                 rotateScreenshotDone = true;
               }
               // If indicator not visible and still have attempts, retry next time.
