@@ -1,0 +1,8 @@
+Base on testing with latest version on `https://jasonycw.github.io/carcassonne/`, there are at list and not limited to the following issues that cause the game not fully working.
+- when temporary tile is placed, the rotate indicator not visible now, which is unacceptable. Rotate indicator must be visible very clearly on the tile with no color transform or opacity like the original version before migration.
+- When I place a tile and immediately move/zoom the map before the temporary tile settle, the temporary tile move/animation being paused, which is not correct. The tile should continue it's animation toward the destination (position and zoom level) until it reach the destination and touch the map.
+- when the tile is rotated manually, meeple cannot be placed which is still incorrect, meeple should be able to placed to the legal move location no matter how many times the tile is rotated
+- field/farm outline still not calculated correctly causing some legal placement being unplaceable when the field being extended through multiple tiles very far away and block out by long roads, turning roads and cities
+- tower extension is disabled in the original version? If it's true, then should remove it. Double confirm the logic.
+- For joiner of the game, when refresh the page, should join back to the host, right now it's connection lost and just stuck at the lobby.
+- For the host, if the remote joiner lose connection, it should have an indicator next to their tag showing connection lost and if they connect back in, it show show they are back.
