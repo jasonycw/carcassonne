@@ -3,6 +3,6 @@ Base on testing with latest version on `https://jasonycw.github.io/carcassonne/`
 - During placing tile state, when click on outside non tile place that is not available to place a tile, the temporary tile should be back to the top right WITH ANIMATION
 - After placing a temporary tile, when click non meeple outline spaces of the tile, it should be back to temporary tile state with one click, remove the meeple outline rotate and show the rotate indicator immediately again. Right now it needs 2 click to make it rotate.
 - field/farm outline still not calculated correctly causing some legal placement being unplaceable when the field being extended through multiple tiles very far away and block out by long roads, turning roads and cities
-- tower extension is disabled in the original version? If it's true, then should remove it. Double confirm the logic.
+- tower extension is disabled in the original version at commit  `962f33eed833cb2cb845e40bb5d7186e66dc6d2d`? If it's true, then should remove it. Double confirm the logic.
 - For joiner of the game, when refresh the page, should join back to the host, right now it's connection lost and just stuck at the lobby. It should be able to join back in to the same game,
 - For the host, if the remote joiner lose connection, it should have an indicator next to their tag showing connection lost should allow them to connect back in, it should show they are back.
