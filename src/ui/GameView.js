@@ -152,11 +152,11 @@ export class GameView {
 
     onRotationChanged(() => {
       // If the player was in meeple-selection phase ('confirmed') and changes
-      // rotation, reset to 'placement-selected' since meeple positions change.
+      // rotation, keep the confirmed phase and update meeple outlines to
+      // match the new rotation.  This avoids requiring the player to click
+      // "Place Tile" again before placing a meeple (Issue 3).
       if (this._confirmPhase === 'confirmed') {
-        this._confirmPhase = 'placement-selected';
-        this._updateHUD('placement-selected');
-        hideMeeplePlacements();
+        showMeeplePlacements();
       }
     });
 
@@ -183,19 +183,33 @@ export class GameView {
         console.log('[GameView] Creating GameHost for P2P host');
         this.gameHost = new GameHost(this.peerManager, this.gamestate);
 
-        // Track connection status for remote players.
+        // Maintain an independent conn→playerIndex mapping for connection
+        // status tracking.  This is separate from HostPeerManager's own
+        // connectedPlayers array because that array is modified by
+        // _initHostDisconnectHandler BEFORE this handler runs, making the
+        // lookup via hostPM.connectedPlayers.find() return undefined.
+        this._connToPlayerIdx = new Map();
         const hostPM = this.peerManager;
         this._connectedPlayers = new Set(
-          hostPM.connectedPlayers ? hostPM.connectedPlayers.map(p => p.playerIndex) : []
+          hostPM.connectedPlayers ? hostPM.connectedPlayers.map(p => {
+            this._connToPlayerIdx.set(p.conn.peer, p.playerIndex);
+            return p.playerIndex;
+          }) : []
         );
         hostPM.on('peer-connected', (conn) => {
           const entry = hostPM.connectedPlayers?.find(p => p.conn === conn);
-          if (entry) this._connectedPlayers.add(entry.playerIndex);
+          if (entry) {
+            this._connectedPlayers.add(entry.playerIndex);
+            this._connToPlayerIdx.set(conn.peer, entry.playerIndex);
+          }
           this._updateScoreboard();
         });
         hostPM.on('peer-disconnected', (conn) => {
-          const entry = hostPM.connectedPlayers?.find(p => p.conn === conn);
-          if (entry) this._connectedPlayers.delete(entry.playerIndex);
+          const playerIndex = this._connToPlayerIdx.get(conn.peer);
+          if (playerIndex != null) {
+            this._connectedPlayers.delete(playerIndex);
+            this._connToPlayerIdx.delete(conn.peer);
+          }
           this._updateScoreboard();
         });
 

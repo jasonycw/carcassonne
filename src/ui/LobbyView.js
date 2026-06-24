@@ -24,7 +24,7 @@ import {
 } from '../network/Protocol.js';
 import { createGameState, initializeNewGame } from '../game/GameLogic.js';
 import { ALL_TILES as TILE_DATA } from '../game/TileData.js';
-import { hasRecoverableGame, getSavedGameInfo, loadGame, removeGame, saveP2pInfo } from '../network/StateSync.js';
+import { hasRecoverableGame, getSavedGameInfo, loadGame, removeGame, loadP2pInfo, saveP2pInfo } from '../network/StateSync.js';
 import { img } from '../utils/AssetPaths.js';
 
 // ---------------------------------------------------------------------------
@@ -228,6 +228,21 @@ export class LobbyView extends EventEmitter {
       console.log('[LobbyView] Auto-joining room:', roomCode.toUpperCase());
       this._joinGame();
       return; // _joinGame continues from here
+    }
+
+    // ── P2P reconnection detection ───────────────────────────────────
+    // If no room code was found in the URL, check localStorage for saved
+    // P2P metadata (Issue 6).  This handles the case where a connected
+    // client refreshes the page — we auto-reconnect to the host using the
+    // saved room code.
+    {
+      const p2pInfo = loadP2pInfo();
+      if (p2pInfo && p2pInfo.room) {
+        console.log('[LobbyView] Found saved P2P info, reconnecting to room:', p2pInfo.room);
+        this.dom.roomCodeInput.value = p2pInfo.room;
+        this._joinGame();
+        return;
+      }
     }
 
     this._setStatus('Ready');
