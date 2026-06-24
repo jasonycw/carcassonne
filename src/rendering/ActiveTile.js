@@ -561,20 +561,22 @@ export function updateBoardPosition() {
   const screenCenterX = t.applyX(centerX);
   const screenCenterY = t.applyY(centerY);
 
-  // If a D3 transition is in progress, start a NEW transition from the
-  // current interpolated position toward the updated board coordinates.
-  // This keeps the tile smoothly animated instead of snapping (Issue 1).
-  // D3 handles this correctly: calling .transition() on an element that is
-  // already transitioning cancels the old one and interpolates from the
-  // current visual state to the new target.
+  // If a D3 transition is in progress, interrupt the old transition and
+  // snap the tile to the updated position using a very short duration.
+  // This prevents rapid zoom/pan events from restarting the full 750ms
+  // animation repeatedly, which would make the tile appear "paused".
+  // The original moveToBoardPosition animation's on('end') handler still
+  // fires via the safety timeout in moveToBoardPosition.
   if (_transitioning) {
     groups.activeTileTransGroup
+      .interrupt()
       .transition()
-      .duration(TRANSITION_DURATION)
+      .duration(50)
       .attr('transform', `translate(${screenCenterX},${screenCenterY})`);
     groups.activeTileRotGroup
+      .interrupt()
       .transition()
-      .duration(TRANSITION_DURATION)
+      .duration(50)
       .attr('transform', `rotate(${currentRotation * 90}) scale(${t.k})`);
     return;
   }
@@ -634,10 +636,6 @@ export function resetActiveTile(svgElement, animated = false) {
       });
 
     groups.activeTileRotGroup.select('.active-tile-rotation-indicator')
-      .transition()
-      .duration(TRANSITION_DURATION)
-      .attr('opacity', 0);
-    groups.activeTileRotGroup.select('.active-tile-rotation-indicator-bg')
       .transition()
       .duration(TRANSITION_DURATION)
       .attr('opacity', 0);
@@ -879,11 +877,6 @@ function hideRotationIndicator() {
     indicator.interrupt();
     indicator.attr('opacity', 0);
   }
-  const bg = groups.activeTileRotGroup.select('circle.active-tile-rotation-indicator-bg');
-  if (!bg.empty()) {
-    bg.interrupt();
-    bg.attr('opacity', 0);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -922,25 +915,21 @@ export function getCurrentRotation() {
 /**
  * Show or hide the rotation indicator based on how many valid rotations the
  * current placement has.  Hidden when ≤ 1 (rotation not available or trivial).
+ * Uses semi-transparent opacity (0.45) matching the original game.ejs rendering.
  */
 function _updateRotationIndicator() {
   const groups = getActiveTileGroups();
   if (!groups) return;
   const indicator = groups.activeTileRotGroup.select('use.active-tile-rotation-indicator');
-  const bg = groups.activeTileRotGroup.select('circle.active-tile-rotation-indicator-bg');
   if (indicator.empty()) return;
   const hasMultipleRotations =
     selectedMove &&
     selectedMove.placement &&
     selectedMove.placement.rotations &&
     selectedMove.placement.rotations.length > 1;
-  const opacity = hasMultipleRotations ? 1 : 0;
+  const opacity = hasMultipleRotations ? 0.45 : 0;
   indicator.interrupt();
   indicator.attr('opacity', opacity);
-  if (!bg.empty()) {
-    bg.interrupt();
-    bg.attr('opacity', opacity);
-  }
 }
 
 /** Force-set rotation (e.g. when restoring game state). */

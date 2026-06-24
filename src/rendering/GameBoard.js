@@ -269,26 +269,14 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('class', 'active-tile-rotation');
   // Rotation indicator (hidden by default — only shown when tile is pinned
   // on board and the placement has more than 1 valid rotation).
-  // Shows a repeat/reload arrow icon with a fully opaque black background
-  // pill and thick white border so it is clearly visible on any tile art.
+  // Matches original game.ejs rendering: semi-transparent reload icon
+  // without any background circle, matching the original opacity 0.45.
   activeTileRotGroup.append('use')
     .attr('class', 'active-tile-rotation-indicator')
     .attr('href', '#svgicon-repeat-payment')
     .attr('x', -16)
     .attr('y', -16)
     .attr('transform', `scale(${TILE_SIZE / 32})`)
-    .attr('opacity', 0)
-    .attr('pointer-events', 'none');
-  // Fully opaque black circular background so the indicator never blends
-  // into busy tile artwork (Issue 2).
-  activeTileRotGroup.insert('circle', '.active-tile-rotation-indicator')
-    .attr('class', 'active-tile-rotation-indicator-bg')
-    .attr('r', TILE_SIZE * 0.28)
-    .attr('cx', 0)
-    .attr('cy', 0)
-    .attr('fill', '#000000')
-    .attr('stroke', '#ffffff')
-    .attr('stroke-width', 4)
     .attr('opacity', 0)
     .attr('pointer-events', 'none');
   // Meeple-placements sub-group (hidden by default).
