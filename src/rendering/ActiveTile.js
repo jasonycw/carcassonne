@@ -212,7 +212,10 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
 
       // Clear any previously placed meeple (rotation invalidates meeple positions).
       selectedMove.meeple = null;
-      groups.meeplePlacementsGroup.selectAll('image.placed-meeple').remove();
+      // Hide (don't remove) placed-meeple images — preserving the DOM
+      // elements so D3 outline-group click handlers can read their
+      // visibility attribute without crashing on an empty selection.
+      groups.meeplePlacementsGroup.selectAll('image.placed-meeple').attr('visibility', 'hidden');
       // Re-show all outlines that may have been hidden when a meeple was placed.
       groups.meeplePlacementsGroup.selectAll('image.meeple-outline').attr('visibility', null);
 
