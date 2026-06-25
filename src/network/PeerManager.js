@@ -101,12 +101,24 @@ export class PeerManager extends EventEmitter {
             { urls: 'stun:stun4.l.google.com:19302' },
 
             // ── TURN relay fallbacks ───────────────────────────────────
-            // These relay through a public server when P2P fails
-            // (symmetric NAT, CGNAT, corporate firewalls, etc.)
+            // These relay through a public server when direct P2P fails
+            // (symmetric NAT, CGNAT, corporate firewalls, etc.).
+            // Multiple providers improve the chance of a relay path.
+
+            // PeerJS built-in TURN servers (eu + us regions).
+            // These are the defaults PeerJS uses when no config override is given.
+            // Credentials: peerjs / peerjsp
+            {
+              urls: [
+                'turn:eu-0.turn.peerjs.com:3478',
+                'turn:us-0.turn.peerjs.com:3478',
+              ],
+              username: 'peerjs',
+              credential: 'peerjsp',
+            },
 
             // Open Relay Project (Metered.ca) — free, 20 GB/month
-            // Supports TCP on port 80 (bypasses most firewalls)
-            // Also supports UDP for unrestricted networks.
+            // Supports TCP on port 80 (bypasses most firewalls).
             // Docs: https://www.metered.ca/tools/openrelay/
             {
               urls: [
@@ -116,7 +128,7 @@ export class PeerManager extends EventEmitter {
               username: 'openrelayproject',
               credential: 'openrelayproject',
             },
-            // Same relay over TLS on 443 (works in strict HTTPS-only contexts)
+            // Same relay over TLS on 443 (strict HTTPS-only contexts)
             {
               urls: [
                 'turns:openrelay.metered.ca:443',
@@ -125,8 +137,6 @@ export class PeerManager extends EventEmitter {
               username: 'openrelayproject',
               credential: 'openrelayproject',
             },
-
-
           ],
           sdpSemantics: 'unified-plan',
         },
