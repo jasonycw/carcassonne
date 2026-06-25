@@ -94,23 +94,45 @@ export class PeerManager extends EventEmitter {
         debug: 3,  // verbose logging for diagnosing LAN/WAN connectivity
         config: {
           iceServers: [
-            // Multiple STUN servers for reliable NAT discovery
+            // ── STUN (NAT type discovery) ─────────────────────────────
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:stun3.l.google.com:19302' },
             { urls: 'stun:stun4.l.google.com:19302' },
-            // Open Relay Project — free TURN fallback (20 GB/month)
-            // https://www.metered.ca/tools/openrelay/
+
+            // ── TURN relay fallbacks ───────────────────────────────────
+            // These relay through a public server when P2P fails
+            // (symmetric NAT, CGNAT, corporate firewalls, etc.)
+
+            // Open Relay Project (Metered.ca) — free, 20 GB/month
+            // Supports TCP on port 80 (bypasses most firewalls)
+            // Docs: https://www.metered.ca/tools/openrelay/
             {
-              urls: 'turn:openrelay.metered.ca:80',
+              urls: 'turn:openrelay.metered.ca:80?transport=tcp',
               username: 'openrelayproject',
               credential: 'openrelayproject',
             },
-            // PeerJS cloud TURN servers (may be unreliable)
+            // Same relay over TLS on 443 (works in strict HTTPS contexts)
+            {
+              urls: 'turns:openrelay.metered.ca:443?transport=tcp',
+              username: 'openrelayproject',
+              credential: 'openrelayproject',
+            },
+
+            // PeerJS cloud TURN — UDP (standard TURN port)
             {
               urls: [
                 'turn:eu-0.turn.peerjs.com:3478',
                 'turn:us-0.turn.peerjs.com:3478',
+              ],
+              username: 'peerjs',
+              credential: 'peerjsp',
+            },
+            // Same PeerJS TURN over TCP (firewall-friendly)
+            {
+              urls: [
+                'turn:eu-0.turn.peerjs.com:3478?transport=tcp',
+                'turn:us-0.turn.peerjs.com:3478?transport=tcp',
               ],
               username: 'peerjs',
               credential: 'peerjsp',
@@ -524,11 +546,11 @@ export class ClientPeerManager extends PeerManager {
 
       this.on('message', onJoinResult);
 
-      // Timeout.
+      // Timeout (30s — TURN relay candidates can be slow to gather).
       setTimeout(() => {
         this.off('message', onJoinResult);
         reject(new Error('Connection timed out'));
-      }, 15000);
+      }, 30000);
     });
   }
 
