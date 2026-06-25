@@ -106,37 +106,27 @@ export class PeerManager extends EventEmitter {
 
             // Open Relay Project (Metered.ca) — free, 20 GB/month
             // Supports TCP on port 80 (bypasses most firewalls)
+            // Also supports UDP for unrestricted networks.
             // Docs: https://www.metered.ca/tools/openrelay/
             {
-              urls: 'turn:openrelay.metered.ca:80?transport=tcp',
+              urls: [
+                'turn:openrelay.metered.ca:80',
+                'turn:openrelay.metered.ca:80?transport=tcp',
+              ],
               username: 'openrelayproject',
               credential: 'openrelayproject',
             },
-            // Same relay over TLS on 443 (works in strict HTTPS contexts)
+            // Same relay over TLS on 443 (works in strict HTTPS-only contexts)
             {
-              urls: 'turns:openrelay.metered.ca:443?transport=tcp',
+              urls: [
+                'turns:openrelay.metered.ca:443',
+                'turns:openrelay.metered.ca:443?transport=tcp',
+              ],
               username: 'openrelayproject',
               credential: 'openrelayproject',
             },
 
-            // PeerJS cloud TURN — UDP (standard TURN port)
-            {
-              urls: [
-                'turn:eu-0.turn.peerjs.com:3478',
-                'turn:us-0.turn.peerjs.com:3478',
-              ],
-              username: 'peerjs',
-              credential: 'peerjsp',
-            },
-            // Same PeerJS TURN over TCP (firewall-friendly)
-            {
-              urls: [
-                'turn:eu-0.turn.peerjs.com:3478?transport=tcp',
-                'turn:us-0.turn.peerjs.com:3478?transport=tcp',
-              ],
-              username: 'peerjs',
-              credential: 'peerjsp',
-            },
+
           ],
           sdpSemantics: 'unified-plan',
         },
