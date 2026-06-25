@@ -33,6 +33,11 @@ const PEER_PATH = '/';
 const RECONNECT_DELAY = 2000;      // ms between reconnection attempts
 const PING_INTERVAL = 10000;       // ms between heartbeats
 
+// Metered.ca Open Relay Project shared secret (publicly documented).
+// Used to generate HMAC-SHA1 TURN credentials client-side.
+// Docs: https://www.metered.ca/tools/openrelay/
+const METERED_TURN_SECRET = 'openrelayprojectsecret';
+
 // ---------------------------------------------------------------------------
 // Room code helpers
 // ---------------------------------------------------------------------------
@@ -50,6 +55,45 @@ export function generateRoomCode() {
 /** Build the PeerJS peer ID from a room code. */
 export function roomCodeToPeerId(roomCode) {
   return `carcassonne-${roomCode}`;
+}
+
+// ---------------------------------------------------------------------------
+// TURN credential helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate HMAC-SHA1-based TURN credentials for Metered.ca Open Relay.
+ *
+ * Metered.ca's TURN server accepts auth-secret (HMAC) credentials.
+ * The shared secret is publicly documented in their Static Auth section.
+ * We compute the HMAC client-side so no API key or backend is needed.
+ *
+ * The returned credential is valid for 24 hours.
+ *
+ * @returns {{ username: string, credential: string }}
+ *   Object suitable for use in an RTCIceServer entry.
+ */
+async function generateMeteredTurnCredentials() {
+  const timestamp = Math.floor(Date.now() / 1000) + 86400; // 24h from now
+  const username = `${timestamp}:carcassonne`;
+
+  // Compute HMAC-SHA1 via Web Crypto API.
+  const encoder = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(METERED_TURN_SECRET),
+    { name: 'HMAC', hash: 'SHA-1' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    cryptoKey,
+    encoder.encode(username),
+  );
+
+  const credential = btoa(String.fromCharCode(...new Uint8Array(signature)));
+  return { username, credential };
 }
 
 // ---------------------------------------------------------------------------
@@ -86,60 +130,59 @@ export class PeerManager extends EventEmitter {
    * Returns a Promise that resolves when the peer is ready.
    */
   async init() {
+    // ── Build ICE servers configuration ──────────────────────────────
+    // Generate HMAC-based TURN credentials for Metered.ca Open Relay.
+    // The shared secret is public; we compute HMAC-SHA1 client-side.
+    let meteredCreds;
+    try {
+      meteredCreds = await generateMeteredTurnCredentials();
+    } catch (err) {
+      console.warn('[PeerManager] Failed to generate Metered.ca TURN creds,',
+        'falling back to static credentials:', err);
+      meteredCreds = { username: 'openrelayproject', credential: 'openrelayproject' };
+    }
+
+    const iceServers = [
+      // ── STUN (NAT type discovery) ─────────────────────────────────
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+
+      // ── Metered.ca Open Relay TURN (HMAC-authenticated) ────────────
+      // Free, 20 GB/month. Relays through a public server when direct
+      // P2P fails (symmetric NAT, CGNAT, corporate firewalls, etc.).
+      // Credentials generated client-side via HMAC-SHA1 with the
+      // publicly documented shared secret. Time-limited (24h).
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:80?transport=tcp',
+        ],
+        username: meteredCreds.username,
+        credential: meteredCreds.credential,
+      },
+
+      // ── PeerJS built-in TURN servers (fallback) ────────────────────
+      // These are the defaults PeerJS uses when no config override is
+      // given. May be unreliable but included as additional candidates.
+      {
+        urls: [
+          'turn:eu-0.turn.peerjs.com:3478',
+          'turn:us-0.turn.peerjs.com:3478',
+        ],
+        username: 'peerjs',
+        credential: 'peerjsp',
+      },
+    ];
+
     return new Promise((resolve, reject) => {
       this.peer = new Peer(this.peerId, {
         host: PEER_HOST,
         port: PEER_PORT,
         path: PEER_PATH,
         debug: 3,  // verbose logging for diagnosing LAN/WAN connectivity
-        config: {
-          iceServers: [
-            // ── STUN (NAT type discovery) ─────────────────────────────
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' },
-
-            // ── TURN relay fallbacks ───────────────────────────────────
-            // These relay through a public server when direct P2P fails
-            // (symmetric NAT, CGNAT, corporate firewalls, etc.).
-            // Multiple providers improve the chance of a relay path.
-
-            // PeerJS built-in TURN servers (eu + us regions).
-            // These are the defaults PeerJS uses when no config override is given.
-            // Credentials: peerjs / peerjsp
-            {
-              urls: [
-                'turn:eu-0.turn.peerjs.com:3478',
-                'turn:us-0.turn.peerjs.com:3478',
-              ],
-              username: 'peerjs',
-              credential: 'peerjsp',
-            },
-
-            // Open Relay Project (Metered.ca) — free, 20 GB/month
-            // Supports TCP on port 80 (bypasses most firewalls).
-            // Docs: https://www.metered.ca/tools/openrelay/
-            {
-              urls: [
-                'turn:openrelay.metered.ca:80',
-                'turn:openrelay.metered.ca:80?transport=tcp',
-              ],
-              username: 'openrelayproject',
-              credential: 'openrelayproject',
-            },
-            // Same relay over TLS on 443 (strict HTTPS-only contexts)
-            {
-              urls: [
-                'turns:openrelay.metered.ca:443',
-                'turns:openrelay.metered.ca:443?transport=tcp',
-              ],
-              username: 'openrelayproject',
-              credential: 'openrelayproject',
-            },
-          ],
-          sdpSemantics: 'unified-plan',
-        },
+        config: { iceServers, sdpSemantics: 'unified-plan' },
       });
 
       this.peer.on('open', (id) => {
