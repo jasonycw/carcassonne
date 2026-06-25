@@ -91,7 +91,7 @@ export class PeerManager extends EventEmitter {
         host: PEER_HOST,
         port: PEER_PORT,
         path: PEER_PATH,
-        debug: 0,  // set to 2 for verbose logging
+        debug: 3,  // verbose logging for diagnosing LAN/WAN connectivity
         config: {
           iceServers: [
             // Multiple STUN servers for reliable NAT discovery
@@ -137,6 +137,7 @@ export class PeerManager extends EventEmitter {
       });
 
       this.peer.on('disconnected', () => {
+        console.warn(`[PeerManager] Disconnected from signaling server (role: ${this.role}, peerId: ${this.peerId})`);
         this.connected = false;
         this.emit('disconnected');
         // Attempt to reconnect (cancelled in destroy()).
