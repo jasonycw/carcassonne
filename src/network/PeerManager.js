@@ -22,6 +22,7 @@ import {
   deserialize,
   joinRequest,
 } from './Protocol.js';
+import { getSettings } from '../ui/SettingsPanel.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -96,6 +97,46 @@ async function generateMeteredTurnCredentials() {
   return { username, credential };
 }
 
+/**
+ * Fetch TURN credentials from Metered.ca REST API.
+ *
+ * The free Metered.ca plan provides 5-20 GB/month of TURN relay traffic.
+ * Sign up at https://dashboard.metered.ca/signup → TURN Servers → generate
+ * credential, then copy the API Key into the game's settings panel.
+ *
+ * API docs: https://www.metered.ca/docs/turn-rest-api/get-credential
+ *
+ * @param {string} apiKey  Metered.ca API key
+ * @returns {Promise<Array<{urls: string|string[], username?: string, credential?: string}>>}
+ *   Array of iceServers from the API. Includes STUN + TURN entries.
+ */
+async function fetchMeteredIceServers(apiKey) {
+  const url = `https://metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(url);
+
+  if (!res.ok) {
+    throw new Error(`Metered.ca API returned ${res.status}`);
+  }
+
+  const data = await res.json();
+
+  // The API returns a JSON array of iceServer objects.
+  // If the response has an "error" field, treat it as failure.
+  if (data.error) {
+    throw new Error(`Metered.ca API error: ${data.error}`);
+  }
+
+  // Normalize "urls" to always be an array for consistent handling.
+  // The API may return urls as a string in some entries.
+  const servers = Array.isArray(data) ? data : (data.iceServers || []);
+  for (const srv of servers) {
+    if (typeof srv.urls === 'string') {
+      srv.urls = [srv.urls];
+    }
+  }
+  return servers;
+}
+
 // ---------------------------------------------------------------------------
 // PeerManager  (shared base)
 // ---------------------------------------------------------------------------
@@ -131,50 +172,70 @@ export class PeerManager extends EventEmitter {
    */
   async init() {
     // ── Build ICE servers configuration ──────────────────────────────
-    // Generate HMAC-based TURN credentials for Metered.ca Open Relay.
-    // The shared secret is public; we compute HMAC-SHA1 client-side.
-    let meteredCreds;
-    try {
-      meteredCreds = await generateMeteredTurnCredentials();
-    } catch (err) {
-      console.warn('[PeerManager] Failed to generate Metered.ca TURN creds,',
-        'falling back to static credentials:', err);
-      meteredCreds = { username: 'openrelayproject', credential: 'openrelayproject' };
+    const settings = getSettings();
+    const apiKey = (settings.meteredApiKey || '').trim();
+
+    // Always include Google STUN servers.
+    const iceServers = [
+      { urls: ['stun:stun.l.google.com:19302'] },
+      { urls: ['stun:stun2.l.google.com:19302'] },
+      { urls: ['stun:stun3.l.google.com:19302'] },
+      { urls: ['stun:stun4.l.google.com:19302'] },
+    ];
+
+    let apiTurnSucceeded = false;
+
+    // ── Metered.ca REST API (preferred) ─────────────────────────────
+    // If the user has configured a free API key, fetch production-grade
+    // TURN credentials from Metered.ca's global relay infrastructure
+    // (global.relay.metered.ca). The free plan provides 5-20 GB/month.
+    if (apiKey) {
+      try {
+        const apiServers = await fetchMeteredIceServers(apiKey);
+        // Add only TURN entries from the API (keep our reliable STUN servers).
+        for (const srv of apiServers) {
+          const urls = Array.isArray(srv.urls) ? srv.urls : [srv.urls];
+          const hasTurn = urls.some(u => u.startsWith('turn:'));
+          if (hasTurn) {
+            iceServers.push(srv);
+          }
+        }
+        apiTurnSucceeded = true;
+          console.log('[PeerManager] Using Metered.ca REST API TURN credentials');
+      } catch (err) {
+        console.warn('[PeerManager] Metered.ca API failed, using fallback TURN:', err);
+      }
     }
 
-    const iceServers = [
-      // ── STUN (NAT type discovery) ─────────────────────────────────
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
+    // ── Fallback TURN (no API key or API failed) ────────────────────
+    if (!apiTurnSucceeded) {
+      let turnCreds;
+      try {
+        turnCreds = await generateMeteredTurnCredentials();
+      } catch (err) {
+        console.warn('[PeerManager] HMAC generation failed, using static credentials:', err);
+        turnCreds = { username: 'openrelayproject', credential: 'openrelayproject' };
+      }
 
-      // ── Metered.ca Open Relay TURN (HMAC-authenticated) ────────────
-      // Free, 20 GB/month. Relays through a public server when direct
-      // P2P fails (symmetric NAT, CGNAT, corporate firewalls, etc.).
-      // Credentials generated client-side via HMAC-SHA1 with the
-      // publicly documented shared secret. Time-limited (24h).
-      {
+      iceServers.push({
         urls: [
           'turn:openrelay.metered.ca:80',
           'turn:openrelay.metered.ca:80?transport=tcp',
         ],
-        username: meteredCreds.username,
-        credential: meteredCreds.credential,
-      },
+        username: turnCreds.username,
+        credential: turnCreds.credential,
+      });
+    }
 
-      // ── PeerJS built-in TURN servers (fallback) ────────────────────
-      // These are the defaults PeerJS uses when no config override is
-      // given. May be unreliable but included as additional candidates.
-      {
-        urls: [
-          'turn:eu-0.turn.peerjs.com:3478',
-          'turn:us-0.turn.peerjs.com:3478',
-        ],
-        username: 'peerjs',
-        credential: 'peerjsp',
-      },
-    ];
+    // ── PeerJS built-in TURN servers (additional fallback) ──────────
+    iceServers.push({
+      urls: [
+        'turn:eu-0.turn.peerjs.com:3478',
+        'turn:us-0.turn.peerjs.com:3478',
+      ],
+      username: 'peerjs',
+      credential: 'peerjsp',
+    });
 
     return new Promise((resolve, reject) => {
       this.peer = new Peer(this.peerId, {
