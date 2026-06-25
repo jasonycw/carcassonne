@@ -92,6 +92,32 @@ export class PeerManager extends EventEmitter {
         port: PEER_PORT,
         path: PEER_PATH,
         debug: 0,  // set to 2 for verbose logging
+        config: {
+          iceServers: [
+            // Multiple STUN servers for reliable NAT discovery
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' },
+            // Open Relay Project — free TURN fallback (20 GB/month)
+            // https://www.metered.ca/tools/openrelay/
+            {
+              urls: 'turn:openrelay.metered.ca:80',
+              username: 'openrelayproject',
+              credential: 'openrelayproject',
+            },
+            // PeerJS cloud TURN servers (may be unreliable)
+            {
+              urls: [
+                'turn:eu-0.turn.peerjs.com:3478',
+                'turn:us-0.turn.peerjs.com:3478',
+              ],
+              username: 'peerjs',
+              credential: 'peerjsp',
+            },
+          ],
+          sdpSemantics: 'unified-plan',
+        },
       });
 
       this.peer.on('open', (id) => {
