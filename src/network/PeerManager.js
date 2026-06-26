@@ -22,7 +22,6 @@ import {
   deserialize,
   joinRequest,
 } from './Protocol.js';
-import { getSettings } from '../ui/SettingsPanel.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -38,6 +37,10 @@ const PING_INTERVAL = 10000;       // ms between heartbeats
 // Used to generate HMAC-SHA1 TURN credentials client-side.
 // Docs: https://www.metered.ca/tools/openrelay/
 const METERED_TURN_SECRET = 'openrelayprojectsecret';
+
+// Metered.ca REST API key — free tier, 5-20 GB/month.
+// Sign up at https://dashboard.metered.ca/signup to get your own.
+const METERED_API_KEY = '6f046f03888d7b80b408795679a2191a21d1';
 
 // ---------------------------------------------------------------------------
 // Room code helpers
@@ -111,7 +114,7 @@ async function generateMeteredTurnCredentials() {
  *   Array of iceServers from the API. Includes STUN + TURN entries.
  */
 async function fetchMeteredIceServers(apiKey) {
-  const url = `https://metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(apiKey)}`;
+  const url = `https://carcassonne.metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url);
 
   if (!res.ok) {
@@ -120,15 +123,15 @@ async function fetchMeteredIceServers(apiKey) {
 
   const data = await res.json();
 
-  // The API returns a JSON array of iceServer objects.
-  // If the response has an "error" field, treat it as failure.
-  if (data.error) {
+  // The API returns a JSON array of iceServer objects ready for
+  // RTCPeerConnection. If the response has an "error" field, treat
+  // it as failure.
+  if (data && data.error) {
     throw new Error(`Metered.ca API error: ${data.error}`);
   }
 
-  // Normalize "urls" to always be an array for consistent handling.
-  // The API may return urls as a string in some entries.
   const servers = Array.isArray(data) ? data : (data.iceServers || []);
+  // Normalize "urls" to always be an array for consistent handling.
   for (const srv of servers) {
     if (typeof srv.urls === 'string') {
       srv.urls = [srv.urls];
@@ -172,70 +175,68 @@ export class PeerManager extends EventEmitter {
    */
   async init() {
     // ── Build ICE servers configuration ──────────────────────────────
-    const settings = getSettings();
-    const apiKey = (settings.meteredApiKey || '').trim();
-
-    // Always include Google STUN servers.
-    const iceServers = [
-      { urls: ['stun:stun.l.google.com:19302'] },
-      { urls: ['stun:stun2.l.google.com:19302'] },
-      { urls: ['stun:stun3.l.google.com:19302'] },
-      { urls: ['stun:stun4.l.google.com:19302'] },
-    ];
-
-    let apiTurnSucceeded = false;
+    let iceServers;
 
     // ── Metered.ca REST API (preferred) ─────────────────────────────
-    // If the user has configured a free API key, fetch production-grade
-    // TURN credentials from Metered.ca's global relay infrastructure
-    // (global.relay.metered.ca). The free plan provides 5-20 GB/month.
-    if (apiKey) {
-      try {
-        const apiServers = await fetchMeteredIceServers(apiKey);
-        // Add only TURN entries from the API (keep our reliable STUN servers).
-        for (const srv of apiServers) {
-          const urls = Array.isArray(srv.urls) ? srv.urls : [srv.urls];
-          const hasTurn = urls.some(u => u.startsWith('turn:'));
-          if (hasTurn) {
-            iceServers.push(srv);
-          }
-        }
-        apiTurnSucceeded = true;
-          console.log('[PeerManager] Using Metered.ca REST API TURN credentials');
-      } catch (err) {
-        console.warn('[PeerManager] Metered.ca API failed, using fallback TURN:', err);
-      }
-    }
-
-    // ── Fallback TURN (no API key or API failed) ────────────────────
-    if (!apiTurnSucceeded) {
+    // Fetch production-grade TURN credentials from Metered.ca's global
+    // relay infrastructure (global.relay.metered.ca).
+    // Free tier provides 5-20 GB/month.
+    try {
+      iceServers = await fetchMeteredIceServers(METERED_API_KEY);
+      console.log('[PeerManager] Using Metered.ca REST API TURN credentials');
+    } catch (err) {
+      console.warn('[PeerManager] Metered.ca API failed, using fallback TURN:', err);
+      // Fallback: HMAC for openrelay.metered.ca + PeerJS servers.
       let turnCreds;
       try {
         turnCreds = await generateMeteredTurnCredentials();
-      } catch (err) {
-        console.warn('[PeerManager] HMAC generation failed, using static credentials:', err);
+      } catch (e) {
         turnCreds = { username: 'openrelayproject', credential: 'openrelayproject' };
       }
-
-      iceServers.push({
-        urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:80?transport=tcp',
-        ],
-        username: turnCreds.username,
-        credential: turnCreds.credential,
-      });
+      iceServers = [
+        { urls: ['stun:stun.l.google.com:19302'] },
+        { urls: ['stun:stun2.l.google.com:19302'] },
+        { urls: ['stun:stun3.l.google.com:19302'] },
+        { urls: ['stun:stun4.l.google.com:19302'] },
+        {
+          urls: [
+            'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:80?transport=tcp',
+          ],
+          username: turnCreds.username,
+          credential: turnCreds.credential,
+        },
+        {
+          urls: [
+            'turn:eu-0.turn.peerjs.com:3478',
+            'turn:us-0.turn.peerjs.com:3478',
+          ],
+          username: 'peerjs',
+          credential: 'peerjsp',
+        },
+      ];
     }
 
-    // ── PeerJS built-in TURN servers (additional fallback) ──────────
-    iceServers.push({
-      urls: [
-        'turn:eu-0.turn.peerjs.com:3478',
-        'turn:us-0.turn.peerjs.com:3478',
-      ],
-      username: 'peerjs',
-      credential: 'peerjsp',
-    });
+    // If API succeeded, prepend Google STUN and append PeerJS fallback.
+    if (iceServers.length > 0 && !iceServers.some(s => s.urls && s.urls.includes('stun:stun.l.google.com:19302'))) {
+      iceServers.unshift(
+        { urls: ['stun:stun.l.google.com:19302'] },
+        { urls: ['stun:stun2.l.google.com:19302'] },
+        { urls: ['stun:stun3.l.google.com:19302'] },
+        { urls: ['stun:stun4.l.google.com:19302'] },
+      );
+    }
+    // Always include PeerJS servers as extra relay candidates.
+    if (!iceServers.some(s => s.urls && s.urls.includes('turn:eu-0.turn.peerjs.com:3478'))) {
+      iceServers.push({
+        urls: [
+          'turn:eu-0.turn.peerjs.com:3478',
+          'turn:us-0.turn.peerjs.com:3478',
+        ],
+        username: 'peerjs',
+        credential: 'peerjsp',
+      });
+    }
 
     return new Promise((resolve, reject) => {
       this.peer = new Peer(this.peerId, {

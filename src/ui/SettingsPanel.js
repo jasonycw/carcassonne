@@ -22,7 +22,6 @@ const DEFAULTS = {
   darkMode: true,
   playerColor: '',
   nickname: '',
-  meteredApiKey: '',
 };
 
 // ---------------------------------------------------------------------------
@@ -122,25 +121,6 @@ const PANEL_HTML = `
     </select>
   </div>
 
-  <hr style="border:none;border-top:1px solid #444;margin:16px 0;" />
-
-  <div style="font-size:0.85rem; margin-bottom:8px;">
-    <label style="display:block; margin-bottom:4px; opacity:0.7;">
-      Metered.ca API Key <em style="opacity:0.5;">(for P2P multiplayer)</em>
-    </label>
-    <input type="text" id="setting-turn-apikey" placeholder="Enter your free API key" style="
-      width:100%; padding:6px; border-radius:6px; border:1px solid #444;
-      background:#16213e; color:#eee; font-size:0.85rem; box-sizing:border-box;
-    " />
-    <div style="margin-top:6px; opacity:0.6; line-height:1.5;">
-      Enable relay connectivity when direct P2P fails (CGNAT / firewalls).
-      Free signup at
-      <a href="https://dashboard.metered.ca/signup" target="_blank" rel="noopener"
-         style="color:#6af; text-decoration:none;">dashboard.metered.ca</a>
-      → TURN Servers → generate credential → copy the <strong>API Key</strong>.
-    </div>
-  </div>
-
   <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
     <button id="settings-close" style="
       padding:8px 20px; border-radius:6px; border:1px solid #555;
@@ -169,7 +149,6 @@ export class SettingsPanelUI extends EventEmitter {
       sound: null,
       darkMode: null,
       color: null,
-      meteredApiKey: null,
       closeBtn: null,
     };
 
@@ -177,7 +156,6 @@ export class SettingsPanelUI extends EventEmitter {
     this.dom.sound = panel.querySelector('#setting-sound');
     this.dom.darkMode = panel.querySelector('#setting-darkmode');
     this.dom.color = panel.querySelector('#setting-color');
-    this.dom.meteredApiKey = panel.querySelector('#setting-turn-apikey');
     this.dom.closeBtn = panel.querySelector('#settings-close');
 
     // Load current settings.
@@ -185,7 +163,6 @@ export class SettingsPanelUI extends EventEmitter {
     this.dom.sound.checked = settings.soundEnabled;
     this.dom.darkMode.checked = settings.darkMode;
     this.dom.color.value = settings.playerColor || '';
-    this.dom.meteredApiKey.value = settings.meteredApiKey || '';
 
     // Bind events.
     this.dom.sound.addEventListener('change', () => {
@@ -200,11 +177,6 @@ export class SettingsPanelUI extends EventEmitter {
 
     this.dom.color.addEventListener('change', () => {
       updateSetting('playerColor', this.dom.color.value);
-      this.emit('settings-changed', getSettings());
-    });
-
-    this.dom.meteredApiKey.addEventListener('change', () => {
-      updateSetting('meteredApiKey', this.dom.meteredApiKey.value.trim());
       this.emit('settings-changed', getSettings());
     });
 
