@@ -1,7 +1,8 @@
 /**
- * screenshot-game.spec.js — Play a 4-player hot-seat game with all expansions
- * and take screenshots showing beginning, middle, and end of the game
- * with meeples placed and scoring visible.
+ * screenshot-game.spec.js — Play a 4-player hot-seat game with available
+ * expansions (Inns & Cathedrals, Traders & Builders) and take screenshots
+ * showing beginning, middle, and end of the game with meeples placed and
+ * scoring visible.
  *
  * Screenshots are written to screenshots/*.png for the README.
  *
@@ -115,10 +116,9 @@ test.describe('Screenshot Game', () => {
     await page.locator('#player-name').fill('Alice');
     await page.locator('#player-count').selectOption('4');
 
-    // Enable all three expansions
+    // Enable available expansions (Tower is disabled per baseline commit 962f33ee)
     await page.locator('input[value="inns-and-cathedrals"]').check();
     await page.locator('input[value="traders-and-builders"]').check();
-    await page.locator('input[value="the-tower"]').check();
 
     await page.locator('#create-game-btn').click();
     await page.waitForSelector('#lobby-players[style*="block"]', { timeout: 10000 });
