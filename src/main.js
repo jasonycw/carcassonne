@@ -28,6 +28,11 @@ register('/', (params) => {
 
   // Listen for game start.
   view.on('start-game', (config) => {
+    // For P2P games, ensure ?room=XXXX is in the URL before navigating
+    // so that both host and joiners preserve the room code in the address bar.
+    if (config.roomCode && !config.isLocalGame) {
+      history.replaceState(null, '', `?room=${encodeURIComponent(config.roomCode)}#/game`);
+    }
     navigate('/game', config);
   });
 

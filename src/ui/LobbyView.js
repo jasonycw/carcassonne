@@ -231,9 +231,11 @@ export class LobbyView extends EventEmitter {
 
     // ── P2P reconnection detection ───────────────────────────────────
     // If no room code was found in the URL, check localStorage for saved
-    // P2P metadata (Issue 5/6).  This handles page refresh for both the
-    // host (playerIndex 0 → recreate the room) and clients (playerIndex > 0
-    // → join the existing room via _joinGame).
+    // P2P metadata (Issue 5/6).  This handles page refresh for:
+    //   - Host (playerIndex 0): always recreate the room from saved state.
+    //   - Client (playerIndex > 0): only rejoin if the URL has ?room=XXX.
+    //     If the user navigated to the home page manually (no ?room=XXX),
+    //     clear the saved info so they can start a fresh game.
     {
       const p2pInfo = loadP2pInfo();
       if (p2pInfo && p2pInfo.room) {
@@ -243,11 +245,19 @@ export class LobbyView extends EventEmitter {
           this._recoverHostGame(p2pInfo.room);
           return;
         }
-        // Client refresh — auto-join the existing room (Issue 6).
-        console.log('[LobbyView] Found saved P2P info, reconnecting to room:', p2pInfo.room);
-        this.dom.roomCodeInput.value = p2pInfo.room;
-        this._joinGame(p2pInfo.playerIndex);
-        return;
+        // Client refresh — only rejoin if URL has ?room=XXX.
+        // If user went to the home page manually without room code,
+        // clear P2P info so they can start a fresh game.
+        const hasRoomInUrl = window.location.search.includes('room=');
+        if (hasRoomInUrl) {
+          console.log('[LobbyView] Found saved P2P info, reconnecting to room:', p2pInfo.room);
+          this.dom.roomCodeInput.value = p2pInfo.room;
+          this._joinGame(p2pInfo.playerIndex);
+          return;
+        }
+        // No room in URL — user navigated here to quit. Clear saved info.
+        console.log('[LobbyView] Clearing stale P2P info (no room in URL)');
+        removeP2pInfo();
       }
     }
 
@@ -1141,8 +1151,10 @@ export class LobbyView extends EventEmitter {
     this.peerManager = null;
     // Issue 5/6: Save P2P metadata so a page refresh can reconnect.
     // Host gets playerIndex 0, clients get their assigned index.
+    // Also store roomCode in config so main.js can set the correct URL.
     if (this.roomCode && config.isLocalGame === false) {
       saveP2pInfo({ room: this.roomCode, playerIndex: config.isHost ? 0 : config.playerIndex });
+      config.roomCode = this.roomCode;
     }
     this.container.innerHTML = '';
     this.emit('start-game', config);

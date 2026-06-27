@@ -22,14 +22,22 @@ export function register(path, handler) {
   routes[path] = handler;
 }
 
-/** Navigate to a route with optional parameters. */
+/** Navigate to a route with optional parameters and search query. */
 export function navigate(path, params = {}) {
   if (path.startsWith('/')) {
     const hash = path === '/' ? '' : path;
-    // Update URL silently (replaceState does NOT fire hashchange).
-    // Previously we used window.location.hash = hash, which triggered
-    // hashchange and caused a duplicate resolve() call (= double GameView).
-    history.replaceState(null, '', `#${hash}`);
+    // Preserve any existing search (query) params in the URL so that
+    // ?room=XXXX survives navigation to /game (P2P multiplayer).
+    // For lobby (path='/'), strip search params entirely so the user
+    // can quit by navigating to the plain home URL.
+    const search = window.location.search;
+    let url;
+    if (path === '/' || !search) {
+      url = `#${hash}`;
+    } else {
+      url = `${search}#${hash}`;
+    }
+    history.replaceState(null, '', url);
   }
   currentParams = params;
   resolve();
