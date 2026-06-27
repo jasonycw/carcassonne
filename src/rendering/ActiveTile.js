@@ -538,12 +538,18 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
   // Ensure the tile group is visible.
   groups.activeTileGroup.attr('visibility', null);
 
+  // Capture the starting rotation angle so we can animate from it.
+  const startRotMatch = groups.activeTileRotGroup.attr('transform')
+    ?.match(/rotate\(([^)]+)\)/);
+  const startAngle = startRotMatch ? parseFloat(startRotMatch[1]) : 0;
+  const endAngle = currentRotation * 90;
+
   // Set the rotation group scale to the current zoom level IMMEDIATELY
   // (before any tweens) so the tile appears at the correct visual size
-  // from frame 1, matching the board's zoom state.  Only position is
-  // animated — scale follows zoom instantaneously (Issue 1).
+  // from frame 1, matching the board's zoom state.  Scale follows zoom
+  // instantaneously — rotation is animated in the tween below.
   groups.activeTileRotGroup
-    .attr('transform', `rotate(${currentRotation * 90}) scale(${startScale})`);
+    .attr('transform', `rotate(${startAngle}) scale(${startScale})`);
 
   _transitioning = true;
   _pendingAnimationResolve = null;
@@ -573,19 +579,20 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
       });
 
     // ── Rotation tween ────────────────────────────────────────────────
-    // The rotation group's scale is already set to the current zoom level
-    // before the transition started.  We only animate rotation (no scale
-    // animation) so the tile doesn't visually "snap to 100%" (Issue 1).
+    // Interpolates the rotation angle from startAngle → endAngle while
+    // keeping the zoom scale dynamic (no scale animation).
     groups.activeTileRotGroup
       .transition()
       .duration(TRANSITION_DURATION)
       .tween('tracked-rotation', function () {
+        const angle0 = startAngle;
+        const angle1 = endAngle;
         return function (progress) {
           if (!_isPinned) return;
-          // Keep scale in sync with the current zoom (dynamic, no snap).
           const m = getBoardMetrics();
+          const currentAngle = angle0 + (angle1 - angle0) * progress;
           d3.select(this).attr('transform',
-            `rotate(${currentRotation * 90}) scale(${m.transform.k})`);
+            `rotate(${currentAngle}) scale(${m.transform.k})`);
         };
       })
       .on('end', () => {
