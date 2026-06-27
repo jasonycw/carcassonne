@@ -27,6 +27,7 @@ To migrate the Carcassonne board game to a static GitHub Pages on https://jasony
 - Multiplayer must be working
 - README must has the latest screenshot of the game running with multiple players, meeples placed and scoring working, showing the beginning, middle of the game, end of the game
 - When verify, everything must be check locally first and then also check after GitHub Page is built
+* ISSUES.md MUST NOT BE CHANGED BY LLM, ONLY ALLOWED TO BE UPDATED BY HUMAN AFTER VERIFICATION*
 
 # VERIFICATION & DEFINITION OF DONE
 Before committing tasks or marking a feature phase complete, you must explicitly pass the following validation matrix:
