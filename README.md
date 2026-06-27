@@ -6,9 +6,11 @@ Play solo, hot-seat with friends on one device, or create a room and share the c
 
 ## Screenshots
 
-| Lobby | Game Started | Mid-game | Game Over |
+| Lobby (4P) | Game Started | Mid-game | Game Over |
 |-------|-------------|----------|-----------|
 | ![Lobby](screenshots/01-lobby.png) | ![Game Board](screenshots/02-game-started.png) | ![Mid-game](screenshots/03-mid-game.png) | ![Game Over](screenshots/04-game-over.png) |
+| Rotation indicator | | | |
+| ![Rotate](screenshots/05-rotate-indicator.png) | | | |
 
 ## Features
 
@@ -22,7 +24,6 @@ Play solo, hot-seat with friends on one device, or create a room and share the c
 - **Expansions** (optional):
   - Inns & Cathedrals (large meeples)
   - Traders & Builders (builder, pig, goods tokens)
-  - The Tower (tower pieces, captures)
 - **Responsive SVG board** — pan & zoom with mouse wheel / pinch
 - **Scoreboard** — live player scores, meeple counts, expansion piece indicators
 
