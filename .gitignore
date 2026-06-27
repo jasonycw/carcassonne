@@ -34,14 +34,8 @@ dist/
 test-results/
 test-dist/
 playwright-report/
-gh-pages-verify-*.png
-gh-pages-*.png
 .antigravitycli/
 .playwright-mcp/
 
 # Baseline checkout artifact
 original_962f33ee/
-
-# Root-level test artifact screenshots (generated outside screenshots/)
-lobby.png
-game-with-tile.png
