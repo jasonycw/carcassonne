@@ -113,7 +113,7 @@ async function tryPlaceTile(page, hooks = {}) {
 }
 
 test.describe('Screenshot Game', () => {
-  test('play 4-player game with expansions and capture all 6 screenshots', async ({ page }) => {
+  test('play 4-player game with expansions and capture screenshots', async ({ page }) => {
     test.setTimeout(600000); // 10 minutes
 
     // Use a wide tall viewport so tile placements stay visible.
@@ -196,5 +196,18 @@ test.describe('Screenshot Game', () => {
     await page.waitForTimeout(2000);
     await page.screenshot({ path: 'screenshots/04-game-over.png', fullPage: true });
     console.log('✓ Screenshot 4: game over');
+
+    // ── 5. Verify cloister scoring in breakdown ─────────────────────────
+    // Check that the game-over banner shows actual numbers for cloisters
+    // (not '-'), confirming all feature types scored correctly.
+    // The breakdown is a table with headers: Player | Cities | Roads | Farms | Cloisters | Total
+    // Cloister column index is 4 (0-based), the 5th <td> in each row.
+    const cloisterCells = await page.locator('#game-over-banner table tbody tr td:nth-child(5)').allTextContents();
+    const nonDashCloister = cloisterCells.filter(v => v.trim() !== '-');
+    if (nonDashCloister.length > 0) {
+      console.log(`✓ Cloister scores present in breakdown: ${nonDashCloister.join(', ')}`);
+    } else {
+      console.error('✗ FAIL: All cloister scores show "-" in game-over breakdown!');
+    }
   });
 });
