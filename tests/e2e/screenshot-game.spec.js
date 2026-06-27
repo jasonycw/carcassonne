@@ -11,8 +11,10 @@
  *  02-game-started.png        — Board right after game start
  *  03-mid-game.png            — Board mid-game (20+ tiles, meeples, scoring)
  *  04-game-over.png           — Final board with game-over banner and score breakdown
- *  05-rotate-indicator.png    — Floating tile with rotation indicator visible
  */
+
+let meeplePlacementCounter = 0;
+
 import { test } from '@playwright/test';
 
 /**
@@ -84,9 +86,16 @@ async function tryPlaceTile(page, hooks = {}) {
   }
 
   // Try to place a meeple if outlines are visible.
-  const meepleOutline = page.locator('#game-svg image.meeple-outline').first();
-  if (await meepleOutline.isVisible({ timeout: 800 }).catch(() => false)) {
-    await meepleOutline.dispatchEvent('click');
+  // Cycle through outlines (road→city→farm→cloister order) so all
+  // feature types get played over the course of a game — otherwise
+  // picking the FIRST outline always prefers roads/cities and never
+  // places cloister meeples, making the end-game breakdown show "-".
+  const meepleOutlines = page.locator('#game-svg image.meeple-outline');
+  const outlineCount = await meepleOutlines.count().catch(() => 0);
+  if (outlineCount > 0) {
+    const outlineIndex = meeplePlacementCounter % outlineCount;
+    await meepleOutlines.nth(outlineIndex).dispatchEvent('click');
+    meeplePlacementCounter++;
     await page.waitForTimeout(200);
   }
 
@@ -136,44 +145,16 @@ test.describe('Screenshot Game', () => {
     // ── 3. Place tiles ────────────────────────────────────────────────
     // With 4 players we need ~36 tiles per cycle to show everyone's moves.
     // Take mid-game at tile 20 where more meeples and scoring are visible.
+    // Meeple placement cycles through available outlines so all feature types
+    // (roads, cities, farms, cloisters) get played over the game.
     let totalPlaced = 0;
     let midGameDone = false;
     let gameOver = false;
-    // Track whether we've captured the rotation-indicator screenshot.
-    let rotateScreenshotDone = false;
-    let rotateScreenshotAttempts = 0;
-    const MAX_ROTATION_ATTEMPTS = 50;
     // Well above the ~132 tiles in a game with all expansions combined.
     const MAX_TILES = 200;
 
     while (!gameOver && totalPlaced < MAX_TILES) {
-      const placed = await tryPlaceTile(page, {
-        onTilePinned: rotateScreenshotDone || rotateScreenshotAttempts >= MAX_ROTATION_ATTEMPTS
-          ? null
-          : async (p) => {
-              rotateScreenshotAttempts++;
-              await p.waitForTimeout(400);
-              // Check if the rotation indicator is actually visible
-              // (tile has >1 valid rotation). If visible, capture it
-              // as a close-up crop of the SVG board. The indicator is
-              // small on a full-page viewport, so we zoom into the SVG
-              // to make it clearly readable.
-              const indicatorVisible = await p
-                .locator('#game-svg use.active-tile-rotation-indicator')
-                .getAttribute('opacity')
-                .then((v) => v !== null && parseFloat(v) > 0)
-                .catch(() => false);
-              if (indicatorVisible) {
-                await p.screenshot({
-                  path: 'screenshots/05-rotate-indicator.png',
-                  fullPage: true,
-                });
-                console.log('✓ Screenshot 5: tile rotation indicator');
-                rotateScreenshotDone = true;
-              }
-              // If indicator not visible and still have attempts, retry next time.
-            },
-      });
+      const placed = await tryPlaceTile(page);
 
       if (placed) {
         totalPlaced++;

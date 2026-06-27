@@ -9,8 +9,6 @@ Play solo, hot-seat with friends on one device, or create a room and share the c
 | Lobby (4P) | Game Started | Mid-game | Game Over |
 |-------|-------------|----------|-----------|
 | ![Lobby](screenshots/01-lobby.png) | ![Game Board](screenshots/02-game-started.png) | ![Mid-game](screenshots/03-mid-game.png) | ![Game Over](screenshots/04-game-over.png) |
-| Rotation indicator | | | |
-| ![Rotate](screenshots/05-rotate-indicator.png) | | | |
 
 ## Features
 
