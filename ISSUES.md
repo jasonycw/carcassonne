@@ -1,6 +1,15 @@
-Base on testing with latest version on `https://jasonycw.github.io/carcassonne/`, there are at list and not limited to the following issues that cause the game not fully working.
-- During placing tile state, when click on outside non tile place that is not available to place a tile, the temporary tile should be back to the top right WITH ANIMATION(Both transition and zoom animation) IN ONE CLICK. Right now it just teleport back to top right and then disappear.
-- When the temporary tile is placed, all the meeple outlines are sometime not rotated now which is incorrect, the outline should be not be rotated and always facing the screen normally like a placed meeple.
-- After placing a temporary tile, when click non meeple outline spaces of the tile, it should be back to temporary tile state with one click, remove the meeple outline, rotate if available and show the rotate indicator immediately again. Right now it needs 2 click to make it rotate, 1st just remove outline and show the rotate indicator, 2nd rotate rotate the tile, this is incorrect.
-- tower extension is disabled in the original version at commit  `962f33eed833cb2cb845e40bb5d7186e66dc6d2d`? If it's true, then should remove it. If it deem to be kept, double confirm the logic by checking online how the expansion work. It is still showing in the home page for selection
-- For host of the game, when refresh the page, should go back to the original, right now it's connection lost and become it's own offline game. It should be able to join back in to the same game
+# Issues — Resolved
+
+All issues identified during migration testing have been fixed and verified on the deployed site at `https://jasonycw.github.io/carcassonne/`.
+
+## Resolved Issues
+
+1. **Tile animation on cancel (old Issue 2)** — Clicking outside a valid placement now animates the tile back to the top-right corner with both position and zoom transitions in a single click. Fixed by removing the `_showActiveTileIfNeeded()` call from `_cancelPlacement()` which was synchronously rebuilding the tile at the corner position, making the animation invisible.
+
+2. **Meeple outlines rotation (old Issue 3)** — Meeple outlines now consistently counter-rotate to face the screen regardless of when `showMeeplePlacements()` is called. Fixed by adding `_updateOutlineCounterRotation()` call inside `showMeeplePlacements()`.
+
+3. **Double-click to rotate after meeple cancel (old Issue 4)** — Clicking a non-outline area of a placed tile now both reverts from meeple selection AND rotates the tile in a single click. Fixed by removing the `return` statement after the revert callback in the tile image click handler, allowing the rotation logic to run in the same click.
+
+4. **Tower checkbox visible in home page (old Issue 5)** — The Tower expansion is disabled per the original baseline (commit `962f33ee`). The checkbox has been removed from the lobby UI to avoid confusion.
+
+5. **Host refresh loses game (new Issue 5)** — When the host refreshes the page, they now automatically recreate the PeerJS room using the saved room code and transition directly to the game view with the saved game state. GameHost handles incoming JOIN_REQUESTs from reconnecting clients.
