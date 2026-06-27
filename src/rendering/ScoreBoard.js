@@ -52,9 +52,10 @@ export function renderScoreboard(container, gamestate, currentPlayerIndex, gameO
     const color = player.color || getPlayerColor(i);
     const isActive = i === currentPlayerIndex && !gameOver;
     const colorHex = getColorHex(color);
-    // Connection status: host (index 0) is always connected; remote players
-    // show green dot when connected, red when disconnected.
-    const isConnected = i === 0 || (connectedPlayers && connectedPlayers.has(i));
+    // Connection status: green dot when connected (in connectedPlayers set),
+    // red when disconnected.  The caller is responsible for including ALL
+    // relevant player indices (including host) in the connectedPlayers Set.
+    const isConnected = connectedPlayers && connectedPlayers.has(i);
     const connColor = isConnected ? '#4caf50' : '#e57373';
 
     html += `
