@@ -607,10 +607,12 @@ export class ClientPeerManager extends PeerManager {
   /**
    * Connect to the host's peer.
    * @param {string} playerName
+   * @param {number} [preferredIndex]  Previously assigned player index for reconnection
    * @returns {Promise<{ playerIndex: number }>}
    */
-  async connectToHost(playerName) {
+  async connectToHost(playerName, preferredIndex) {
     this.playerName = playerName;
+    this._preferredIndex = preferredIndex;
     const hostPeerId = roomCodeToPeerId(this.roomCode);
 
     // Wait for peer ready.
@@ -626,9 +628,9 @@ export class ClientPeerManager extends PeerManager {
       this._setupDataConnection(conn);
       this.hostConnection = conn;
 
-      // Send join request once connected.
+      // Send join request once connected — pass preferredIndex for reconnection.
       conn.on('open', () => {
-        this.send(conn, joinRequest(playerName));
+        this.send(conn, joinRequest(playerName, preferredIndex));
       });
 
       // Listen for join accept/reject.

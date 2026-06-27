@@ -78,27 +78,57 @@ export class GameHost extends EventEmitter {
    */
   _handleJoinRequest(payload, conn) {
     const playerName = (payload && payload.playerName) || 'Reconnecting Player';
-    console.log('[GameHost] Reconnection attempt by:', playerName);
+    const preferredIndex = payload && payload.preferredIndex;
+    console.log('[GameHost] Reconnection attempt by:', playerName, 'preferredIndex:', preferredIndex);
 
-    // Find the first player slot not held by a currently connected remote.
-    // Slot 0 is always the host — skip it.
-    let targetSlot = -1;
-    const connectedIndices = this.hostPeerManager.connectedPlayers.map(p => p.playerIndex);
-    for (let i = 1; i < this.gamestate.players.length; i++) {
-      if (!connectedIndices.includes(i)) {
-        targetSlot = i;
-        break;
+    // If the client provides a preferredIndex (reconnection, Issue 6),
+    // ensure the slot is free by removing any stale connection at that
+    // index.  This handles the race condition where the old connection's
+    // close event hasn't been processed yet when the new JOIN_REQUEST
+    // arrives (page refresh → new PeerJS peer connects before the host
+    // receives the WebRTC close for the old peer).
+    if (preferredIndex != null && preferredIndex > 0) {
+      const staleIdx = this.hostPeerManager.connectedPlayers.findIndex(
+        p => p.playerIndex === preferredIndex
+      );
+      if (staleIdx !== -1) {
+        const stale = this.hostPeerManager.connectedPlayers[staleIdx];
+        console.log('[GameHost] Removing stale connection at slot', preferredIndex);
+        stale.conn.close();
+        this.hostPeerManager.connectedPlayers.splice(staleIdx, 1);
       }
     }
-    if (targetSlot === -1) {
-      // All slots are held by connected clients — assign the next available index.
-      targetSlot = this.gamestate.players.length;
+
+    // Determine target slot:
+    //   a) preferredIndex from reconnecting client (if valid)
+    //   b) first free slot in the game's player array
+    //   c) fallback: next index beyond the array (should not happen for
+    //      reconnection — defensive guard)
+    let targetSlot;
+    if (preferredIndex != null && preferredIndex > 0 && preferredIndex < this.gamestate.players.length) {
+      targetSlot = preferredIndex;
+    } else {
+      targetSlot = -1;
+      const connectedIndices = this.hostPeerManager.connectedPlayers.map(p => p.playerIndex);
+      for (let i = 1; i < this.gamestate.players.length; i++) {
+        if (!connectedIndices.includes(i)) {
+          targetSlot = i;
+          break;
+        }
+      }
+      if (targetSlot === -1) {
+        // All slots are held by connected clients — assign the next available index.
+        targetSlot = this.gamestate.players.length;
+      }
     }
 
     // Accept the join on the host PeerManager side.
     const result = this.hostPeerManager.acceptJoin(conn, playerName, targetSlot);
     if (result && result.accepted) {
       console.log('[GameHost] Reconnection accepted for', playerName, 'as player', targetSlot);
+      // Notify GameView so it updates _connectedPlayers and scoreboard
+      // connection indicator (Issue 7).
+      this.emit('player-reconnected', { playerIndex: targetSlot });
       // Send the full current state to the reconnecting client.
       const sanitized = this.hostPeerManager._sanitizeState(this.gamestate);
       this.hostPeerManager.send(conn, createMessage(MessageType.GAME_STATE_SYNC, { state: sanitized }));

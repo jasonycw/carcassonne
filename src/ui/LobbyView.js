@@ -240,7 +240,8 @@ export class LobbyView extends EventEmitter {
       if (p2pInfo && p2pInfo.room) {
         console.log('[LobbyView] Found saved P2P info, reconnecting to room:', p2pInfo.room);
         this.dom.roomCodeInput.value = p2pInfo.room;
-        this._joinGame();
+        // Pass saved playerIndex so the host can reassign the correct slot.
+        this._joinGame(p2pInfo.playerIndex);
         return;
       }
     }
@@ -497,7 +498,13 @@ export class LobbyView extends EventEmitter {
     }
   }
 
-  async _joinGame() {
+  async _joinGame(preferredIndex) {
+    // Read P2P info BEFORE removeGame() clears it (Issue 6 reconnection).
+    if (preferredIndex == null) {
+      const p2pInfo = loadP2pInfo();
+      if (p2pInfo) preferredIndex = p2pInfo.playerIndex;
+    }
+
     removeGame(); // Clear any previous saved game
     const name = this.dom.playerName.value.trim() || 'Player';
     const code = this.dom.roomCodeInput.value.trim().toUpperCase();
@@ -506,7 +513,7 @@ export class LobbyView extends EventEmitter {
       return;
     }
 
-    console.log('[LobbyView] _joinGame() called - name:', name, 'code:', code);
+    console.log('[LobbyView] _joinGame() called - name:', name, 'code:', code, 'preferredIndex:', preferredIndex);
 
     localStorage.setItem('carcassonne_player_name', name);
     this.roomCode = code;
@@ -525,7 +532,7 @@ export class LobbyView extends EventEmitter {
         gameStartingPayload = payload;
       });
 
-      const result = await this.peerManager.connectToHost(name);
+      const result = await this.peerManager.connectToHost(name, preferredIndex);
       console.log('[LobbyView] Connected to host! Player index:', result.playerIndex, 'players:', result.players);
 
       // Hide the action buttons, keep name input visible.

@@ -90,8 +90,8 @@ export function deserialize(data) {
 // Convenience creators
 // ---------------------------------------------------------------------------
 
-export function joinRequest(playerName) {
-  return createMessage(MessageType.JOIN_REQUEST, { playerName });
+export function joinRequest(playerName, preferredIndex) {
+  return createMessage(MessageType.JOIN_REQUEST, { playerName, preferredIndex });
 }
 
 export function joinAccept(playerId, players, settings) {
