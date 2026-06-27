@@ -192,9 +192,11 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
       // image (non-outline area) reverts to placement-selected state:
       // hide outlines, show rotation indicator.  Only "Place Tile" button
       // should show the outlines.
+      // After reverting, fall through to rotation logic (no return) so that
+      // this single click both hides the outlines AND rotates the tile
+      // (Issue 3).
       if (_isConfirmed) {
         if (onRevertToPlacementCallback) onRevertToPlacementCallback();
-        return;
       }
 
       const placement = selectedMove.placement;
@@ -691,7 +693,9 @@ export function resetActiveTile(svgElement, animated = false) {
       .duration(TRANSITION_DURATION)
       .attr('transform', 'rotate(0) scale(1)')
       .on('end', () => {
-        groups.activeTileGroup.attr('visibility', 'hidden');
+        // Keep the tile visible in the corner so the user sees the animation
+        // result.  The next placement interaction (clicking a valid position or
+        // the tile image) will re-render or re-position it (Issue 1).
         groups.activeTileRotGroup.attr('transform', 'rotate(0)');
       });
 
@@ -847,6 +851,12 @@ export function showMeeplePlacements() {
 
   // Rotation indicator is no longer needed — meeple outlines are shown.
   hideRotationIndicator();
+
+  // Counter-rotate outlines so they face the screen (Issue 2).
+  // showMeeplePlacements() is called after the player clicks "Place Tile",
+  // at which point the tile may have been rotated.  Without this call the
+  // outlines inherit the tile's rotation and appear angled on the screen.
+  _updateOutlineCounterRotation();
 
   // Track confirmed state so the tile image click can revert.
   _isConfirmed = true;

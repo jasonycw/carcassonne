@@ -715,10 +715,13 @@ export class GameView {
     if (this._confirmPhase === 'placement-selected' || this._confirmPhase === 'confirmed') {
       this._confirmPhase = '';
       this._pendingPlacement = null;
-      // Animate the tile back to the corner with both position and scale
-      // transitions (Issue 2), then re-show it in the default state.
+      // Animate the tile back to the corner (transition + zoom).  Do NOT
+      // call _showActiveTileIfNeeded() here — that would call
+      // renderActiveTile() synchronously, rebuilding the tile at the corner
+      // position and making the animation invisible (Issue 1).
+      // The tile stays visible in the corner after the animation completes
+      // (resetActiveTile's on('end') no longer hides the group).
       resetActiveTile(this.dom.svg, true);
-      this._showActiveTileIfNeeded();
     }
   }
 
