@@ -234,6 +234,9 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
       // Re-filter outlines for the new rotation.
       _applyOutlineFilter(groups.meeplePlacementsGroup);
 
+      // Counter-rotate outlines so they face the screen (Issue 3).
+      _updateOutlineCounterRotation();
+
       if (onRotationChangedCallback) {
         onRotationChangedCallback(currentRotation);
       }
@@ -266,8 +269,12 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
     .append('g')
     .attr('class', 'outline-group')
     .style('pointer-events', 'none')
+    // The outline-group is a child of activeTileRotGroup, which rotates
+    // with the tile.  We counter-rotate by -currentRotation so the outlines
+    // always face the screen (Issue 3), matching the original game behavior
+    // where each outline had `rotate(-selectedMove.rotation * 90)` applied.
     .attr('transform', (d) =>
-      `translate(${(d.offset.x - 0.5) * TILE_SIZE},${(d.offset.y - 0.5) * TILE_SIZE})`
+      `translate(${(d.offset.x - 0.5) * TILE_SIZE},${(d.offset.y - 0.5) * TILE_SIZE}) rotate(${-currentRotation * 90})`
     )
     .each(function (d) {
       const g = d3.select(this);
@@ -417,6 +424,10 @@ function rotateActiveTile(direction) {
   // Re-show all outlines that may have been hidden when a meeple was placed
   // (rotation may change which features are accessible).
   groups.meeplePlacementsGroup.selectAll('image.meeple-outline').attr('visibility', null);
+
+  // Counter-rotate outlines so they face the screen (Issue 3).
+  _updateOutlineCounterRotation();
+
   if (selectedMove && selectedMove.placement) {
     updateMeeplePlacementsInternal();
   }
@@ -512,8 +523,10 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
   const startScreenX = startMatch ? parseFloat(startMatch[1]) : 0;
   const startScreenY = startMatch ? parseFloat(startMatch[2]) : 0;
 
-  // The tile in the corner is at scale 1 with rotation 0.
-  const startScale = 1;
+  // Capture the current zoom scale so we set the tile's scale immediately
+  // (no scale animation) — preventing the "snap to 100% size" visual glitch.
+  const metrics0 = getBoardMetrics();
+  const startScale = metrics0.transform.k;
 
   // Save pinned state for zoom tracking.
   _isPinned = true;
@@ -522,6 +535,13 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
 
   // Ensure the tile group is visible.
   groups.activeTileGroup.attr('visibility', null);
+
+  // Set the rotation group scale to the current zoom level IMMEDIATELY
+  // (before any tweens) so the tile appears at the correct visual size
+  // from frame 1, matching the board's zoom state.  Only position is
+  // animated — scale follows zoom instantaneously (Issue 1).
+  groups.activeTileRotGroup
+    .attr('transform', `rotate(${currentRotation * 90}) scale(${startScale})`);
 
   _transitioning = true;
   _pendingAnimationResolve = null;
@@ -550,19 +570,20 @@ export function moveToBoardPosition(gridX, gridY, rotation) {
         };
       });
 
-    // ── Scale / rotation tween ─────────────────────────────────────────
-    // Recalculates the target zoom scale each tick so the tile's size
-    // follows the board zoom level.
+    // ── Rotation tween ────────────────────────────────────────────────
+    // The rotation group's scale is already set to the current zoom level
+    // before the transition started.  We only animate rotation (no scale
+    // animation) so the tile doesn't visually "snap to 100%" (Issue 1).
     groups.activeTileRotGroup
       .transition()
       .duration(TRANSITION_DURATION)
-      .tween('tracked-scale', function () {
+      .tween('tracked-rotation', function () {
         return function (progress) {
           if (!_isPinned) return;
+          // Keep scale in sync with the current zoom (dynamic, no snap).
           const m = getBoardMetrics();
-          const targetK = m.transform.k;
-          const currentScale = startScale + (targetK - startScale) * progress;
-          d3.select(this).attr('transform', `rotate(${currentRotation * 90}) scale(${currentScale})`);
+          d3.select(this).attr('transform',
+            `rotate(${currentRotation * 90}) scale(${m.transform.k})`);
         };
       })
       .on('end', () => {
@@ -760,6 +781,31 @@ function updateMeeplePlacementsInternal() {
         return null;
       }
       return 'hidden';
+    });
+}
+
+// ---------------------------------------------------------------------------
+// _updateOutlineCounterRotation  (internal)
+// ---------------------------------------------------------------------------
+
+/**
+ * Update the outline-group transform so the meeple outlines counter-rotate
+ * to face the screen when the tile rotation changes (Issue 3).
+ * Called after each rotation change.
+ */
+function _updateOutlineCounterRotation() {
+  const groups = getActiveTileGroups();
+  if (!groups) return;
+  const meepleGroup = groups.meeplePlacementsGroup;
+  const counterRotate = -currentRotation * 90;
+  meepleGroup.selectAll('g.outline-group')
+    .attr('transform', function () {
+      // Preserve the translate part, update the rotate part.
+      const t = d3.select(this).attr('transform');
+      const m = t ? t.match(/translate\(([^,]+),([^)]+)\)/) : null;
+      const tx = m ? m[1] : '0';
+      const ty = m ? m[2] : '0';
+      return `translate(${tx},${ty}) rotate(${counterRotate})`;
     });
 }
 
@@ -973,6 +1019,15 @@ function _updateRotationIndicator() {
   const opacity = hasMultipleRotations ? 0.45 : 0;
   indicator.interrupt();
   indicator.attr('opacity', opacity);
+}
+
+/**
+ * Show or hide the rotation indicator based on the current placement's
+ * valid rotation count.  Exported so GameView's revert callback can
+ * re-show the indicator after cancelling meeple placement (Issue 4).
+ */
+export function updateRotationIndicator() {
+  _updateRotationIndicator();
 }
 
 /** Force-set rotation (e.g. when restoring game state). */

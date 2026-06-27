@@ -21,6 +21,7 @@ import {
   showMeeplePlacements, hideMeeplePlacements,
   onTilePlaced, onRotationChanged,
   setIsConfirmed, getIsConfirmed, onRevertToPlacement,
+  updateRotationIndicator,
 } from '../rendering/ActiveTile.js';
 import { img } from '../utils/AssetPaths.js';
 import { placeTile, placeTowerPiece, captureMeeple, skipTowerStep, skipCapture } from '../game/GameLogic.js';
@@ -169,6 +170,10 @@ export class GameView {
         hideMeeplePlacements();
         this._confirmPhase = 'placement-selected';
         this._updateHUD('placement-selected');
+        // Re-show the rotation indicator immediately (Issue 4).
+        // Without this, the indicator stays hidden until the user clicks
+        // the tile to rotate it, requiring an extra click.
+        updateRotationIndicator();
         // setIsConfirmed(false) is already called inside hideMeeplePlacements()
       }
     });
@@ -238,6 +243,22 @@ export class GameView {
         });
         this.gameHost.on('chat-message', (payload) => {
           this.chatPanel.addMessage(payload.username, payload.message);
+        });
+        // Issue 7: When a remote client reconnects (after page refresh),
+        // GameHost._handleJoinRequest emits 'player-reconnected' so we can
+        // update the scoreboard connection indicator immediately.
+        this.gameHost.on('player-reconnected', ({ playerIndex }) => {
+          if (playerIndex != null && playerIndex > 0) {
+            this._connectedPlayers.add(playerIndex);
+            // Also update _connToPlayerIdx — we find the connection by playerIndex
+            // since the new conn.peer differs from the old one.
+            const hostPM = this.peerManager;
+            const entry = hostPM.connectedPlayers?.find(p => p.playerIndex === playerIndex);
+            if (entry) {
+              this._connToPlayerIdx.set(entry.conn.peer, playerIndex);
+            }
+            this._updateScoreboard();
+          }
         });
       } else {
         console.log('[GameView] Creating GameClient for P2P client, playerIndex:', this.playerIndex);
@@ -694,9 +715,9 @@ export class GameView {
     if (this._confirmPhase === 'placement-selected' || this._confirmPhase === 'confirmed') {
       this._confirmPhase = '';
       this._pendingPlacement = null;
-      // Snap the tile back to the corner and re-show it in the default
-      // (placement-awaiting) state.
-      resetActiveTile(this.dom.svg, false);
+      // Animate the tile back to the corner with both position and scale
+      // transitions (Issue 2), then re-show it in the default state.
+      resetActiveTile(this.dom.svg, true);
       this._showActiveTileIfNeeded();
     }
   }

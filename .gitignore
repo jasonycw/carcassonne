@@ -38,3 +38,6 @@ gh-pages-verify-*.png
 gh-pages-*.png
 .antigravitycli/
 .playwright-mcp/
+
+# Baseline checkout artifact
+original_962f33ee/
