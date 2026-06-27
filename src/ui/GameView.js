@@ -28,7 +28,8 @@ import { placeTile, placeTowerPiece, captureMeeple, skipTowerStep, skipCapture }
 import { getDetailedScores } from '../game/Scoring.js';
 import { GameHost } from '../network/GameHost.js';
 import { GameClient } from '../network/GameClient.js';
-import { saveGame, removeGame } from '../network/StateSync.js';
+import { ClientPeerManager } from '../network/PeerManager.js';
+import { saveGame, removeGame, loadP2pInfo, saveP2pInfo } from '../network/StateSync.js';
 import { renderScoreboard, getColorHex, escapeHtml } from '../rendering/ScoreBoard.js';
 import { navigate } from './Router.js';
 import { ChatPanel } from './ChatPanel.js';
@@ -90,8 +91,48 @@ const GAME_HTML = `
       position: absolute; top: 0; left: 0; right: 0; z-index: 50;
       display: none; pointer-events: auto;
     "></div>
+
+    <!-- Reconnection overlay (hidden by default) -->
+    <div id="game-reconnect-overlay" style="
+      position: absolute; inset: 0; z-index: 60;
+      display: none; pointer-events: auto;
+      background: rgba(0,0,0,0.75);
+      align-items: center; justify-content: center;
+      flex-direction: column; gap: 12px;
+    ">
+      <div style="
+        background: #1a1a2e; border: 1px solid #555; border-radius: 12px;
+        padding: 24px 36px; text-align: center;
+        font-family: 'Segoe UI', sans-serif;
+      ">
+        <div style="color:#ff6b6b; font-size:1.1rem; font-weight:bold; margin-bottom:8px;">
+          Host disconnected
+        </div>
+        <div style="color:#aaa; font-size:0.85rem;">
+          Reconnecting to host...
+        </div>
+        <div id="reconnect-spinner" style="
+          margin:12px auto 0; width: 24px; height: 24px;
+          border: 3px solid #333; border-top-color: #66bb6a;
+          border-radius: 50%; animation: reconnect-spin 0.8s linear infinite;
+        "></div>
+        <div id="reconnect-failed" style="display:none; margin-top:12px;">
+          <div style="color:#aaa; font-size:0.85rem; margin-bottom:8px;">
+            Could not reconnect to host.
+          </div>
+          <button id="reconnect-lobby-btn" style="
+            background: rgba(255,255,255,0.15); border: 1px solid #666;
+            color: #eee; padding: 8px 20px; border-radius: 6px;
+            cursor: pointer; font-size:0.85rem;
+          ">Return to Lobby</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
+<style>
+@keyframes reconnect-spin { to { transform: rotate(360deg); } }
+</style>
 `;
 
 // ---------------------------------------------------------------------------
@@ -125,6 +166,9 @@ export class GameView {
     this.settingsPanel = null;
     this.gameHost = null;
     this.gameClient = null;
+    /** @type {{ playerName: string, roomCode: string, preferredIndex: number }|null} */
+    this._reconnectInfo = null;
+    this._reconnecting = false;
   }
 
   mount(container) {
@@ -140,7 +184,16 @@ export class GameView {
       hud: container.querySelector('#game-hud'),
       meepleTypes: container.querySelector('#hud-meeple-types'),
       confirm: container.querySelector('#hud-confirm'),
+      reconnectOverlay: container.querySelector('#game-reconnect-overlay'),
+      reconnectFailed: container.querySelector('#reconnect-failed'),
+      reconnectLobbyBtn: container.querySelector('#reconnect-lobby-btn'),
     };
+    // Wire up the reconnect-overlay "Return to Lobby" button.
+    if (this.dom.reconnectLobbyBtn) {
+      this.dom.reconnectLobbyBtn.addEventListener('click', () => {
+        navigate('/');
+      });
+    }
 
     this._bindEvents();
 
@@ -214,6 +267,8 @@ export class GameView {
             return p.playerIndex;
           }) : []
         );
+        // The host (player 0) is always connected to themselves.
+        this._connectedPlayers.add(0);
         hostPM.on('peer-connected', (conn) => {
           const entry = hostPM.connectedPlayers?.find(p => p.conn === conn);
           if (entry) {
@@ -268,38 +323,23 @@ export class GameView {
         // green (connected) dots for all participants.
         this._connectedPlayers = new Set(this.gamestate.players.map((_, i) => i));
         this.gameClient = new GameClient(this.peerManager, this.gamestate);
-        this.gameClient.on('state-update', () => {
-          console.log('[GameView] Client state update, re-rendering');
-          this._renderBoard();
-          this._updateTurnIndicator();
-          this._showActiveTileIfNeeded();
-          this._pendingPlacement = null;
-          this._confirmPhase = '';
+        this._registerClientGameHandlers();
+
+        // Store reconnection info for host-disconnect recovery (Issues 2/3).
+        const p2pInfo = loadP2pInfo();
+        this._reconnectInfo = {
+          playerName: localStorage.getItem('carcassonne_player_name') || 'Player',
+          roomCode: p2pInfo ? p2pInfo.room : null,
+          preferredIndex: this.playerIndex,
+        };
+
+        // Detect host disconnect and attempt reconnection.
+        this._reconnecting = false;
+        this.peerManager.on('peer-disconnected', () => {
+          this._handleHostDisconnect();
         });
-        this.gameClient.on('game-over', () => {
-          console.log('[GameView] Client game over');
-          this._showGameOver();
-        });
-        this.gameClient.on('chat-message', (payload) => {
-          this.chatPanel.addMessage(payload.username, payload.message);
-        });
-        this.gameClient.on('move-rejected', () => {
-          console.log('[GameView] Move rejected by host');
-          // _showActiveTileIfNeeded nulls _pendingPlacement, so save it first.
-          const pending = this._pendingPlacement;
-          this._renderBoard();
-          this._updateTurnIndicator();
-          this._showActiveTileIfNeeded();
-          if (pending) {
-            // Restore tile to the previously selected board position.
-            this._showActiveTileAt(pending.x, pending.y, pending.rotation);
-            // Restore the phase so the user can retry immediately.
-            this._confirmPhase = 'confirmed';
-            this._updateHUD('confirmed');
-            showMeeplePlacements();
-          }
-          this._pendingPlacement = null;
-          this._showStatusMessage('Placement rejected by host. Try a different position.');
+        this.peerManager.on('peer-error', () => {
+          this._handleHostDisconnect();
         });
       }
     }
@@ -484,6 +524,146 @@ export class GameView {
         this._connectedPlayers,
       );
     }
+  }
+
+  // ── Host-disconnect detection & reconnection (Issues 2/3) ─────────────
+
+  /**
+   * Called when a P2P client detects that the host has disconnected.
+   * Marks the host offline on the scoreboard and starts reconnection
+   * attempts.
+   */
+  _handleHostDisconnect() {
+    if (this.isHost || this.isLocalGame) return;
+    if (this._reconnecting) return;
+    this._reconnecting = true;
+
+    console.log('[GameView] Host disconnected, attempting reconnection');
+    this._connectedPlayers.delete(0);
+    this._updateScoreboard();
+    this._showReconnectOverlay(true);
+
+    this._attemptReconnect();
+  }
+
+  /**
+   * Show or hide the reconnection overlay.
+   * @param {boolean} show
+   */
+  _showReconnectOverlay(show) {
+    const overlay = this.dom && this.dom.reconnectOverlay;
+    if (!overlay) return;
+    overlay.style.display = show ? 'flex' : 'none';
+    if (this.dom.reconnectFailed) {
+      this.dom.reconnectFailed.style.display = 'none';
+    }
+  }
+
+  /**
+   * Attempt to reconnect to the host after a disconnect.
+   * Retries up to 10 times with a 3-second interval.
+   */
+  async _attemptReconnect() {
+    if (!this._reconnectInfo || !this._reconnectInfo.roomCode) {
+      console.warn('[GameView] No reconnection info available');
+      this._showReconnectFailed();
+      return;
+    }
+
+    const { playerName, roomCode, preferredIndex } = this._reconnectInfo;
+    const maxAttempts = 10;
+    const retryDelay = 3000;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (!this._reconnecting) return; // cancelled
+
+      console.log(`[GameView] Reconnection attempt ${attempt}/${maxAttempts}`);
+      try {
+        // Destroy old client/peer.
+        if (this.gameClient) this.gameClient.destroy();
+        if (this.peerManager) {
+          this.peerManager.removeAllListeners();
+          this.peerManager.destroy();
+        }
+
+        // Create fresh ClientPeerManager and connect to host.
+        const newPM = new ClientPeerManager(roomCode);
+        await newPM.connectToHost(playerName, preferredIndex);
+
+        // Success — swap in the new peer and GameClient.
+        this.peerManager = newPM;
+        this.gameClient = new GameClient(newPM, this.gamestate);
+        this._registerClientGameHandlers();
+
+        this._reconnecting = false;
+        this._connectedPlayers.add(0);
+        this._updateScoreboard();
+        this._showReconnectOverlay(false);
+        console.log('[GameView] Reconnected to host successfully');
+        return;
+      } catch (err) {
+        console.warn(`[GameView] Reconnect attempt ${attempt} failed:`, err.message);
+        if (attempt < maxAttempts) {
+          await new Promise(r => setTimeout(r, retryDelay));
+        }
+      }
+    }
+
+    // All attempts failed.
+    this._showReconnectFailed();
+  }
+
+  /**
+   * Show the "Reconnection failed" state in the overlay with a
+   * "Return to Lobby" button.
+   */
+  _showReconnectFailed() {
+    this._reconnecting = false;
+    if (this.dom && this.dom.reconnectFailed) {
+      this.dom.reconnectFailed.style.display = 'block';
+    }
+    if (this.dom && this.dom.reconnectOverlay) {
+      const spinner = this.dom.reconnectOverlay.querySelector('#reconnect-spinner');
+      if (spinner) spinner.style.display = 'none';
+    }
+  }
+
+  /**
+   * Register the standard GameClient event handlers.  Extracted so the
+   * same listeners can be re-attached after reconnection.
+   */
+  _registerClientGameHandlers() {
+    if (!this.gameClient) return;
+    this.gameClient.on('state-update', () => {
+      console.log('[GameView] Client state update, re-rendering');
+      this._renderBoard();
+      this._updateTurnIndicator();
+      this._showActiveTileIfNeeded();
+      this._pendingPlacement = null;
+      this._confirmPhase = '';
+    });
+    this.gameClient.on('game-over', () => {
+      console.log('[GameView] Client game over');
+      this._showGameOver();
+    });
+    this.gameClient.on('chat-message', (payload) => {
+      this.chatPanel.addMessage(payload.username, payload.message);
+    });
+    this.gameClient.on('move-rejected', () => {
+      console.log('[GameView] Move rejected by host');
+      const pending = this._pendingPlacement;
+      this._renderBoard();
+      this._updateTurnIndicator();
+      this._showActiveTileIfNeeded();
+      if (pending) {
+        this._showActiveTileAt(pending.x, pending.y, pending.rotation);
+        this._confirmPhase = 'confirmed';
+        this._updateHUD('confirmed');
+        showMeeplePlacements();
+      }
+      this._pendingPlacement = null;
+      this._showStatusMessage('Placement rejected by host. Try a different position.');
+    });
   }
 
   /** Get the set of player indices controlled by remote P2P clients (host only). */
