@@ -4,5 +4,6 @@ Base on testing with latest version on `https://jasonycw.github.io/carcassonne/`
 - For host of the game, when refresh the page, should go back to the orignal room base on the URL `https://jasonycw.github.io/carcassonne/?room=XXX#/game` with correct game state, if the remote player reconnect and players turn, should not allow the host to place tile, right now it's reconnect and become it's own offline game for a while.
 - When the host is in an online game and then change to page from `https://jasonycw.github.io/carcassonne/?room=XXXX#/game` to `https://jasonycw.github.io/carcassonne/`, should stay at home page instead of rejoining the game. Rejoin must be flow the room code
 - When the joiner refresh the page mid-game, should only rejoin when the URL has the room code or manually input the room code. Now if joiner joint a game, there is no way for the player to quite the game by going to `https://jasonycw.github.io/carcassonne/` and create a new game. This also mean when the game is started, all joint players including the host should have the URL like `?room=XXX`. And the join must match the room code, not just blindly join the last online game.
+- The meta tags can still get some update to be better shareable on Twitter, Google, Telegram, etc
 
 * THIS FILE MUST NOT BE CHANGED BY LLM, ONLY ALLOWED TO BE UPDATED BY HUMAN AFTER VERIFICATION *
