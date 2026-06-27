@@ -44,14 +44,20 @@ register('/game', (params) => {
     return null;
   }
 
-  // Issue 5: If we recovered from localStorage (no params.localState) and
-  // saved P2P metadata indicates this was a P2P client (not host), redirect
-  // to the lobby with the room code so the existing reconnection flow
-  // (msg:game_state_sync) can re-establish the PeerJS connection.
+  // If we recovered from localStorage (no params.localState) and saved P2P
+  // metadata exists, redirect to the lobby so the reconnection flow can
+  // re-establish the PeerJS connection:
+  //   - Host (playerIndex === 0) → LobbyView recreates the room (Issue 5)
+  //   - Client (playerIndex > 0)  → LobbyView auto-joins the room (Issue 6)
   // NOTE: Use setTimeout to avoid re-entering resolve() while it's running.
   if (!params.localState) {
     const p2pInfo = loadP2pInfo();
-    if (p2pInfo && p2pInfo.room && p2pInfo.playerIndex > 0) {
+    if (p2pInfo && p2pInfo.room) {
+      if (p2pInfo.playerIndex === 0) {
+        console.log('[main] Host P2P refresh detected, redirecting to lobby for recovery');
+        setTimeout(() => navigate('/'), 0);
+        return null;
+      }
       console.log('[main] P2P client refresh detected, redirecting to room:', p2pInfo.room);
       setTimeout(() => navigate('/?room=' + encodeURIComponent(p2pInfo.room)), 0);
       return null;

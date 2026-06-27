@@ -24,7 +24,7 @@ import {
 } from '../network/Protocol.js';
 import { createGameState, initializeNewGame } from '../game/GameLogic.js';
 import { ALL_TILES as TILE_DATA } from '../game/TileData.js';
-import { hasRecoverableGame, getSavedGameInfo, loadGame, removeGame, loadP2pInfo, saveP2pInfo } from '../network/StateSync.js';
+import { hasRecoverableGame, getSavedGameInfo, loadGame, removeGame, loadP2pInfo, saveP2pInfo, removeP2pInfo } from '../network/StateSync.js';
 import { img } from '../utils/AssetPaths.js';
 
 // ---------------------------------------------------------------------------
@@ -82,9 +82,8 @@ const LOBBY_HTML = `
         <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
           <input type="checkbox" value="traders-and-builders" /> Traders &amp; Builders
         </label>
-        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
-          <input type="checkbox" value="the-tower" /> The Tower
-        </label>
+        <!-- Tower expansion removed: disabled in the original baseline commit
+             962f33ee and its logic was too complex to re-verify. -->
       </div>
 
       <div style="display: flex; gap: 12px;">
@@ -232,15 +231,21 @@ export class LobbyView extends EventEmitter {
 
     // ── P2P reconnection detection ───────────────────────────────────
     // If no room code was found in the URL, check localStorage for saved
-    // P2P metadata (Issue 6).  This handles the case where a connected
-    // client refreshes the page — we auto-reconnect to the host using the
-    // saved room code.
+    // P2P metadata (Issue 5/6).  This handles page refresh for both the
+    // host (playerIndex 0 → recreate the room) and clients (playerIndex > 0
+    // → join the existing room via _joinGame).
     {
       const p2pInfo = loadP2pInfo();
       if (p2pInfo && p2pInfo.room) {
+        if (p2pInfo.playerIndex === 0) {
+          // Host refresh — recreate the room and transition to game.
+          console.log('[LobbyView] Detected host P2P recovery, room:', p2pInfo.room);
+          this._recoverHostGame(p2pInfo.room);
+          return;
+        }
+        // Client refresh — auto-join the existing room (Issue 6).
         console.log('[LobbyView] Found saved P2P info, reconnecting to room:', p2pInfo.room);
         this.dom.roomCodeInput.value = p2pInfo.room;
-        // Pass saved playerIndex so the host can reassign the correct slot.
         this._joinGame(p2pInfo.playerIndex);
         return;
       }
@@ -842,6 +847,74 @@ export class LobbyView extends EventEmitter {
     }
   }
 
+  // ── Host reconnection (Issue 5) ────────────────────────────────────
+
+  /**
+   * Recreate the PeerJS room after the host refreshed the page,
+   * then transition directly to the game view with the saved state.
+   */
+  async _recoverHostGame(savedRoomCode) {
+    const state = loadGame();
+    if (!state) {
+      this._setStatus('No saved game found');
+      return;
+    }
+
+    // Consume the old P2P info — _transitionToGame will re-save it.
+    removeP2pInfo();
+
+    this.isHost = true;
+    this.roomCode = savedRoomCode;
+    this.hostName = 'Host';
+
+    // Hide action buttons (same as _createGame does).
+    const createBtn = this.dom.createBtn;
+    const joinBtn = this.dom.joinBtn;
+    const joinForm = this.dom.joinForm;
+    const pcSelect = this.dom.playerCount;
+    const expansionContainer = this.container.querySelector('#lobby-forms div:nth-child(2)');
+    if (createBtn) createBtn.style.display = 'none';
+    if (joinBtn) joinBtn.style.display = 'none';
+    if (joinForm) joinForm.style.display = 'none';
+    if (pcSelect) pcSelect.style.display = 'none';
+    if (expansionContainer) expansionContainer.style.display = 'none';
+
+    this._setStatus('Recreating room...');
+
+    try {
+      this.peerManager = new HostPeerManager(
+        this.roomCode,
+        { expansions: state.expansions || ['base-game'] },
+        'Host',
+      );
+      await this.peerManager.init();
+
+      // Show room code so the host can re-share the invite link.
+      this.dom.roomCode.textContent = this.roomCode;
+      this.dom.roomDisplay.style.display = 'block';
+
+      this._setStatus('Room recreated. Transitioning to game...');
+
+      // Brief delay so the room code is visible, then transition to the
+      // game view with the saved state.  GameHost will handle incoming
+      // JOIN_REQUEST messages from reconnecting clients and send them
+      // GAME_STATE_SYNC.
+      setTimeout(() => {
+        this._transitionToGame({
+          isHost: true,
+          peerManager: this.peerManager,
+          isLocalGame: false,
+          localState: state,
+          playerIndex: 0,
+          localPlayers: state.players,
+        });
+      }, 1000);
+    } catch (err) {
+      console.error('[LobbyView] Failed to recreate room:', err);
+      this._setStatus('Failed to recreate room: ' + err.message);
+    }
+  }
+
   // ── Lobby management ────────────────────────────────────────────────
 
   _updatePlayerList() {
@@ -1066,9 +1139,10 @@ export class LobbyView extends EventEmitter {
     // close all WebRTC connections before GameHost/GameClient can use them.
     config.transferPeerManager = this.peerManager;
     this.peerManager = null;
-    // Issue 5: Save P2P metadata so a page refresh can reconnect the client.
-    if (this.roomCode && config.isLocalGame === false && config.isHost === false) {
-      saveP2pInfo({ room: this.roomCode, playerIndex: config.playerIndex });
+    // Issue 5/6: Save P2P metadata so a page refresh can reconnect.
+    // Host gets playerIndex 0, clients get their assigned index.
+    if (this.roomCode && config.isLocalGame === false) {
+      saveP2pInfo({ room: this.roomCode, playerIndex: config.isHost ? 0 : config.playerIndex });
     }
     this.container.innerHTML = '';
     this.emit('start-game', config);
