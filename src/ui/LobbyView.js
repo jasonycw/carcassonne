@@ -184,6 +184,35 @@ export class LobbyView extends EventEmitter {
     const saved = localStorage.getItem('carcassonne_player_name');
     if (saved) this.dom.playerName.value = saved;
 
+    // ── P2P reconnection detection (runs BEFORE room code detection) ──
+    // Host recovery (playerIndex === 0) must preempt room code auto-join
+    // so the host doesn't try to join its own room as a client when the URL
+    // has ?room=XXXX after a refresh.
+    {
+      const p2pInfo = loadP2pInfo();
+      if (p2pInfo && p2pInfo.room) {
+        if (p2pInfo.playerIndex === 0) {
+          // Host refresh — recreate the room and transition to game.
+          console.log('[LobbyView] Detected host P2P recovery, room:', p2pInfo.room);
+          this._recoverHostGame(p2pInfo.room);
+          return;
+        }
+        // Client refresh — only rejoin if URL has ?room=XXX.
+        // If user went to the home page manually without room code,
+        // clear P2P info so they can start a fresh game.
+        const hasRoomInUrl = window.location.search.includes('room=');
+        if (hasRoomInUrl) {
+          console.log('[LobbyView] Found saved P2P info, reconnecting to room:', p2pInfo.room);
+          this.dom.roomCodeInput.value = p2pInfo.room;
+          this._joinGame(p2pInfo.playerIndex);
+          return;
+        }
+        // No room in URL — user navigated here to quit. Clear saved info.
+        console.log('[LobbyView] Clearing stale P2P info (no room in URL)');
+        removeP2pInfo();
+      }
+    }
+
     // ── Room code detection (priority order) ────────────────────────
     // 1. Router params (parsed from hash or window.location.search by Router.js).
     // 2. Direct window.location.search parsing.
@@ -227,38 +256,6 @@ export class LobbyView extends EventEmitter {
       console.log('[LobbyView] Auto-joining room:', roomCode.toUpperCase());
       this._joinGame();
       return; // _joinGame continues from here
-    }
-
-    // ── P2P reconnection detection ───────────────────────────────────
-    // If no room code was found in the URL, check localStorage for saved
-    // P2P metadata (Issue 5/6).  This handles page refresh for:
-    //   - Host (playerIndex 0): always recreate the room from saved state.
-    //   - Client (playerIndex > 0): only rejoin if the URL has ?room=XXX.
-    //     If the user navigated to the home page manually (no ?room=XXX),
-    //     clear the saved info so they can start a fresh game.
-    {
-      const p2pInfo = loadP2pInfo();
-      if (p2pInfo && p2pInfo.room) {
-        if (p2pInfo.playerIndex === 0) {
-          // Host refresh — recreate the room and transition to game.
-          console.log('[LobbyView] Detected host P2P recovery, room:', p2pInfo.room);
-          this._recoverHostGame(p2pInfo.room);
-          return;
-        }
-        // Client refresh — only rejoin if URL has ?room=XXX.
-        // If user went to the home page manually without room code,
-        // clear P2P info so they can start a fresh game.
-        const hasRoomInUrl = window.location.search.includes('room=');
-        if (hasRoomInUrl) {
-          console.log('[LobbyView] Found saved P2P info, reconnecting to room:', p2pInfo.room);
-          this.dom.roomCodeInput.value = p2pInfo.room;
-          this._joinGame(p2pInfo.playerIndex);
-          return;
-        }
-        // No room in URL — user navigated here to quit. Clear saved info.
-        console.log('[LobbyView] Clearing stale P2P info (no room in URL)');
-        removeP2pInfo();
-      }
     }
 
     this._setStatus('Ready');
