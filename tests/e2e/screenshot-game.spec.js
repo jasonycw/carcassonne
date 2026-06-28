@@ -9,7 +9,7 @@
  * Screenshots captured:
  *  01-lobby.png              — Lobby with 4 player slots and all expansions
  *  02-game-started.png        — Board right after game start
- *  03-mid-game.png            — Board mid-game (20+ tiles, meeples, scoring)
+ *  03-mid-game.png            — Mid-game with rotation indicator visible on pinned tile
  *  04-game-over.png           — Final board with game-over banner and score breakdown
  */
 
@@ -144,9 +144,10 @@ test.describe('Screenshot Game', () => {
 
     // ── 3. Place tiles ────────────────────────────────────────────────
     // With 4 players we need ~36 tiles per cycle to show everyone's moves.
-    // Take mid-game at tile 20 where more meeples and scoring are visible.
-    // Meeple placement cycles through available outlines so all feature types
-    // (roads, cities, farms, cloisters) get played over the game.
+    // Take mid-game screenshot at a moment when a tile is pinned on the
+    // board with the rotation indicator visible (Issue 1).
+    // Meeple placement cycles through available outlines so all feature
+    // types (roads, cities, farms, cloisters) get played over the game.
     let totalPlaced = 0;
     let midGameDone = false;
     let gameOver = false;
@@ -154,20 +155,23 @@ test.describe('Screenshot Game', () => {
     const MAX_TILES = 200;
 
     while (!gameOver && totalPlaced < MAX_TILES) {
-      const placed = await tryPlaceTile(page);
+      const placed = await tryPlaceTile(page, {
+        onTilePinned: midGameDone ? null : async (p) => {
+          // Take mid-game screenshot when a tile is pinned on the board
+          // with the rotation indicator visible.  This captures the
+          // rotation arrow as part of the mid-game screenshot (Issue 1).
+          if (totalPlaced >= 18) {
+            await p.waitForTimeout(300);
+            await p.screenshot({ path: 'screenshots/03-mid-game.png', fullPage: true });
+            console.log('✓ Screenshot 3: mid-game (with rotation indicator)');
+            midGameDone = true;
+          }
+        },
+      });
 
       if (placed) {
         totalPlaced++;
         if (totalPlaced % 10 === 0) console.log(`Placed ${totalPlaced} tiles`);
-
-        // Take mid-game screenshot when there's enough on the board
-        // to show meeples placed and some scoring activity.
-        if (!midGameDone && totalPlaced >= 20) {
-          await page.waitForTimeout(500);
-          await page.screenshot({ path: 'screenshots/03-mid-game.png', fullPage: true });
-          console.log('✓ Screenshot 3: mid-game');
-          midGameDone = true;
-        }
       } else {
         // No move made — likely game over or between turns.
         // Retry banner detection with longer total wait in case
