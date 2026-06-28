@@ -1,7 +1,6 @@
 Base on testing with latest version on `https://jasonycw.github.io/carcassonne/`, there are at list and not limited to the following issues that cause the game not fully working.
-- When the host rejoin the game, the joiner take way too long to reconnect (takes like 30s), the retry connect back to host frequency must be increase to make it way more responsive to join back the host immediate when the host go back online
+- When the host refresh and rejoin the game, the joiners take way too long to reconnect (takes like 30s), the retry connect back to host frequency must be increase to make it way more responsive to join back the host immediate when the host go back online
 - When the host refresh the game 2nd time, the joiner failed to be notified and the host doesn't pick up the host.
-- For host of the game, when refresh the page, should go back to the orignal room base on the URL `https://jasonycw.github.io/carcassonne/?room=XXX#/game` with correct game state, if the remote player reconnect and players turn, should not allow the host to place tile, right now it's reconnect and become it's own offline game for a while.
 - When the joiner refresh the page mid-game, should only rejoin following the URL's the room code or manually input the room code. Now if joiner joint a game, there is no way for the player to join another game by going to `https://jasonycw.github.io/carcassonne/?room=YYYY`. The joiner must match the URL's room code, not just blindly join the last online game.
 
 * THIS FILE MUST NOT BE CHANGED BY LLM, ONLY ALLOWED TO BE UPDATED BY HUMAN AFTER VERIFICATION *
