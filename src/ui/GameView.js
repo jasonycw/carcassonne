@@ -580,8 +580,10 @@ export class GameView {
     }
 
     const { playerName, roomCode, preferredIndex } = this._reconnectInfo;
-    const maxAttempts = 30;
-    const retryDelay = 1000;
+    // Issue 1: Shorter retry interval (500ms → 12s max at 24 attempts)
+    // so the joiner snaps back as soon as the host comes online.
+    const maxAttempts = 24;
+    const retryDelay = 500;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (!this._reconnecting) return; // cancelled
