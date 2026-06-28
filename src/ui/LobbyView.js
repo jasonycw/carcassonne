@@ -208,11 +208,19 @@ export class LobbyView extends EventEmitter {
         // Client refresh — only rejoin if URL has ?room=XXX.
         // If user went to the home page manually without room code,
         // clear P2P info so they can start a fresh game.
-        const hasRoomInUrl = window.location.search.includes('room=');
-        if (hasRoomInUrl) {
-          console.log('[LobbyView] Found saved P2P info, reconnecting to room:', p2pInfo.room);
-          this.dom.roomCodeInput.value = p2pInfo.room;
-          this._joinGame(p2pInfo.playerIndex);
+        // Issue 3: Use the URL room code, NOT the saved P2P info room,
+        // so the joiner can join a different game by changing the URL.
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlRoom = urlParams.get('room');
+        if (urlRoom) {
+          // Only pass saved p2pInfo.playerIndex as preferredIndex if the
+          // room code matches (page refresh within the same game).
+          // When the user navigates to a different room code URL, treat
+          // it as a fresh join (no preferredIndex).
+          const preferredIndex = (p2pInfo.room === urlRoom) ? p2pInfo.playerIndex : undefined;
+          console.log('[LobbyView] Reconnecting via URL room:', urlRoom, 'preferredIndex:', preferredIndex);
+          this.dom.roomCodeInput.value = urlRoom.toUpperCase();
+          this._joinGame(preferredIndex);
           return;
         }
         // No room in URL — user navigated here to quit. Clear saved info.
