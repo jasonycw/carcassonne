@@ -653,11 +653,15 @@ export class ClientPeerManager extends PeerManager {
 
       this.on('message', onJoinResult);
 
-      // Timeout (30s — TURN relay candidates can be slow to gather).
+      // Timeout — reduced from 30s to 8s for fast reconnection retries.
+      // Initial connections already succeeded once, so the ICE candidates
+      // and signaling round-trip are well within 8s.  In reconnection the
+      // host's peer may not exist yet, so we fail fast and let the retry
+      // loop in _attemptReconnect try again immediately.
       setTimeout(() => {
         this.off('message', onJoinResult);
         reject(new Error('Connection timed out'));
-      }, 30000);
+      }, 8000);
     });
   }
 
