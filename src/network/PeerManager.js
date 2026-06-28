@@ -365,8 +365,12 @@ export class PeerManager extends EventEmitter {
         this.emit('message', message, conn);
         // Also emit a typed event for convenience.
         this.emit(`msg:${message.type}`, message.payload, conn);
-        // Track PING on the host connection for loss detection.
-        if (message.type === MessageType.PING && conn === this.hostConnection) {
+        // Track ANY message from the host for loss detection.
+        // Resets the PING watchdog — if the host is sending game state
+        // updates, tiles, or heartbeats, it's clearly alive.  This also
+        // prevents false positives during large state syncs that could
+        // momentarily delay the dedicated PING heartbeat.
+        if (conn === this.hostConnection) {
           this._lastPingTime = Date.now();
         }
       } catch (err) {

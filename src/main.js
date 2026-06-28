@@ -64,7 +64,7 @@ register('/game', (params) => {
         return null;
       }
       console.log('[main] P2P client refresh detected, redirecting to room:', p2pInfo.room);
-      setTimeout(() => navigate('/?room=' + encodeURIComponent(p2pInfo.room)), 0);
+      setTimeout(() => navigate('/', { room: p2pInfo.room }), 0);
       return null;
     }
   }
