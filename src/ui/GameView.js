@@ -603,6 +603,11 @@ export class GameView {
         this.peerManager = newPM;
         this.gameClient = new GameClient(newPM, this.gamestate);
         this._registerClientGameHandlers();
+        // Issue 2: Re-attach disconnect listeners on the new PeerManager so
+        // that the joiner can automatically reconnect on subsequent host
+        // disconnects (e.g. a 2nd host refresh).
+        newPM.on('peer-disconnected', () => { this._handleHostDisconnect(); });
+        newPM.on('peer-error', () => { this._handleHostDisconnect(); });
 
         this._reconnecting = false;
         this._connectedPlayers.add(0);
