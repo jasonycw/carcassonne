@@ -192,10 +192,18 @@ export class LobbyView extends EventEmitter {
       const p2pInfo = loadP2pInfo();
       if (p2pInfo && p2pInfo.room) {
         if (p2pInfo.playerIndex === 0) {
-          // Host refresh — recreate the room and transition to game.
-          console.log('[LobbyView] Detected host P2P recovery, room:', p2pInfo.room);
-          this._recoverHostGame(p2pInfo.room);
-          return;
+          // Host refresh — only recover when the URL still has a room
+          // code (page refresh).  If the host navigated to the home page
+          // manually (no ?room= in URL), clear P2P info so they see the
+          // fresh lobby (Issue 4).
+          const hasRoomInUrl = window.location.search.includes('room=');
+          if (hasRoomInUrl) {
+            console.log('[LobbyView] Detected host P2P recovery, room:', p2pInfo.room);
+            this._recoverHostGame(p2pInfo.room);
+            return;
+          }
+          console.log('[LobbyView] Host navigated to lobby; clearing P2P info');
+          removeP2pInfo();
         }
         // Client refresh — only rejoin if URL has ?room=XXX.
         // If user went to the home page manually without room code,
@@ -1119,6 +1127,15 @@ export class LobbyView extends EventEmitter {
       } else {
         // 'unfilled' slots become local hot-seat players.
         state.players[i].user = { username: slot.name || `Player ${i + 1}`, _id: `local-player-${i}` };
+      }
+    }
+
+    // Save which player indices were assigned to remote P2P joiners
+    // so the host knows who to wait for after a page refresh (Issue 3).
+    state.remotePlayerIndices = [];
+    for (let i = 1; i < playerCount; i++) {
+      if (slots[i].type === 'remote') {
+        state.remotePlayerIndices.push(i);
       }
     }
 

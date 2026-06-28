@@ -435,9 +435,13 @@ export class GameView {
     } else if (this.isHost && !this.isLocalGame && this.gamestate) {
       // P2P host mode — only sync when the current player slot is NOT
       // controlled by a remote client (i.e. it's a "missing slot" the host
-      // plays for locally).
+      // plays for locally).  Include saved remote player indices from the
+      // game state so the host waits for reconnecting P2P joiners after
+      // a page refresh (Issue 3).
       const remotePlayerIndices = this._getRemotePlayerIndices();
-      if (!remotePlayerIndices.includes(this.gamestate.currentPlayerIndex)) {
+      const savedRemote = this.gamestate.remotePlayerIndices || [];
+      const allRemote = [...new Set([...remotePlayerIndices, ...savedRemote])];
+      if (!allRemote.includes(this.gamestate.currentPlayerIndex)) {
         this.playerIndex = this.gamestate.currentPlayerIndex;
       }
     }
@@ -476,10 +480,14 @@ export class GameView {
     // In P2P host mode, if the current player slot is NOT controlled by a
     // remote client (i.e. it's a "missing slot"), the host can play for them
     // just like hot-seat mode. Sync playerIndex so the host sees valid
-    // placements and the active tile UI.
+    // placements and the active tile UI.  Include saved remote player
+    // indices from the game state so the host waits for reconnecting P2P
+    // joiners after a page refresh (Issue 3).
     if (this.isHost && !this.isLocalGame && this.gamestate) {
       const remotePlayerIndices = this._getRemotePlayerIndices();
-      if (!remotePlayerIndices.includes(this.gamestate.currentPlayerIndex)) {
+      const savedRemote = this.gamestate.remotePlayerIndices || [];
+      const allRemote = [...new Set([...remotePlayerIndices, ...savedRemote])];
+      if (!allRemote.includes(this.gamestate.currentPlayerIndex)) {
         this.playerIndex = this.gamestate.currentPlayerIndex;
       }
     }
@@ -561,18 +569,19 @@ export class GameView {
 
   /**
    * Attempt to reconnect to the host after a disconnect.
-   * Retries up to 10 times with a 3-second interval.
+   * Retries up to 30 times with a 1-second interval for a snappy
+   * reconnection experience (Issue 2).
    */
   async _attemptReconnect() {
     if (!this._reconnectInfo || !this._reconnectInfo.roomCode) {
-      console.warn('[GameView] No reconnection info available');
+      console.warn('[GameView] No reconnection information available');
       this._showReconnectFailed();
       return;
     }
 
     const { playerName, roomCode, preferredIndex } = this._reconnectInfo;
-    const maxAttempts = 10;
-    const retryDelay = 3000;
+    const maxAttempts = 30;
+    const retryDelay = 1000;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (!this._reconnecting) return; // cancelled
