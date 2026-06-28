@@ -569,8 +569,20 @@ export class GameView {
 
   /**
    * Attempt to reconnect to the host after a disconnect.
-   * Retries up to 30 times with a 1-second interval for a snappy
-   * reconnection experience (Issue 2).
+   *
+   * Strategy:
+   *   - Each individual connection attempt has a 2-second deadline.  If the
+   *     host's PeerJS peer isn't available yet, we kill the hanging peer and
+   *     retry — no waiting minutes for a single attempt to time out.
+   *   - Exponential backoff between attempts (500ms → 1s → 2s → … → 30s cap).
+   *     Fast early retries catch a host page-refresh (~2-3s downtime); slower
+   *     later retries avoid hammering PeerJS when the host is truly gone.
+   *   - Total retry window is 15 minutes.  After that the reconnection overlay
+   *     shows a "connection lost" message with a "Return to Lobby" button.
+   *
+   * The connectToHost promise is wired to reject immediately when its peer
+   * is destroyed (via the 'destroyed' event), so the 2s timeout below can
+   * cleanly abort a hanging attempt by calling newPM.destroy().
    */
   async _attemptReconnect() {
     if (!this._reconnectInfo || !this._reconnectInfo.roomCode) {
@@ -580,26 +592,40 @@ export class GameView {
     }
 
     const { playerName, roomCode, preferredIndex } = this._reconnectInfo;
-    // Issue 1: Shorter retry interval (500ms → 12s max at 24 attempts)
-    // so the joiner snaps back as soon as the host comes online.
-    const maxAttempts = 24;
-    const retryDelay = 500;
+    const ATTEMPT_MS = 2000;          // max wall-clock per individual attempt
+    const BACKOFF_START = 500;        // first inter-attempt delay (ms)
+    const BACKOFF_MAX = 30000;        // cap inter-attempt delay (ms)
+    const TOTAL_WINDOW = 15 * 60 * 1000; // 15 minutes before giving up
+    const startTime = Date.now();
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      if (!this._reconnecting) return; // cancelled
+    for (let attempt = 1; ; attempt++) {
+      if (!this._reconnecting) return;
+      if (Date.now() - startTime >= TOTAL_WINDOW) {
+        console.warn('[GameView] Reconnection window expired (15 min)');
+        break;
+      }
 
-      console.log(`[GameView] Reconnection attempt ${attempt}/${maxAttempts}`);
+      // Destroy previous attempt's peer/client.
+      if (this.gameClient) this.gameClient.destroy();
+      if (this.peerManager) {
+        this.peerManager.removeAllListeners();
+        this.peerManager.destroy();
+      }
+
+      const newPM = new ClientPeerManager(roomCode);
+
+      console.log(`[GameView] Reconnect attempt ${attempt}`);
+
+      // Start the connection attempt, but arm a 2-second kill timer.  If the
+      // host's peer isn't reachable by then, newPM.destroy() will fire the
+      // 'destroyed' event, which makes connectToHost reject immediately with
+      // "Connection aborted" — no waiting 15s for the safety timeout.
+      const connectPromise = newPM.connectToHost(playerName, preferredIndex);
+      const killTimer = setTimeout(() => newPM.destroy(), ATTEMPT_MS);
+
       try {
-        // Destroy old client/peer.
-        if (this.gameClient) this.gameClient.destroy();
-        if (this.peerManager) {
-          this.peerManager.removeAllListeners();
-          this.peerManager.destroy();
-        }
-
-        // Create fresh ClientPeerManager and connect to host.
-        const newPM = new ClientPeerManager(roomCode);
-        await newPM.connectToHost(playerName, preferredIndex);
+        await connectPromise;
+        clearTimeout(killTimer); // don't destroy the peer we just connected
 
         // Success — swap in the new peer and GameClient.
         this.peerManager = newPM;
@@ -618,14 +644,16 @@ export class GameView {
         console.log('[GameView] Reconnected to host successfully');
         return;
       } catch (err) {
-        console.warn(`[GameView] Reconnect attempt ${attempt} failed:`, err.message);
-        if (attempt < maxAttempts) {
-          await new Promise(r => setTimeout(r, retryDelay));
+        // Exponential backoff: 500ms, 1s, 2s, 4s, 8s, 16s, 30s (capped).
+        const delay = Math.min(BACKOFF_START * Math.pow(2, attempt - 1), BACKOFF_MAX);
+        if (err.message !== 'Connection aborted') {
+          console.warn(`[GameView] Reconnect attempt ${attempt} failed:`, err.message);
         }
+        await new Promise(r => setTimeout(r, delay));
       }
     }
 
-    // All attempts failed.
+    // All attempts failed within the 15-minute window.
     this._showReconnectFailed();
   }
 
