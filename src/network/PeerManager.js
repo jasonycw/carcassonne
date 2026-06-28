@@ -32,6 +32,7 @@ const PEER_PORT = 443;
 const PEER_PATH = '/';
 const RECONNECT_DELAY = 2000;      // ms between reconnection attempts
 const PING_INTERVAL = 10000;       // ms between heartbeats
+const WATCHDOG_TIMEOUT = PING_INTERVAL * 3; // 30s without PING → assume host lost
 
 // Metered.ca Open Relay Project shared secret (publicly documented).
 // Used to generate HMAC-SHA1 TURN credentials client-side.
@@ -164,6 +165,8 @@ export class PeerManager extends EventEmitter {
     this._pingTimer = null;
     this._reconnectTimer = null;
     this._destroyed = false;
+    this._lastPingTime = 0;
+    this._pingWatchTimer = null;
 
     // If a client, we store the host connection separately.
     this.hostConnection = null;
@@ -298,9 +301,32 @@ export class PeerManager extends EventEmitter {
   }
 
   /** Close the peer and all connections. */
+  _startPingWatch() {
+    this._stopPingWatch();
+    this._lastPingTime = Date.now();
+    this._pingWatchTimer = setInterval(() => {
+      if (!this.hostConnection) {
+        this._stopPingWatch();
+        return;
+      }
+      if (Date.now() - this._lastPingTime > WATCHDOG_TIMEOUT) {
+        console.warn('[PeerManager] Host heartbeat lost — 30s without PING');
+        this.hostConnection.close(); // triggers 'close' → 'peer-disconnected'
+      }
+    }, PING_INTERVAL);
+  }
+
+  _stopPingWatch() {
+    if (this._pingWatchTimer) {
+      clearInterval(this._pingWatchTimer);
+      this._pingWatchTimer = null;
+    }
+  }
+
   destroy() {
     this._destroyed = true;
     this._stopHeartbeat();
+    this._stopPingWatch();
     if (this._reconnectTimer) {
       clearTimeout(this._reconnectTimer);
       this._reconnectTimer = null;
@@ -327,6 +353,10 @@ export class PeerManager extends EventEmitter {
         this.connections.push(conn);
         this.emit('peer-connected', conn);
       }
+      // Start PING watchdog for the host connection.
+      if (conn === this.hostConnection) {
+        this._startPingWatch();
+      }
     });
 
     conn.on('data', (data) => {
@@ -335,6 +365,10 @@ export class PeerManager extends EventEmitter {
         this.emit('message', message, conn);
         // Also emit a typed event for convenience.
         this.emit(`msg:${message.type}`, message.payload, conn);
+        // Track PING on the host connection for loss detection.
+        if (message.type === MessageType.PING && conn === this.hostConnection) {
+          this._lastPingTime = Date.now();
+        }
       } catch (err) {
         console.error('[PeerManager] Failed to deserialize message:', err);
       }
@@ -342,6 +376,11 @@ export class PeerManager extends EventEmitter {
 
     conn.on('close', () => {
       this.connections = this.connections.filter((c) => c !== conn);
+      if (conn === this.hostConnection) {
+        this.hostConnection = null;
+        this.connected = false;
+        this._stopPingWatch();
+      }
       this.emit('peer-disconnected', conn);
     });
 
