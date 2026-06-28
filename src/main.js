@@ -60,7 +60,7 @@ register('/game', (params) => {
     if (p2pInfo && p2pInfo.room) {
       if (p2pInfo.playerIndex === 0) {
         console.log('[main] Host P2P refresh detected, redirecting to lobby for recovery');
-        setTimeout(() => navigate('/'), 0);
+        setTimeout(() => navigate('/', { room: p2pInfo.room, isHostRejoin: true }), 0);
         return null;
       }
       console.log('[main] P2P client refresh detected, redirecting to room:', p2pInfo.room);

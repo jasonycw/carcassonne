@@ -213,13 +213,19 @@ export class LobbyView extends EventEmitter {
         const urlParams = new URLSearchParams(window.location.search);
         const urlRoom = urlParams.get('room');
         if (urlRoom) {
-          // Only pass saved p2pInfo.playerIndex as preferredIndex if the
-          // room code matches (page refresh within the same game).
-          // When the user navigates to a different room code URL, treat
-          // it as a fresh join (no preferredIndex).
-          const preferredIndex = (p2pInfo.room === urlRoom) ? p2pInfo.playerIndex : undefined;
-          console.log('[LobbyView] Reconnecting via URL room:', urlRoom, 'preferredIndex:', preferredIndex);
           this.dom.roomCodeInput.value = urlRoom.toUpperCase();
+          // Host rejoin — recreate the room with saved game state.
+          if (p2pInfo.playerIndex === 0) {
+            console.log('[LobbyView] Host reconnecting via URL room:', urlRoom);
+            this._recoverHostGame(urlRoom.toUpperCase());
+            return;
+          }
+          // Client rejoin — only pass saved p2pInfo.playerIndex as
+          // preferredIndex if the room code matches (page refresh within
+          // the same game).  When the user navigates to a different room
+          // code URL, treat it as a fresh join (no preferredIndex).
+          const preferredIndex = (p2pInfo.room === urlRoom) ? p2pInfo.playerIndex : undefined;
+          console.log('[LobbyView] Client reconnecting via URL room:', urlRoom, 'preferredIndex:', preferredIndex);
           this._joinGame(preferredIndex);
           return;
         }
@@ -269,9 +275,14 @@ export class LobbyView extends EventEmitter {
 
     if (roomCode) {
       this.dom.roomCodeInput.value = roomCode.toUpperCase();
-      console.log('[LobbyView] Auto-joining room:', roomCode.toUpperCase());
-      this._joinGame();
-      return; // _joinGame continues from here
+      if (routerParams && routerParams.isHostRejoin) {
+        console.log('[LobbyView] Host rejoin for room:', roomCode.toUpperCase());
+        this._recoverHostGame(roomCode.toUpperCase());
+      } else {
+        console.log('[LobbyView] Auto-joining room:', roomCode.toUpperCase());
+        this._joinGame();
+      }
+      return;
     }
 
     this._setStatus('Ready');
