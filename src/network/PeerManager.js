@@ -633,35 +633,53 @@ export class ClientPeerManager extends PeerManager {
         this.send(conn, joinRequest(playerName, preferredIndex));
       });
 
+      // ── Single settlement guard ────────────────────────────────────────
+      // Every exit path (JOIN_ACCEPT, JOIN_REJECT, timeout, peer destroyed)
+      // goes through settle(), which guarantees listeners are cleaned up
+      // and the promise is settled exactly once.
+      let settled = false;
+      let timeoutId = null;
+      const settle = (type, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        this.off('message', onJoinResult);
+        this.off('destroyed', onDestroyed);
+        if (type === 'resolve') resolve(value);
+        else reject(value);
+      };
+
       // Listen for join accept/reject.
       const onJoinResult = (message, sourceConn) => {
         if (sourceConn !== conn) return;
 
         if (message.type === MessageType.JOIN_ACCEPT) {
           this.playerIndex = message.payload.playerIndex;
-          this.off('message', onJoinResult);
-          resolve({
+          settle('resolve', {
             playerIndex: this.playerIndex,
             players: message.payload.players || [],
             settings: message.payload.settings || {},
           });
         } else if (message.type === MessageType.JOIN_REJECT) {
-          this.off('message', onJoinResult);
-          reject(new Error(message.payload.reason || 'Join rejected'));
+          settle('reject', new Error(message.payload.reason || 'Join rejected'));
         }
       };
 
       this.on('message', onJoinResult);
 
-      // Timeout — reduced from 30s to 8s for fast reconnection retries.
-      // Initial connections already succeeded once, so the ICE candidates
-      // and signaling round-trip are well within 8s.  In reconnection the
-      // host's peer may not exist yet, so we fail fast and let the retry
-      // loop in _attemptReconnect try again immediately.
-      setTimeout(() => {
-        this.off('message', onJoinResult);
-        reject(new Error('Connection timed out'));
-      }, 8000);
+      // When the caller destroys this peer (e.g. a reconnection timeout in
+      // _attemptReconnect), reject the promise so the retry loop can
+      // advance immediately instead of hanging on a dead peer.
+      const onDestroyed = () => settle('reject', new Error('Connection aborted'));
+      this.once('destroyed', onDestroyed);
+
+      // Safety timeout — should rarely fire because _attemptReconnect now
+      // uses a 2s deadline per attempt and destroys the peer on timeout.
+      timeoutId = setTimeout(() => {
+        if (!settled && !this._destroyed) {
+          settle('reject', new Error('Connection timed out'));
+        }
+      }, 15000);
     });
   }
 
