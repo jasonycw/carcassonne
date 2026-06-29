@@ -320,6 +320,17 @@ export function renderActiveTile(tileData, placements, playerState, svgElement) 
 
       // Validate: check if this location is valid for the current rotation
       if (!selectedMove || !selectedMove.placement) return;
+      // Check that the player actually has the selected meeple type available
+      if (_playerState) {
+        const hasMeepleForType = (function() {
+          if (currentMeepleType === 'normal') return (_playerState.remainingMeeples || 0) > 0;
+          if (currentMeepleType === 'large') return !!_playerState.hasLargeMeeple;
+          if (currentMeepleType === 'builder') return !!_playerState.hasBuilderMeeple;
+          if (currentMeepleType === 'pig') return !!_playerState.hasPigMeeple;
+          return false;
+        })();
+        if (!hasMeepleForType) return;
+      }
       const rotationEntry = selectedMove.placement.rotations[selectedMove.rotationIndex];
       const validMeeples = rotationEntry ? rotationEntry.meeples : [];
       const mType = currentMeepleType === 'large' ? 'normal' : currentMeepleType;
@@ -846,6 +857,16 @@ export function showMeeplePlacements() {
     if (currentMeepleType === 'pig') return !!_playerState.hasPigMeeple;
     return false;
   })();
+
+  // If the player has no meeples of the current type, hide the group entirely
+  // so the outline locations cannot be clicked to place invalid meeples.
+  if (!hasMeeples) {
+    meepleGroup.attr('display', 'none');
+    meepleGroup.attr('visibility', 'hidden');
+    meepleGroup.style('pointer-events', 'none');
+    _isConfirmed = false;
+    return;
+  }
 
   // Show the meeple group and allow pointer events for meeple selection.
   // Bug 3: Must clear BOTH display AND visibility — visibility:hidden is set
