@@ -30,7 +30,7 @@ To migrate the Carcassonne board game to a static GitHub Pages on https://jasony
 ** ISSUES.md MUST NOT BE CHANGED BY LLM, ONLY ALLOWED TO BE UPDATED BY HUMAN AFTER VERIFICATION **
 
 # VERIFICATION & DEFINITION OF DONE
-Before claiming any task done or marking a feature phase complete, you must explicitly pass the following validation matrix:
+Before claiming any task done or marking a feature phase complete or anything fixed, you must explicitly pass the following validation matrix:
 1. Build and run the application locally. Open the browser developer console and verify there are zero errors or failed network requests during a full game loop.
 2. Simulate a full game **from start to finish** to ensure the scoring and tile placement logic is intact.
 3. Test the built project assets locally under a simulated nested path structure matching how GitHub Pages serves repositories (e.g., `localhost:8080/carcassonne/`) to catch path resolution errors early before testing on Github Page.
