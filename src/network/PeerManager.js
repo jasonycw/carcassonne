@@ -18,7 +18,6 @@ import { EventEmitter } from '../utils/EventEmitter.js';
 import {
   MessageType,
   createMessage,
-  serialize,
   deserialize,
   joinRequest,
 } from './Protocol.js';
@@ -289,7 +288,7 @@ export class PeerManager extends EventEmitter {
   /** Send a message to a specific connection. */
   send(conn, message) {
     if (conn && conn.open) {
-      conn.send(serialize(message));
+      conn.send(message);
     }
   }
 
@@ -665,7 +664,7 @@ export class ClientPeerManager extends PeerManager {
     return new Promise((resolve, reject) => {
       const conn = this.peer.connect(hostPeerId, {
         reliable: true,
-        serialization: 'json',
+        serialization: 'binary',
       });
 
       this._setupDataConnection(conn);
