@@ -1211,12 +1211,21 @@ export class GameView {
 
   _onChatSend(text) {
     const username = this.config.localPlayers?.[this.playerIndex]?.user?.username || 'Player';
-    this.chatPanel.addMessage(username, text);
 
     if (this.gameHost) {
+      // GameHost.broadcastChat emits 'chat-message' locally AND broadcasts
+      // to all clients. The local emit triggers handler at line 299-300
+      // which calls chatPanel.addMessage. No direct addMessage needed.
       this.gameHost.broadcastChat(username, text);
     } else if (this.gameClient) {
+      // Client sends CHAT_MESSAGE to host. Host relays to all clients
+      // (including sender) via broadcast. Sender receives it through
+      // msg:chat_message → GameClient emit('chat-message') → handler
+      // at line 693-694 → chatPanel.addMessage. No direct add needed.
       this.gameClient.sendChat(text);
+    } else {
+      // Local/hot-seat game: no P2P network, no echo. Add directly.
+      this.chatPanel.addMessage(username, text);
     }
   }
 
