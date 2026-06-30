@@ -985,17 +985,61 @@ export class LobbyView extends EventEmitter {
       );
       await this.peerManager.init();
 
+      // Rebuild slots from saved state so the lobby UI shows all players.
+      const remoteIndices = state.remotePlayerIndices || [];
+      this.slots = [];
+      for (let i = 0; i < savedPlayerCount; i++) {
+        const player = state.players && state.players[i];
+        const name = (player && player.user && player.user.username) || `Player ${i + 1}`;
+        this.slots.push({
+          playerIndex: i,
+          name,
+          type: i === 0 ? 'host' : (remoteIndices.includes(i) ? 'remote' : 'unfilled'),
+        });
+      }
+      this.localPlayerIndex = 0;
+      this._updatePlayerList();
+
       // Show room code so the host can re-share the invite link.
       this.dom.roomCode.textContent = this.roomCode;
       this.dom.roomDisplay.style.display = 'block';
 
       this._setStatus('Room recreated. Transitioning to game...');
 
-      // Brief delay so the room code is visible, then transition to the
-      // game view with the saved state.  GameHost will handle incoming
-      // JOIN_REQUEST messages from reconnecting clients and send them
-      // GAME_STATE_SYNC.
+      // Temporary JOIN_REQUEST handler for the brief window before
+      // GameHost takes over. Reconnecting clients may connect during
+      // the delay below. Accept and assign their previous slot.
+      const tempJoinHandler = (message, conn) => {
+        if (message.type === MessageType.JOIN_REQUEST) {
+          const pName = (message.payload && message.payload.playerName) || 'Reconnecting Player';
+          // Accept with the preferredIndex (if valid), else find a free slot.
+          let targetSlot = (message.payload && message.payload.preferredIndex);
+          if (targetSlot == null || targetSlot <= 0 || targetSlot >= this.slots.length) {
+            targetSlot = -1;
+            for (let i = 1; i < this.slots.length; i++) {
+              if (this.slots[i].type === 'unfilled') {
+                targetSlot = i;
+                break;
+              }
+            }
+            if (targetSlot === -1) targetSlot = 1; // fallback
+          }
+          const result = this.peerManager.acceptJoin(conn, pName, targetSlot);
+          if (result && result.accepted) {
+            this._connToSlot.set(conn, targetSlot);
+            this.slots[targetSlot].type = 'remote';
+            this.slots[targetSlot].name = pName;
+            this._updatePlayerList();
+            this._setStatus(`${pName} reconnected`);
+          }
+        }
+      };
+      this.peerManager.on('message', tempJoinHandler);
+
+      // Reduced delay so reconnecting clients don't wait too long.
       setTimeout(() => {
+        // Remove the temp handler before GameHost takes over.
+        this.peerManager.off('message', tempJoinHandler);
         this._transitionToGame({
           isHost: true,
           peerManager: this.peerManager,
@@ -1004,7 +1048,7 @@ export class LobbyView extends EventEmitter {
           playerIndex: 0,
           localPlayers: state.players,
         });
-      }, 1000);
+      }, 500);
     } catch (err) {
       console.error('[LobbyView] Failed to recreate room:', err);
       this._setStatus('Failed to recreate room: ' + err.message);
