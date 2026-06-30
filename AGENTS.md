@@ -6,7 +6,7 @@ Before claiming any task done or marking a feature phase complete or anything fi
 1. Build and run the application locally. Open the browser developer console and verify there are zero errors or failed network requests during a full game loop.
 2. Simulate a full game **from start to finish** to ensure the scoring and tile placement logic is intact.
 3. Test the built project assets locally under a simulated nested path structure matching how GitHub Pages serves repositories (e.g., `localhost:8080/carcassonne/`) to catch path resolution errors early before testing on Github Page.
-4. **MUST test the game from start to finish after it is built on GitHub Page**. Must make sure `https://jasonycw.github.io/carcassonne/` meets all the requirement and UIUX matching the original game and can completely the whole game without any issue. Local testing or simple unit test or any small scale e2e test are all worthless compare to FULL P2P GAME TESTED ON GITHUB PAGE!
+4. Done mean **the game MUST has tested the game from start to finish after everything are pushed and is built on GitHub Page**. Must make sure `https://jasonycw.github.io/carcassonne/` meets all the requirements and UIUX matching the original game and can completely the whole game with P2P without any issue. Localhost testing or simple unit test or any small scale e2e test are all worthless compare to FULL P2P GAME TESTED ON GITHUB PAGE!
 
 # TECHNICAL CONSTRAINTS
 - **Static Hosting Only:** The final build must consist solely of client-side assets (HTML, JS, CSS, images). No Express server, No Node.js runtime environment, No MongoDB/database interactions.
@@ -20,8 +20,6 @@ Before claiming any task done or marking a feature phase complete or anything fi
 - **Simplicity First:** Write the absolute minimum code necessary to satisfy the migration. Do not introduce speculative helper patterns, multi-layered configs, or unrequested generic wrappers. Keep modules lean.
 - **Surgical Changes:** Touch only the modules that dictate authentication, persistence, rendering wrapper extraction, or socket handling. Match existing core logic styles and do not arbitrarily refactor functional game logic, math algorithms, or scoring metrics.
 - **Clean Up Orphans:** When backend references, old EJS files, Mongoose schemas, or Passport flows are decoupled, completely remove their respective legacy files and dependencies inside `package.json`. Do not leave broken, unused dead code hanging.
-
-
 
 # COMMIT STANDARD
 This must be followed everytime, for audit, tracking and prevent huge chunk of undocumented changes
