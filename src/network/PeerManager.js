@@ -712,6 +712,7 @@ export class ClientPeerManager extends PeerManager {
           this.playerIndex = message.payload.playerIndex;
           settle('resolve', {
             playerIndex: this.playerIndex,
+            maxPlayers: message.payload.maxPlayers,
             players: message.payload.players || [],
             settings: message.payload.settings || {},
           });

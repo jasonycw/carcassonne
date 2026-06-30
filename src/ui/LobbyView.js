@@ -509,19 +509,16 @@ export class LobbyView extends EventEmitter {
         this._setStatus('A player is connecting...');
         // Auto-revert after 15s if no JOIN_REQUEST arrives.
         const cleanupTimer = setTimeout(() => {
-          // Clean up the cancelTimer listener.
-          const oldCancel = this._connCancelTimers.get(conn);
-          if (oldCancel) {
-            this.peerManager.off('message', oldCancel);
-            this._connCancelTimers.delete(conn);
-          }
           const current = this._connToSlot.get(conn);
           if (current != null && this.slots[current] && this.slots[current].type === 'connecting') {
-            this._connToSlot.delete(conn);
-            this.slots[current].type = 'unfilled';
-            this.slots[current].name = `Player ${current + 1}`;
-            this._updatePlayerList();
-            this._setStatus('Connection timed out');
+            this._freeLobbySlot(conn, current, 'timed out');
+          } else {
+            // Clean up stale cancelTimer entry even if slot already freed.
+            const oldCancel = this._connCancelTimers.get(conn);
+            if (oldCancel) {
+              this.peerManager.off('message', oldCancel);
+              this._connCancelTimers.delete(conn);
+            }
           }
         }, 15000);
         // Cancel timer when this conn sends any message (JOIN_REQUEST comes next).
@@ -1221,14 +1218,40 @@ export class LobbyView extends EventEmitter {
    * Poll all tracked connections every 5s during the lobby phase.
    * Frees slots whose connections died without firing a clean 'close' event
    * (e.g. tab crash, network drop where WebRTC never delivers oniceconnectionstatechange).
+   *
+   * Detection methods (tried in order):
+   * 1. PeerJS's own open flag (conn.open === false)
+   * 2. Underlying RTCDataChannel readyState (if accessible via _dataChannel)
+   * 3. Forced send() attempt — throws on closed data channels
    */
   _startLobbyHealthCheck() {
     this._stopLobbyHealthCheck();
     this._lobbyHealthTimer = setInterval(() => {
       for (const [conn, slotIdx] of this._connToSlot) {
         if (!conn || !this.slots[slotIdx]) continue;
-        // conn.open is false when PeerJS has processed the close.
+
+        let dead = false;
+
+        // Method 1: PeerJS's own open flag.
         if (conn.open === false) {
+          dead = true;
+        }
+        // Method 2: Underlying data channel state (PeerJS internal).
+        if (!dead && conn._dataChannel) {
+          const state = conn._dataChannel.readyState;
+          if (state === 'closed' || state === 'closing') dead = true;
+        }
+        // Method 3: Force-send to trigger error on dead connections.
+        if (!dead) {
+          try {
+            // PeerJS send() throws when the data channel is not open.
+            conn.send(JSON.stringify({ type: '_health' }));
+          } catch (_e) {
+            dead = true;
+          }
+        }
+
+        if (dead) {
           console.log(`[LobbyView] Health check: freeing dead slot ${slotIdx}`);
           this._freeLobbySlot(conn, slotIdx, 'disconnected');
         }
@@ -1246,6 +1269,9 @@ export class LobbyView extends EventEmitter {
   /**
    * Free a lobby slot and clean up all associated state.
    * Shared between peer-disconnected handler and health check.
+   * When running as host, also closes the connection (if still
+   * open) and broadcasts LOBBY_STATE so remaining joiners see the
+   * slot freed immediately.
    */
   _freeLobbySlot(conn, slotIdx, reason) {
     // Clean up any pending connecting timer.
@@ -1255,12 +1281,20 @@ export class LobbyView extends EventEmitter {
       this._connCancelTimers.delete(conn);
     }
     this._connToSlot.delete(conn);
+    // Close the connection so PeerManager removes it from its list.
+    if (conn && typeof conn.close === 'function' && conn.open !== false) {
+      try { conn.close(); } catch (_e) {}
+    }
     if (this.slots[slotIdx]) {
       const removedName = this.slots[slotIdx].name;
       this.slots[slotIdx].type = 'unfilled';
       this.slots[slotIdx].name = `Player ${slotIdx + 1}`;
       this._updatePlayerList();
       this._setStatus(`${removedName} ${reason || 'disconnected'}`);
+      // Tell remaining joiners the lobby state changed.
+      if (this.isHost && this.peerManager && typeof this.peerManager.broadcastLobby === 'function') {
+        this.peerManager.broadcastLobby();
+      }
     }
   }
 
