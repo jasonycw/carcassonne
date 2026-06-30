@@ -1,5 +1,5 @@
 Base on testing with latest version on `https://jasonycw.github.io/carcassonne/`, there are at least and not limited to the following issues.
-- In the lobby page, the joiners should see other seats if available including host's "empty one" with the player name also in sync, now the joiner knows nothing about the lobby condition
+- In the lobby page, the joiners should see host's empty seats name being sync as well, now the joiner knows nothing about the lobby condition
 - In the lobby page, the host should monitor when the joiner is still connecting or not, so disconnected players will not eat up valuable seat. So until the game start, the host should allow drop in and out of any joiners freely. When any joiner is no longer there, should immediately free up the seat to allow others to join. Now idled connection just forever consume the seat for no reason.
 
 **THIS FILE MUST NOT BE CHANGED BY LLM, ONLY ALLOWED TO BE UPDATED BY HUMAN AFTER VERIFICATION**
