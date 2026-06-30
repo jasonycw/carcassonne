@@ -439,8 +439,9 @@ export class HostPeerManager extends PeerManager {
    * @param {object} [settings]  Default game settings (expansions, etc.)
    * @param {string} [hostName]  The host player's display name
    */
-  constructor(roomCode, settings = {}, hostName = 'Host') {
+  constructor(roomCode, settings = {}, hostName = 'Host', maxPlayers = 6) {
     super('host', roomCode);
+    this.maxPlayers = maxPlayers;
     this.settings = {
       expansions: ['base-game'],
       turnTimer: 0,
@@ -483,8 +484,7 @@ export class HostPeerManager extends PeerManager {
    * @returns {{ accepted: boolean, playerIndex?: number, reason?: string }}
    */
   acceptJoin(conn, playerName, preferredIndex) {
-    const maxPlayers = 6;
-    if (this.connectedPlayers.length >= maxPlayers) {
+    if (this.connectedPlayers.length >= this.maxPlayers) {
       this.send(conn, createMessage(MessageType.JOIN_REJECT, { reason: 'Game is full' }));
       return { accepted: false, reason: 'Game is full' };
     }

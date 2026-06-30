@@ -435,7 +435,7 @@ export class LobbyView extends EventEmitter {
 
     try {
       console.log('[LobbyView] Creating host peer manager, room:', this.roomCode, 'name:', name);
-      this.peerManager = new HostPeerManager(this.roomCode, { expansions }, name);
+      this.peerManager = new HostPeerManager(this.roomCode, { expansions }, name, playerCount);
       await this.peerManager.init();
       console.log('[LobbyView] Host peer initialized, peerId:', this.peerManager.peerId);
 
@@ -916,10 +916,12 @@ export class LobbyView extends EventEmitter {
     this._setStatus('Recreating room...');
 
     try {
+      const savedPlayerCount = state.players ? state.players.length : 6;
       this.peerManager = new HostPeerManager(
         this.roomCode,
         { expansions: state.expansions || ['base-game'] },
         'Host',
+        savedPlayerCount,
       );
       await this.peerManager.init();
 
