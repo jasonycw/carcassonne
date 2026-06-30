@@ -291,6 +291,7 @@ export class LobbyView extends EventEmitter {
   }
 
   destroy() {
+    this._stopLobbyHealthCheck();
     if (this.peerManager) {
       this.peerManager.removeAllListeners();
       this.peerManager.destroy();
@@ -535,24 +536,14 @@ export class LobbyView extends EventEmitter {
         this._connCancelTimers.set(conn, cancelTimer);
       });
 
+      // Kick off a periodic health check that frees zombie connections.
+      this._startLobbyHealthCheck();
+
       // Auto-remove player on disconnect.
       this.peerManager.on('peer-disconnected', (conn) => {
-        // Clean up any pending connecting timer for this conn.
-        const staleCancel = this._connCancelTimers.get(conn);
-        if (staleCancel) {
-          this.peerManager.off('message', staleCancel);
-          this._connCancelTimers.delete(conn);
-        }
         const slotIndex = this._connToSlot.get(conn);
         if (slotIndex != null) {
-          this._connToSlot.delete(conn);
-          if (this.slots[slotIndex]) {
-            const removedName = this.slots[slotIndex].name;
-            this.slots[slotIndex].type = 'unfilled';
-            this.slots[slotIndex].name = `Player ${slotIndex + 1}`;
-            this._updatePlayerList();
-            this._setStatus(`${removedName} disconnected`);
-          }
+          this._freeLobbySlot(conn, slotIndex, 'disconnected');
         }
       });
 
@@ -1226,6 +1217,53 @@ export class LobbyView extends EventEmitter {
     }
   }
 
+  /**
+   * Poll all tracked connections every 5s during the lobby phase.
+   * Frees slots whose connections died without firing a clean 'close' event
+   * (e.g. tab crash, network drop where WebRTC never delivers oniceconnectionstatechange).
+   */
+  _startLobbyHealthCheck() {
+    this._stopLobbyHealthCheck();
+    this._lobbyHealthTimer = setInterval(() => {
+      for (const [conn, slotIdx] of this._connToSlot) {
+        if (!conn || !this.slots[slotIdx]) continue;
+        // conn.open is false when PeerJS has processed the close.
+        if (conn.open === false) {
+          console.log(`[LobbyView] Health check: freeing dead slot ${slotIdx}`);
+          this._freeLobbySlot(conn, slotIdx, 'disconnected');
+        }
+      }
+    }, 5000);
+  }
+
+  _stopLobbyHealthCheck() {
+    if (this._lobbyHealthTimer) {
+      clearInterval(this._lobbyHealthTimer);
+      this._lobbyHealthTimer = null;
+    }
+  }
+
+  /**
+   * Free a lobby slot and clean up all associated state.
+   * Shared between peer-disconnected handler and health check.
+   */
+  _freeLobbySlot(conn, slotIdx, reason) {
+    // Clean up any pending connecting timer.
+    const staleCancel = this._connCancelTimers.get(conn);
+    if (staleCancel) {
+      this.peerManager.off('message', staleCancel);
+      this._connCancelTimers.delete(conn);
+    }
+    this._connToSlot.delete(conn);
+    if (this.slots[slotIdx]) {
+      const removedName = this.slots[slotIdx].name;
+      this.slots[slotIdx].type = 'unfilled';
+      this.slots[slotIdx].name = `Player ${slotIdx + 1}`;
+      this._updatePlayerList();
+      this._setStatus(`${removedName} ${reason || 'disconnected'}`);
+    }
+  }
+
   _startGame() {
     // Solo mode requires no PeerManager — _createGame already returned without one.
     if (this.slots.length === 1) {
@@ -1335,6 +1373,8 @@ export class LobbyView extends EventEmitter {
   }
 
   _transitionToGame(config) {
+    // Stop lobby-phase timers before transitioning.
+    this._stopLobbyHealthCheck();
     // Remove peerManager listeners but do NOT destroy the PeerManager —
     // GameView's GameHost/GameClient will take it over.
     this._cleanupPeerManager();

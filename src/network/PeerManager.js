@@ -288,7 +288,14 @@ export class PeerManager extends EventEmitter {
   /** Send a message to a specific connection. */
   send(conn, message) {
     if (conn && conn.open) {
-      conn.send(message);
+      try {
+        conn.send(message);
+      } catch (err) {
+        // Connection is dead — close it so the 'close' handler triggers
+        // peer-disconnected and cleans up slots / connection tracking.
+        console.warn('[PeerManager] Send failed, closing connection:', err);
+        conn.close();
+      }
     }
   }
 
@@ -390,6 +397,10 @@ export class PeerManager extends EventEmitter {
     conn.on('error', (err) => {
       console.error('[PeerManager] Connection error:', err);
       this.emit('peer-error', err, conn);
+      // Close the connection so the 'close' handler fires and triggers
+      // peer-disconnected, which frees the lobby slot.  Without this,
+      // errors can leave zombie connections that never clean up.
+      conn.close();
     });
   }
 
