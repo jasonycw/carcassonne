@@ -28,6 +28,10 @@ dist/
 .claude/
 
 # OpenCode session state
+
+# Screenshot artifacts (ad-hoc game testing screenshots)
+/host-lobby.png
+/lobby-initial.png
 .sisyphus/
 
 # Test artifacts
