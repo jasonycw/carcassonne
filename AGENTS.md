@@ -1,12 +1,12 @@
 # GOAL
-To migrate the Carcassonne board game to a static GitHub Pages on https://jasonycw.github.io/carcassonne/ with simple multiplayer support, removing the requirement for user authentication and server-side hosting fees.
+To migrate the Carcassonne board game to a static GitHub Pages on `https://jasonycw.github.io/carcassonne/` using the `main` branch with simple multiplayer support, removing the requirement for user authentication and server-side hosting fees.
 
 # DEFINITION OF DONE
 Before claiming any task done or marking a feature phase complete or anything fixed, you must explicitly pass the following validation matrix:
 1. Build and run the application locally. Open the browser developer console and verify there are zero errors or failed network requests during a full game loop.
 2. Simulate a full game **from start to finish** to ensure the scoring and tile placement logic is intact.
 3. Test the built project assets locally under a simulated nested path structure matching how GitHub Pages serves repositories (e.g., `localhost:8080/carcassonne/`) to catch path resolution errors early before testing on Github Page.
-4. Done mean **the game MUST has tested the game from start to finish after everything are pushed and is built on GitHub Page**. Must make sure `https://jasonycw.github.io/carcassonne/` meets all the requirements and UIUX matching the original game and can completely the whole game with P2P without any issue. Localhost testing or simple unit test or any small scale e2e test are all worthless compare to FULL P2P GAME TESTED ON GITHUB PAGE!
+4. Done means **the game MUST has tested the game from start to finish after everything are pushed and is built on GitHub Page**. Must make sure `https://jasonycw.github.io/carcassonne/` meets all the requirements and UIUX matching the original game and can completely the whole game with P2P without any issue. Localhost testing or simple unit test or any small scale e2e test are all worthless compare to FULL P2P GAME TESTED ON GITHUB PAGE!
 
 # TECHNICAL CONSTRAINTS
 - **Static Hosting Only:** The final build must consist solely of client-side assets (HTML, JS, CSS, images). No Express server, No Node.js runtime environment, No MongoDB/database interactions.
