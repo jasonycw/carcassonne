@@ -1232,10 +1232,15 @@ export class LobbyView extends EventEmitter {
    *
    * Detection methods (tried in order):
    * 1. PeerJS's own open flag (conn.open === false)
-   * 2. Underlying RTCDataChannel readyState (if accessible via _dataChannel)
-   * 3. RTCPeerConnection ICE state — 'disconnected'/'failed' means the remote
-   *    is unreachable even if the data channel hasn't closed yet.
-   * 4. Forced send() attempt — throws on closed data channels
+   * 2. PeerJS 1.5.5 public dataChannel.readyState
+   * 3. Per-connection message timeout: the host's heartbeat sends PING every 10s,
+   *    and every client auto-responds with PONG.  If we haven't received ANY
+   *    message (including PONG) from the remote for 20s, they're dead.
+   *
+   * NOTE: PeerJS 1.5.5 send() never throws (it catches errors internally and
+   * returns false), so a force-send try-catch is useless for detection.
+   * _peerConnection is not exposed on DataConnection, so ICE state is
+   * unavailable here — we rely on PONG timeout instead.
    */
   _startLobbyHealthCheck() {
     this._stopLobbyHealthCheck();
@@ -1249,27 +1254,18 @@ export class LobbyView extends EventEmitter {
         if (conn.open === false) {
           dead = true;
         }
-        // Method 2: Underlying data channel state (PeerJS internal).
-        if (!dead && conn._dataChannel) {
-          const state = conn._dataChannel.readyState;
-          if (state === 'closed' || state === 'closing') dead = true;
-        }
-        // Method 3: RTCPeerConnection ICE state — detects network-level drops
-        // before the data channel closes (tab crash, network partition).
-        if (!dead && conn._peerConnection) {
+        // Method 2: Public dataChannel.readyState (PeerJS 1.5.5 exposes this).
+        if (!dead && conn.dataChannel) {
           try {
-            const iceState = conn._peerConnection.iceConnectionState;
-            if (iceState === 'disconnected' || iceState === 'failed' || iceState === 'closed') {
-              dead = true;
-            }
+            const state = conn.dataChannel.readyState;
+            if (state === 'closed' || state === 'closing') dead = true;
           } catch (_e) {}
         }
-        // Method 4: Force-send to trigger error on dead connections.
-        if (!dead) {
-          try {
-            // PeerJS send() throws when the data channel is not open.
-            conn.send(JSON.stringify({ type: '_health' }));
-          } catch (_e) {
+        // Method 3: No messages received within timeout.
+        // _lastMsgTime is set on 'open' and updated on every incoming message
+        // (including PONG auto-response when the client receives PING).
+        if (!dead && conn._lastMsgTime) {
+          if (Date.now() - conn._lastMsgTime > 20000) {
             dead = true;
           }
         }

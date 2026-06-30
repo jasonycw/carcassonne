@@ -359,6 +359,8 @@ export class PeerManager extends EventEmitter {
         this.connections.push(conn);
         this.emit('peer-connected', conn);
       }
+      // Track last message time for health monitoring.
+      conn._lastMsgTime = Date.now();
       // Start PING watchdog for the host connection.
       if (conn === this.hostConnection) {
         this._startPingWatch();
@@ -368,6 +370,11 @@ export class PeerManager extends EventEmitter {
     conn.on('data', (data) => {
       try {
         const message = deserialize(data);
+        // Auto-respond to PING with PONG so the host can detect remote
+        // liveness via the health check timeout.
+        if (message.type === 'ping') {
+          this.send(conn, createMessage(MessageType.PONG));
+        }
         this.emit('message', message, conn);
         // Also emit a typed event for convenience.
         this.emit(`msg:${message.type}`, message.payload, conn);
@@ -379,6 +386,9 @@ export class PeerManager extends EventEmitter {
         if (conn === this.hostConnection) {
           this._lastPingTime = Date.now();
         }
+        // Track last message time per-connection for health check timeout.
+        // Any incoming message (including PONG) proves the remote is alive.
+        conn._lastMsgTime = Date.now();
       } catch (err) {
         console.error('[PeerManager] Failed to deserialize message:', err);
       }
