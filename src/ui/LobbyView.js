@@ -141,6 +141,8 @@ export class LobbyView extends EventEmitter {
     this.slots = [];
     /** Map conn → slot index for tracking disconnect/remotes. */
     this._connToSlot = new Map();
+    /** Map conn → cancelTimer handler so we can clean up on disconnect. */
+    this._connCancelTimers = new Map();
     /** Index of the local player in the slots array. */
     this.localPlayerIndex = 0;
   }
@@ -465,6 +467,8 @@ export class LobbyView extends EventEmitter {
           // Find first unfilled slot (skip host slot 0).
           const firstUnfilled = this.slots.find(s => s.type === 'unfilled' && s.playerIndex > 0);
           if (!firstUnfilled) {
+            // Send JOIN_REJECT so the client gets a proper error instead of timing out.
+            this.peerManager.send(conn, createMessage(MessageType.JOIN_REJECT, { reason: 'Game is full' }));
             this._setStatus('All slots are full');
             return;
           }
@@ -504,6 +508,12 @@ export class LobbyView extends EventEmitter {
         this._setStatus('A player is connecting...');
         // Auto-revert after 15s if no JOIN_REQUEST arrives.
         const cleanupTimer = setTimeout(() => {
+          // Clean up the cancelTimer listener.
+          const oldCancel = this._connCancelTimers.get(conn);
+          if (oldCancel) {
+            this.peerManager.off('message', oldCancel);
+            this._connCancelTimers.delete(conn);
+          }
           const current = this._connToSlot.get(conn);
           if (current != null && this.slots[current] && this.slots[current].type === 'connecting') {
             this._connToSlot.delete(conn);
@@ -515,13 +525,24 @@ export class LobbyView extends EventEmitter {
         }, 15000);
         // Cancel timer when this conn sends any message (JOIN_REQUEST comes next).
         const cancelTimer = (msg, srcConn) => {
-          if (srcConn === conn) clearTimeout(cleanupTimer);
+          if (srcConn === conn) {
+            clearTimeout(cleanupTimer);
+            this.peerManager.off('message', cancelTimer);
+            this._connCancelTimers.delete(conn);
+          }
         };
         this.peerManager.on('message', cancelTimer);
+        this._connCancelTimers.set(conn, cancelTimer);
       });
 
       // Auto-remove player on disconnect.
       this.peerManager.on('peer-disconnected', (conn) => {
+        // Clean up any pending connecting timer for this conn.
+        const staleCancel = this._connCancelTimers.get(conn);
+        if (staleCancel) {
+          this.peerManager.off('message', staleCancel);
+          this._connCancelTimers.delete(conn);
+        }
         const slotIndex = this._connToSlot.get(conn);
         if (slotIndex != null) {
           this._connToSlot.delete(conn);
@@ -660,6 +681,7 @@ export class LobbyView extends EventEmitter {
         isHost: p.isHost || p.playerIndex === 0,
         playerIndex: p.playerIndex,
       }));
+      this.maxPlayers = result.maxPlayers || (result.players ? result.players.length : 2);
       this.localPlayerIndex = result.playerIndex;
       this.dom.lobbyPlayers.style.display = 'block';
       // Non-host should not see the start game button.
@@ -711,6 +733,7 @@ export class LobbyView extends EventEmitter {
           isHost: p.isHost || p.playerIndex === 0,
           playerIndex: p.playerIndex,
         }));
+        if (payload.maxPlayers) this.maxPlayers = payload.maxPlayers;
         this._updatePlayerList();
       });
 
@@ -1084,6 +1107,26 @@ export class LobbyView extends EventEmitter {
         }
         list.appendChild(li);
       });
+      // Show empty seats so the joiner sees the full lobby size.
+      if (this.maxPlayers) {
+        for (let i = 0; i < this.maxPlayers; i++) {
+          if (!this.players.find(p => p.playerIndex === i)) {
+            const li = document.createElement('li');
+            li.className = 'player-list-item';
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = i === 0 ? 'Host' : `Player ${i + 1}`;
+            nameSpan.style.opacity = '0.4';
+            li.appendChild(nameSpan);
+            if (i !== 0) {
+              const badge = document.createElement('span');
+              badge.className = 'slot-badge slot-badge--empty';
+              badge.textContent = 'Empty';
+              li.appendChild(badge);
+            }
+            list.appendChild(li);
+          }
+        }
+      }
       return;
     }
 

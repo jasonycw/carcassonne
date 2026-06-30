@@ -502,6 +502,7 @@ export class HostPeerManager extends PeerManager {
       playerIndex,
       players: this.getPlayerList(),
       settings: this.settings,
+      maxPlayers: this.maxPlayers,
     }));
 
     // Notify others.
@@ -530,6 +531,7 @@ export class HostPeerManager extends PeerManager {
     this.broadcast(createMessage(MessageType.LOBBY_STATE, {
       players: this.getPlayerList(),
       settings: this.settings,
+      maxPlayers: this.maxPlayers,
     }));
   }
 
