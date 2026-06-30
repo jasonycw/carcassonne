@@ -450,13 +450,25 @@ export class LobbyView extends EventEmitter {
       // Listen for join requests.
       this.peerManager.on('message', (message, conn) => {
         if (message.type === MessageType.JOIN_REQUEST) {
+          // Check if this conn was already assigned a 'connecting' slot.
+          let slotIndex = this._connToSlot.get(conn);
+          if (slotIndex != null && this.slots[slotIndex] && this.slots[slotIndex].type === 'connecting') {
+            // Convert connecting slot to remote.
+            this.slots[slotIndex].name = message.payload.playerName;
+            this.slots[slotIndex].type = 'remote';
+            this._updatePlayerList();
+            this._setStatus(`${message.payload.playerName} joined!`);
+            // The host PeerManager still needs to accept the join.
+            this.peerManager.acceptJoin(conn, message.payload.playerName, slotIndex);
+            return;
+          }
           // Find first unfilled slot (skip host slot 0).
           const firstUnfilled = this.slots.find(s => s.type === 'unfilled' && s.playerIndex > 0);
           if (!firstUnfilled) {
             this._setStatus('All slots are full');
             return;
           }
-          const slotIndex = firstUnfilled.playerIndex;
+          slotIndex = firstUnfilled.playerIndex;
           const result = this.peerManager.acceptJoin(conn, message.payload.playerName, slotIndex);
           if (result.accepted) {
             this._connToSlot.set(conn, slotIndex);
@@ -477,6 +489,35 @@ export class LobbyView extends EventEmitter {
             }));
           }
         }
+      });
+
+      // Show "Connecting..." state when a raw connection arrives but
+      // before the client sends JOIN_REQUEST. Times out after 15s.
+      this.peerManager.on('peer-connected', (conn) => {
+        const firstEmpty = this.slots.find(s => s.type === 'unfilled' && s.playerIndex > 0);
+        if (!firstEmpty) return;
+        const slotIdx = firstEmpty.playerIndex;
+        this.slots[slotIdx].type = 'connecting';
+        this.slots[slotIdx].name = 'Connecting...';
+        this._connToSlot.set(conn, slotIdx);
+        this._updatePlayerList();
+        this._setStatus('A player is connecting...');
+        // Auto-revert after 15s if no JOIN_REQUEST arrives.
+        const cleanupTimer = setTimeout(() => {
+          const current = this._connToSlot.get(conn);
+          if (current != null && this.slots[current] && this.slots[current].type === 'connecting') {
+            this._connToSlot.delete(conn);
+            this.slots[current].type = 'unfilled';
+            this.slots[current].name = `Player ${current + 1}`;
+            this._updatePlayerList();
+            this._setStatus('Connection timed out');
+          }
+        }, 15000);
+        // Cancel timer when this conn sends any message (JOIN_REQUEST comes next).
+        const cancelTimer = (msg, srcConn) => {
+          if (srcConn === conn) clearTimeout(cleanupTimer);
+        };
+        this.peerManager.on('message', cancelTimer);
       });
 
       // Auto-remove player on disconnect.
@@ -562,13 +603,24 @@ export class LobbyView extends EventEmitter {
       console.log('[LobbyView] Creating ClientPeerManager for room:', code);
       this.peerManager = new ClientPeerManager(code);
 
-      // Register game_starting listener BEFORE connectToHost to avoid a race
-      // where the host sends game_starting before we are listening.
+      // Register listeners BEFORE connectToHost to avoid races where the
+      // host sends events before we are listening.
       let gameStartingReceived = false;
       let gameStartingPayload = null;
       this.peerManager.on('msg:game_starting', (payload) => {
         gameStartingReceived = true;
         gameStartingPayload = payload;
+      });
+
+      // Buffer lobby events that could arrive before listeners are registered.
+      const bufferedLobbyEvents = [];
+      const lobbyBufferTypes = ['msg:player_joined', 'msg:player_left', 'msg:player_name_updated', 'msg:lobby_state', 'msg:game_state_sync'];
+      const lobbyBufferHandlers = lobbyBufferTypes.map(type => {
+        const handler = (payload) => {
+          bufferedLobbyEvents.push({ type, payload });
+        };
+        this.peerManager.on(type, handler);
+        return { type, handler };
       });
 
       const result = await this.peerManager.connectToHost(name, preferredIndex);
@@ -845,6 +897,14 @@ export class LobbyView extends EventEmitter {
         }, 2000);
       });
 
+      // Remove buffer handlers and replay captured events.
+      for (const { type, handler } of lobbyBufferHandlers) {
+        this.peerManager.off(type, handler);
+      }
+      for (const evt of bufferedLobbyEvents) {
+        this.peerManager.emit(evt.type, evt.payload);
+      }
+
       // If game_starting was received before the listener above was registered,
       // process the stored payload now.
       if (gameStartingReceived) {
@@ -1001,6 +1061,18 @@ export class LobbyView extends EventEmitter {
         badge.className = 'slot-badge slot-badge--empty';
         badge.textContent = 'Empty';
         li.appendChild(input);
+        li.appendChild(badge);
+      } else if (slot.type === 'connecting') {
+        // Connecting state: show name and a pending badge.
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = slot.name;
+        nameSpan.style.fontStyle = 'italic';
+        nameSpan.style.opacity = '0.6';
+        const badge = document.createElement('span');
+        badge.className = 'slot-badge slot-badge--connecting';
+        badge.textContent = 'Connecting...';
+        badge.style.cssText = 'background: #f9a825; color: #111; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px;';
+        li.appendChild(nameSpan);
         li.appendChild(badge);
       } else {
         // Player name.
