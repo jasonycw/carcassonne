@@ -1,6 +1,13 @@
 # GOAL
 To migrate the Carcassonne board game to a static GitHub Pages on https://jasonycw.github.io/carcassonne/ with simple multiplayer support, removing the requirement for user authentication and server-side hosting fees.
 
+# DEFINITION OF DONE
+Before claiming any task done or marking a feature phase complete or anything fixed, you must explicitly pass the following validation matrix:
+1. Build and run the application locally. Open the browser developer console and verify there are zero errors or failed network requests during a full game loop.
+2. Simulate a full game **from start to finish** to ensure the scoring and tile placement logic is intact.
+3. Test the built project assets locally under a simulated nested path structure matching how GitHub Pages serves repositories (e.g., `localhost:8080/carcassonne/`) to catch path resolution errors early before testing on Github Page.
+4. **MUST test the game from start to finish after it is built on GitHub Page**. Must make sure `https://jasonycw.github.io/carcassonne/` meets all the requirement and UIUX matching the original game and can completely the whole game without any issue. Local testing or simple unit test or any small scale e2e test are all worthless compare to FULL P2P GAME TESTED ON GITHUB PAGE!
+
 # TECHNICAL CONSTRAINTS
 - **Static Hosting Only:** The final build must consist solely of client-side assets (HTML, JS, CSS, images). No Express server, No Node.js runtime environment, No MongoDB/database interactions.
 - **Multiplayer Architecture:** Host-authoritative PeerJS WebRTC P2P. The room creator (Host) acts as the central authority executing game logic, validation, and scoring, while broadcasting state updates to up to 5 players. Connection orchestration must handle handshake signaling seamlessly using direct shareable room URLs (e.g., `https://jasonycw.github.io/carcassonne/?room=XXXXXX`)
@@ -14,12 +21,7 @@ To migrate the Carcassonne board game to a static GitHub Pages on https://jasony
 - **Surgical Changes:** Touch only the modules that dictate authentication, persistence, rendering wrapper extraction, or socket handling. Match existing core logic styles and do not arbitrarily refactor functional game logic, math algorithms, or scoring metrics.
 - **Clean Up Orphans:** When backend references, old EJS files, Mongoose schemas, or Passport flows are decoupled, completely remove their respective legacy files and dependencies inside `package.json`. Do not leave broken, unused dead code hanging.
 
-# VERIFICATION & DEFINITION OF DONE
-Before claiming any task done or marking a feature phase complete or anything fixed, you must explicitly pass the following validation matrix:
-1. Build and run the application locally. Open the browser developer console and verify there are zero errors or failed network requests during a full game loop.
-2. Simulate a full game **from start to finish** to ensure the scoring and tile placement logic is intact.
-3. Test the built project assets locally under a simulated nested path structure matching how GitHub Pages serves repositories (e.g., `localhost:8080/carcassonne/`) to catch path resolution errors early before testing on Github Page.
-4. **MUST test the game from start to finish after it is built on GitHub Page**. Must make sure `https://jasonycw.github.io/carcassonne/` meets all the requirement and UIUX matching the original game and can completely the whole game without any issue. Local testing or simple unit test or any small scale e2e test are all worthless compare to FULL P2P GAME TESTED ON GITHUB PAGE!
+
 
 # COMMIT STANDARD
 This must be followed everytime, for audit, tracking and prevent huge chunk of undocumented changes
