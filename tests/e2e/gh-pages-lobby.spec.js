@@ -62,7 +62,9 @@ test.describe('GitHub Pages Lobby', () => {
 
     // ── Verify joiner sees host name ──────────────────────────────────
     const j1PlayerNames = await j1Page.evaluate(() => {
-      const items = document.querySelectorAll('.player-list-item span:first-child');
+      // (You) badge is in a separate <span>, not the first-child.  Use
+      // the full text of each .player-list-item to catch both name and badge.
+      const items = document.querySelectorAll('.player-list-item');
       return Array.from(items).map(el => el.textContent);
     });
     console.log('[GH Lobby] Joiner 1 sees players:', j1PlayerNames);
@@ -128,7 +130,8 @@ test.describe('GitHub Pages Lobby', () => {
     await hostPage.goto(GH_PAGES_URL, { waitUntil: 'networkidle', timeout: 30000 });
     await hostPage.waitForSelector('#lobby-container', { timeout: 15000 });
     await hostPage.locator('#player-name').fill('SyncTestHost');
-    await hostPage.locator('#player-count').selectOption('3');
+    // Use 4 players so slot 2 remains empty after joiner takes slot 1.
+    await hostPage.locator('#player-count').selectOption('4');
     await hostPage.locator('#create-game-btn').click();
 
     await hostPage.waitForSelector('#room-code:not(:empty)', { timeout: 60000 });
@@ -136,10 +139,13 @@ test.describe('GitHub Pages Lobby', () => {
 
     const roomCode = await hostPage.locator('#room-code').textContent();
 
-    // Edit an unfilled slot name
+    // Edit the SECOND unfilled slot's name (slot index 2, NOT slot 1).
+    // The first joiner will take slot 1, so we edit a different slot
+    // to verify the name sync survives on an empty seat.
     const slotInputs = hostPage.locator('.slot-name-input');
     await expect(slotInputs.first()).toBeVisible({ timeout: 5000 });
-    await slotInputs.first().fill('WaitingForBob');
+    // slotInputs.nth(1) corresponds to the second unfilled slot (index 2).
+    await slotInputs.nth(1).fill('WaitingForBob');
 
     // ── Joiner context ─────────────────────────────────────────────────
     const jContext = await browser.newContext();
@@ -159,9 +165,9 @@ test.describe('GitHub Pages Lobby', () => {
     // Wait for LOBBY_STATE to propagate
     await jPage.waitForTimeout(2000);
 
-    // Verify joiner sees the edited slot name
+    // Verify joiner sees the edited slot name on the empty seat.
     const jNames = await jPage.evaluate(() => {
-      const items = document.querySelectorAll('.player-list-item span:first-child');
+      const items = document.querySelectorAll('.player-list-item');
       return Array.from(items).map(el => el.textContent);
     });
     console.log('[GH Lobby] Joiner sees players:', jNames);
