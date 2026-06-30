@@ -141,6 +141,8 @@ export class LobbyView extends EventEmitter {
     this.slots = [];
     /** Map conn → slot index for tracking disconnect/remotes. */
     this._connToSlot = new Map();
+    /** Slot array synced from host (joiner side) for displaying slot names. */
+    this._lobbySlots = [];
     /** Map conn → cancelTimer handler so we can clean up on disconnect. */
     this._connCancelTimers = new Map();
     /** Index of the local player in the slots array. */
@@ -462,7 +464,7 @@ export class LobbyView extends EventEmitter {
             this._updatePlayerList();
             this._setStatus(`${message.payload.playerName} joined!`);
             // The host PeerManager still needs to accept the join.
-            this.peerManager.acceptJoin(conn, message.payload.playerName, slotIndex);
+            this.peerManager.acceptJoin(conn, message.payload.playerName, slotIndex, this.slots);
             return;
           }
           // Find first unfilled slot (skip host slot 0).
@@ -474,7 +476,7 @@ export class LobbyView extends EventEmitter {
             return;
           }
           slotIndex = firstUnfilled.playerIndex;
-          const result = this.peerManager.acceptJoin(conn, message.payload.playerName, slotIndex);
+          const result = this.peerManager.acceptJoin(conn, message.payload.playerName, slotIndex, this.slots);
           if (result.accepted) {
             this._connToSlot.set(conn, slotIndex);
             this.slots[slotIndex].type = 'remote';
@@ -670,6 +672,7 @@ export class LobbyView extends EventEmitter {
         playerIndex: p.playerIndex,
       }));
       this.maxPlayers = result.maxPlayers || (result.players ? result.players.length : 2);
+      if (result.slots) this._lobbySlots = result.slots;
       this.localPlayerIndex = result.playerIndex;
       this.dom.lobbyPlayers.style.display = 'block';
       // Non-host should not see the start game button.
@@ -722,6 +725,7 @@ export class LobbyView extends EventEmitter {
           playerIndex: p.playerIndex,
         }));
         if (payload.maxPlayers) this.maxPlayers = payload.maxPlayers;
+        if (payload.slots) this._lobbySlots = payload.slots;
         this._updatePlayerList();
       });
 
@@ -1035,7 +1039,7 @@ export class LobbyView extends EventEmitter {
             }
             if (targetSlot === -1) targetSlot = 1; // fallback
           }
-          const result = this.peerManager.acceptJoin(conn, pName, targetSlot);
+          const result = this.peerManager.acceptJoin(conn, pName, targetSlot, this.slots);
           if (result && result.accepted) {
             this._connToSlot.set(conn, targetSlot);
             this.slots[targetSlot].type = 'remote';
@@ -1095,14 +1099,17 @@ export class LobbyView extends EventEmitter {
         }
         list.appendChild(li);
       });
-      // Show empty seats so the joiner sees the full lobby size.
+      // Show empty seats so the joiner sees the full lobby size
+      // with slot names synced from the host (via _lobbySlots).
       if (this.maxPlayers) {
         for (let i = 0; i < this.maxPlayers; i++) {
           if (!this.players.find(p => p.playerIndex === i)) {
             const li = document.createElement('li');
             li.className = 'player-list-item';
+            // Use synced slot name if available, fall back to generic label.
+            const slotInfo = this._lobbySlots ? this._lobbySlots.find(s => s.playerIndex === i) : null;
             const nameSpan = document.createElement('span');
-            nameSpan.textContent = i === 0 ? 'Host' : `Player ${i + 1}`;
+            nameSpan.textContent = slotInfo ? slotInfo.name : (i === 0 ? 'Host' : `Player ${i + 1}`);
             nameSpan.style.opacity = '0.4';
             li.appendChild(nameSpan);
             if (i !== 0) {
@@ -1131,6 +1138,10 @@ export class LobbyView extends EventEmitter {
         input.maxLength = 20;
         input.addEventListener('input', () => {
           this.slots[slot.playerIndex].name = input.value.trim() || `Player ${slot.playerIndex + 1}`;
+          // Sync slot name to joiners so they see the same label.
+          if (this.peerManager && typeof this.peerManager.broadcastLobby === 'function') {
+            this.peerManager.broadcastLobby(this.slots);
+          }
         });
         const badge = document.createElement('span');
         badge.className = 'slot-badge slot-badge--empty';
@@ -1222,7 +1233,9 @@ export class LobbyView extends EventEmitter {
    * Detection methods (tried in order):
    * 1. PeerJS's own open flag (conn.open === false)
    * 2. Underlying RTCDataChannel readyState (if accessible via _dataChannel)
-   * 3. Forced send() attempt — throws on closed data channels
+   * 3. RTCPeerConnection ICE state — 'disconnected'/'failed' means the remote
+   *    is unreachable even if the data channel hasn't closed yet.
+   * 4. Forced send() attempt — throws on closed data channels
    */
   _startLobbyHealthCheck() {
     this._stopLobbyHealthCheck();
@@ -1241,7 +1254,17 @@ export class LobbyView extends EventEmitter {
           const state = conn._dataChannel.readyState;
           if (state === 'closed' || state === 'closing') dead = true;
         }
-        // Method 3: Force-send to trigger error on dead connections.
+        // Method 3: RTCPeerConnection ICE state — detects network-level drops
+        // before the data channel closes (tab crash, network partition).
+        if (!dead && conn._peerConnection) {
+          try {
+            const iceState = conn._peerConnection.iceConnectionState;
+            if (iceState === 'disconnected' || iceState === 'failed' || iceState === 'closed') {
+              dead = true;
+            }
+          } catch (_e) {}
+        }
+        // Method 4: Force-send to trigger error on dead connections.
         if (!dead) {
           try {
             // PeerJS send() throws when the data channel is not open.
@@ -1291,9 +1314,9 @@ export class LobbyView extends EventEmitter {
       this.slots[slotIdx].name = `Player ${slotIdx + 1}`;
       this._updatePlayerList();
       this._setStatus(`${removedName} ${reason || 'disconnected'}`);
-      // Tell remaining joiners the lobby state changed.
+      // Tell remaining joiners the lobby state changed (includes slot names).
       if (this.isHost && this.peerManager && typeof this.peerManager.broadcastLobby === 'function') {
-        this.peerManager.broadcastLobby();
+        this.peerManager.broadcastLobby(this.slots);
       }
     }
   }

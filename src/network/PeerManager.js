@@ -492,9 +492,10 @@ export class HostPeerManager extends PeerManager {
    * @param {string} playerName
    * @param {number} [preferredIndex] - Specific slot index to assign (for slot-based lobby).
    *        If not provided, uses the next sequential index (connectedPlayers.length + 1).
+   * @param {Array} [slots] - Full slot array from LobbyView so the joiner sees host-edited slot names.
    * @returns {{ accepted: boolean, playerIndex?: number, reason?: string }}
    */
-  acceptJoin(conn, playerName, preferredIndex) {
+  acceptJoin(conn, playerName, preferredIndex, slots) {
     if (this.connectedPlayers.length >= this.maxPlayers) {
       this.send(conn, createMessage(MessageType.JOIN_REJECT, { reason: 'Game is full' }));
       return { accepted: false, reason: 'Game is full' };
@@ -514,6 +515,7 @@ export class HostPeerManager extends PeerManager {
       players: this.getPlayerList(),
       settings: this.settings,
       maxPlayers: this.maxPlayers,
+      slots,
     }));
 
     // Notify others.
@@ -538,11 +540,12 @@ export class HostPeerManager extends PeerManager {
   }
 
   /** Broadcast the current lobby state. */
-  broadcastLobby() {
+  broadcastLobby(slots) {
     this.broadcast(createMessage(MessageType.LOBBY_STATE, {
       players: this.getPlayerList(),
       settings: this.settings,
       maxPlayers: this.maxPlayers,
+      slots,  // full slot array so joiners see host-edited slot names
     }));
   }
 
@@ -715,6 +718,7 @@ export class ClientPeerManager extends PeerManager {
             maxPlayers: message.payload.maxPlayers,
             players: message.payload.players || [],
             settings: message.payload.settings || {},
+            slots: message.payload.slots,
           });
         } else if (message.type === MessageType.JOIN_REJECT) {
           settle('reject', new Error(message.payload.reason || 'Join rejected'));
