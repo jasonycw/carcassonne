@@ -79,7 +79,24 @@ export class GameHost extends EventEmitter {
   _handleJoinRequest(payload, conn) {
     const playerName = (payload && payload.playerName) || 'Reconnecting Player';
     const preferredIndex = payload && payload.preferredIndex;
-    console.log('[GameHost] Reconnection attempt by:', playerName, 'preferredIndex:', preferredIndex);
+    console.log('[GameHost] Connection attempt by:', playerName, 'preferredIndex:', preferredIndex);
+
+    // ── Block new joiners after game has started ──────────────────────────
+    // The starting tile is placed by initializeNewGame(), so placedTiles
+    // with length > 0 reliably indicates the game has started.
+    // A reconnecting client always passes preferredIndex (saved from the
+    // original join). A new joiner without one is a late joiner — reject.
+    const gameStarted = this.gamestate.placedTiles && this.gamestate.placedTiles.length > 0;
+    if (gameStarted && (preferredIndex == null || preferredIndex <= 0)) {
+      console.log('[GameHost] Rejecting late join — game already started');
+      if (conn) {
+        this.hostPeerManager.send(conn, createMessage(MessageType.JOIN_REJECT, {
+          reason: 'Game already started',
+        }));
+      }
+      return;
+    }
+    // ── END GATE ─────────────────────────────────────────────────────────
 
     // If the client provides a preferredIndex (reconnection, Issue 6),
     // ensure the slot is free by removing any stale connection at that
