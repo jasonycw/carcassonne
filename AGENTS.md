@@ -1,12 +1,12 @@
 # GOAL
-To migrate the Carcassonne board game to a static GitHub Pages on `https://jasonycw.github.io/carcassonne/` using the `main` branch with simple multiplayer support, removing the requirement for user authentication and server-side hosting fees.
+To create the Carcassonne board game to a static GitHub Pages on `https://jasonycw.github.io/carcassonne/` using the `main` branch with simple multiplayer support, without user authentication and server-side hosting fees.
 
 # DEFINITION OF DONE
 Before claiming any task done or marking a feature phase complete or anything fixed, you must explicitly pass the following validation matrix:
 1. Build and run the application locally. Open the browser developer console and verify there are zero errors or failed network requests during a full game loop.
 2. Simulate a full game **from start to finish** to ensure the scoring and tile placement logic is intact.
 3. Test the built project assets locally under a simulated nested path structure matching how GitHub Pages serves repositories (e.g., `localhost:8080/carcassonne/`) to catch path resolution errors early before testing on Github Page.
-4. Done means **the game MUST has tested the game from start to finish after everything are pushed and is built on GitHub Page**. Must make sure `https://jasonycw.github.io/carcassonne/` meets all the requirements and UIUX matching the original game and can completely the whole game with P2P without any issue. Localhost testing or simple unit test or any small scale e2e test are all worthless compare to FULL P2P GAME TESTED ON GITHUB PAGE!
+4. Done means **the game MUST has tested in P2P mode from start to finish online after everything are pushed and is built on GitHub Page**. Must make sure `https://jasonycw.github.io/carcassonne/` meets all the requirements and UIUX matching the original game and can completely the whole game with P2P without any issue. Localhost testing or simple unit test or any small scale e2e test are all worthless compare to FULL P2P GAME TESTED ON GITHUB PAGE!
 
 # TECHNICAL CONSTRAINTS
 - **Static Hosting Only:** The final build must consist solely of client-side assets (HTML, JS, CSS, images). No Express server, No Node.js runtime environment, No MongoDB/database interactions.
@@ -27,18 +27,3 @@ This must be followed everytime, for audit, tracking and prevent huge chunk of u
 - **Iterative & Traceable:** Commits should represent a step-by-step assembly of the phases. NEVER one commit with multiple changes/fixes
 - **Clean Commit History:** Document messages explicitly detailing what changed, matching exactly the lines impacted.
 - **No artifact left:** All files must either be commited or gitignore artifact folder or removed, must not have any untrack/unstaged file left, testing artifacts must by ignored, all commited file must be absolutely neccessary for the goal.
-
-# BACKGROUND & CONTEXT
-- **Baseline Functional Commit Before migration:** `962f33eed833cb2cb845e40bb5d7186e66dc6d2d` (Not just this commit change, it is just the latest commit, must check the whole repo at that point in time)
-- **The Problem:** The baseline version requires user login, server-side persistence, or external hosting configurations that incur costs/maintenance.
-- **The Solution:** Strip out the backend entirely. Port all game mechanics, tile definitions, and structural verification into a pure, client-side JavaScript architecture that compiles into static assets served completely free of charge on GitHub Pages. Migrate to a 100% standalone frontend game client running entirely in the browser via GitHub Pages with mobile support.
-
-# TASKS
-- The gameplay UX must be 1 to 1 identical to before migration `962f33eed833cb2cb845e40bb5d7186e66dc6d2d`, no exception
-- Follow the initial plan from `/.antigravitycli/implementation_plan.md`, use judgement
-- The game must be able to play from beginning to end without any issue
-- All extensions must be fully working, with any combination
-- No deadlink, dead image or error after it's built on GitHub Page, no exception
-- Multiplayer must be working
-- README must has the latest screenshot of the game running with multiple players, meeples placed and scoring working, showing the beginning, middle of the game, end of the game
-- When verify, everything must be check locally first and then also check after GitHub Page is built
