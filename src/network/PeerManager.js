@@ -30,8 +30,9 @@ const PEER_HOST = '0.peerjs.com';  // default PeerJS cloud host
 const PEER_PORT = 443;
 const PEER_PATH = '/';
 const RECONNECT_DELAY = 2000;      // ms between reconnection attempts
-const PING_INTERVAL = 10000;       // ms between heartbeats
-const WATCHDOG_TIMEOUT = PING_INTERVAL * 3; // 30s without PING → assume host lost
+const PING_INTERVAL = 1000;        // ms between heartbeats (aggressive for near-instant zombie detection)
+const LIVENESS_TIMEOUT = PING_INTERVAL * 3; // 3s without any message → assume remote is dead
+const WATCHDOG_TIMEOUT = PING_INTERVAL * 3; // 3s without PING → assume host lost
 
 // Metered.ca Open Relay Project shared secret (publicly documented).
 // Used to generate HMAC-SHA1 TURN credentials client-side.
@@ -352,6 +353,23 @@ export class PeerManager extends EventEmitter {
 
   /** Set up a DataConnection with event handlers. */
   _setupDataConnection(conn) {
+    // ── Liveness timer (fires after LIVENESS_TIMEOUT of no incoming data) ──
+    // Cleared on 'data', 'close', and when the connection is destroyed.
+    let livenessTimer = null;
+    const resetLiveness = () => {
+      clearTimeout(livenessTimer);
+      livenessTimer = setTimeout(() => {
+        if (conn.open) {
+          console.warn(`[PeerManager] Liveness timeout — closing zombie connection to ${conn.peer}`);
+          conn.close();
+        }
+      }, LIVENESS_TIMEOUT);
+    };
+    const clearLiveness = () => {
+      clearTimeout(livenessTimer);
+      livenessTimer = null;
+    };
+
     conn.on('open', () => {
       // Avoid duplicates.
       const existing = this.connections.find((c) => c.peer === conn.peer);
@@ -359,8 +377,9 @@ export class PeerManager extends EventEmitter {
         this.connections.push(conn);
         this.emit('peer-connected', conn);
       }
-      // Track last message time for health monitoring.
+      // Start liveness timer and message tracker.
       conn._lastMsgTime = Date.now();
+      resetLiveness();
       // Start PING watchdog for the host connection.
       if (conn === this.hostConnection) {
         this._startPingWatch();
@@ -389,12 +408,26 @@ export class PeerManager extends EventEmitter {
         // Track last message time per-connection for health check timeout.
         // Any incoming message (including PONG) proves the remote is alive.
         conn._lastMsgTime = Date.now();
+        // Reset liveness timer — we heard from them.
+        resetLiveness();
       } catch (err) {
         console.error('[PeerManager] Failed to deserialize message:', err);
       }
     });
 
+    // PeerJS 1.5.5 emits 'iceStateChanged' on the DataConnection when the
+    // underlying RTCPeerConnection ICE state changes (disconnected / failed).
+    // This fires much faster than waiting for the data channel to close —
+    // typically within a few seconds of a tab close or network drop.
+    conn.on('iceStateChanged', (state) => {
+      if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+        console.warn(`[PeerManager] ICE ${state} on ${conn.peer} — closing`);
+        conn.close();
+      }
+    });
+
     conn.on('close', () => {
+      clearLiveness();
       this.connections = this.connections.filter((c) => c !== conn);
       if (conn === this.hostConnection) {
         this.hostConnection = null;
