@@ -155,7 +155,7 @@ function meepleSize(meepleType) {
  * @param {SVGSVGElement} svgElement  The <svg> DOM node (not a selector string).
  * @param {object}        [options]
  * @param {number}        [options.tileSize=100]
- * @param {[number,number]} [options.scaleExtent=[0.25, 1]]
+ * @param {[number,number]} [options.scaleExtent=[0.25, 2.5]]
  * @param {[number,number]} [options.translateExtent]  Bounds for panning.
  */
 export function initializeBoard(svgElement, options = {}) {
@@ -211,7 +211,7 @@ export function initializeBoard(svgElement, options = {}) {
     .attr('flood-opacity', 0.8);
 
   // ── Zoom behaviour ────────────────────────────────────────────────────
-  const scaleExtent = options.scaleExtent || [0.25, 1];
+  const scaleExtent = options.scaleExtent || [0.25, 2.5];
   zoomBehavior = d3.zoom()
     .scaleExtent(scaleExtent);
 
