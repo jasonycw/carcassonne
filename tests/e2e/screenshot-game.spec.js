@@ -203,18 +203,19 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
     console.log('✓ Screenshot 2: game started');
 
     // ── 3. Place tiles ────────────────────────────────────────────────────
-    // Play through the full game (host places tiles for all players).
-    // The host plays for their own turns AND hot-seat local players.
-    // The remote client plays their own turns via P2P state sync.
-    // tryPlaceTile returns false when it's not the active player's turn,
-    // so the loop naturally cycles between all 4 players.
+    // Both host and client place tiles during the game loop:
+    //   - Host places for Host, Local player 1, Local player 2 (hot-seat)
+    //   - Client places for Remote player 1 (P2P)
+    // tryPlaceTile returns false when it's not the caller's active turn,
+    // so trying both sides naturally handles turn cycling.
     let totalPlaced = 0;
     let midGameDone = false;
     let gameOver = false;
     const MAX_TILES = 200;
 
     while (!gameOver && totalPlaced < MAX_TILES) {
-      const placed = await tryPlaceTile(hostPage, {
+      // Host-side placement (Host / Local player 1-2 turns)
+      const hostPlaced = await tryPlaceTile(hostPage, {
         onTilePinned: midGameDone ? null : async (p) => {
           if (totalPlaced < 18) return;
           await p.waitForTimeout(1000);
@@ -231,17 +232,32 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
         },
       });
 
-      if (placed) {
+      if (hostPlaced) {
         totalPlaced++;
         if (totalPlaced % 10 === 0) console.log(`Placed ${totalPlaced} tiles`);
-      } else {
-        for (let i = 0; i < 15; i++) {
-          const visible = await hostPage
-            .locator('#game-over-banner')
-            .isVisible({ timeout: 1000 })
-            .catch(() => false);
-          if (visible) { gameOver = true; break; }
-        }
+        continue;
+      }
+
+      // Client-side placement (Remote player 1 turn)
+      const clientPlaced = await tryPlaceTile(clientPage);
+      if (clientPlaced) {
+        totalPlaced++;
+        if (totalPlaced % 10 === 0) console.log(`Placed ${totalPlaced} tiles`);
+        continue;
+      }
+
+      // No one placed — wait a beat for turn transitions, then check for game over
+      await hostPage.waitForTimeout(500);
+      for (let i = 0; i < 15; i++) {
+        const hostOver = await hostPage
+          .locator('#game-over-banner')
+          .isVisible({ timeout: 1000 })
+          .catch(() => false);
+        const clientOver = await clientPage
+          .locator('#game-over-banner')
+          .isVisible({ timeout: 1000 })
+          .catch(() => false);
+        if (hostOver || clientOver) { gameOver = true; break; }
       }
     }
 
