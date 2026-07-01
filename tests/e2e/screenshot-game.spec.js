@@ -157,15 +157,30 @@ test.describe('Screenshot Game', () => {
     while (!gameOver && totalPlaced < MAX_TILES) {
       const placed = await tryPlaceTile(page, {
         onTilePinned: midGameDone ? null : async (p) => {
-          // Take mid-game screenshot when a tile is pinned on the board
-          // with the rotation indicator visible.  This captures the
-          // rotation arrow as part of the mid-game screenshot (Issue 1).
-          if (totalPlaced >= 18) {
-            await p.waitForTimeout(300);
-            await p.screenshot({ path: 'screenshots/03-mid-game.png', fullPage: true });
-            console.log('✓ Screenshot 3: mid-game (with rotation indicator)');
-            midGameDone = true;
+          // Take mid-game screenshot only when the rotation indicator
+          // is actually visible on the pinned tile (opacity > 0).
+          // The indicator only appears on tiles with >1 valid rotation.
+          if (totalPlaced < 18) return; // let the board grow first
+          // Wait for the 750ms tile-pinning transition to complete.
+          await p.waitForTimeout(1000);
+          // Check if the rotation indicator is currently visible on the
+          // pinned tile. The indicator is a <use> element with CSS
+          // class "active-tile-rotation-indicator"; it's shown/hidden
+          // via opacity in _updateRotationIndicator().
+          const hasIndicator = await p.evaluate(() => {
+            const el = document.querySelector('#game-svg use.active-tile-rotation-indicator');
+            if (!el) return false;
+            const opacity = parseFloat(el.getAttribute('opacity') || '0');
+            return opacity > 0;
+          }).catch(() => false);
+          if (!hasIndicator) {
+            // This tile has only 1 valid rotation — no indicator.
+            // Don't null the hook so we retry on the next tile.
+            return;
           }
+          await p.screenshot({ path: 'screenshots/03-mid-game.png', fullPage: true });
+          console.log('✓ Screenshot 3: mid-game (with rotation indicator)');
+          midGameDone = true;
         },
       });
 
