@@ -35,6 +35,7 @@ dist/
 
 # Playwright test output
 .playwright/
+.playwright-report/
 
 # Baseline checkout artifact
 original_962f33ee/

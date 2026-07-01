@@ -3,13 +3,18 @@
  * with expansions (Inns & Cathedrals, Traders & Builders) and take
  * screenshots showing beginning, middle, and end of the game.
  *
- * Uses two browser contexts (host + client) so the lobby screenshot
- * shows both players connected and verifies state sync throughout.
+ * Uses two browser contexts (host + remote client) plus hot-seat local
+ * players for a total of 4 players in the lobby. The lobby screenshot
+ * shows all 4 with proper naming:
+ *   - Host (local)
+ *   - Remote player 1 (connects via P2P)
+ *   - Local player 1 (hot-seat on host)
+ *   - Local player 2 (hot-seat on host)
  *
  * Screenshots are written to screenshots/*.png for the README.
  *
  * Screenshots captured:
- *  01-lobby.png              — Lobby with host + client connected, expansions
+ *  01-lobby.png              — Lobby with 4 players, all expansions
  *  02-game-started.png        — Board right after game start (host view)
  *  03-mid-game.png            — Mid-game with rotation indicator on pinned tile
  *  04-game-over.png           — Final board with game-over banner and scores
@@ -62,7 +67,6 @@ async function tryPlaceTile(page, hooks = {}) {
   const hasPlacement = await placement.isVisible({ timeout: 2000 }).catch(() => false);
   if (!hasPlacement) {
     // No placement found — maybe it's another player's turn (hot-seat).
-    // The HUD might show for a non-active player; wait for it to pass.
     await page.waitForTimeout(1000);
     return false;
   }
@@ -71,11 +75,9 @@ async function tryPlaceTile(page, hooks = {}) {
   await placement.dispatchEvent('click');
   await page.waitForTimeout(300);
 
-  // Fire rotation-indicator hook (if provided) while the tile is pinned
-  // and before any confirm button click.
+  // Fire rotation-indicator hook (if provided) while the tile is pinned.
   if (hooks.onTilePinned) {
     await hooks.onTilePinned(page);
-    // Clear the hook so it only fires once.
     hooks.onTilePinned = null;
   }
 
@@ -90,10 +92,6 @@ async function tryPlaceTile(page, hooks = {}) {
   }
 
   // Try to place a meeple if outlines are visible.
-  // Cycle through outlines (road→city→farm→cloister order) so all
-  // feature types get played over the course of a game — otherwise
-  // picking the FIRST outline always prefers roads/cities and never
-  // places cloister meeples, making the end-game breakdown show "-".
   const meepleOutlines = page.locator('#game-svg image.meeple-outline');
   const outlineCount = await meepleOutlines.count().catch(() => 0);
   if (outlineCount > 0) {
@@ -120,7 +118,6 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
   test('play 4-player game with expansions and capture screenshots', async ({ browser }) => {
     test.setTimeout(600000); // 10 minutes
 
-    // Error tracking for both contexts
     const hostErrors = [];
     const clientErrors = [];
 
@@ -133,17 +130,18 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
     await hostPage.goto(GH_PAGES_URL, { waitUntil: 'networkidle', timeout: 30000 });
     await hostPage.waitForSelector('#lobby-container', { timeout: 15000 });
 
-    // ── Client context ───────────────────────────────────────────────────
+    // ── Client context (Remote player 1) ─────────────────────────────────
     const clientContext = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
     const clientPage = await clientContext.newPage();
     clientPage.on('console', (msg) => { if (msg.type() === 'error') clientErrors.push(msg.text()); });
     clientPage.on('pageerror', (err) => clientErrors.push(err.message));
 
-    // ── 1. Lobby (2-player with all expansions, client connected) ────────
-    await hostPage.locator('#player-name').fill('HostPlayer');
-    await hostPage.locator('#player-count').selectOption('2');
+    // ── 1. Lobby (4 players with expansions) ─────────────────────────────
+    // Host setup: 4-player game with all expansions
+    await hostPage.locator('#player-name').fill('Host');
+    await hostPage.locator('#player-count').selectOption('4');
 
-    // Enable available expansions (Tower is disabled per baseline commit 962f33ee)
+    // Enable available expansions
     await hostPage.locator('input[value="inns-and-cathedrals"]').check();
     await hostPage.locator('input[value="traders-and-builders"]').check();
 
@@ -155,7 +153,17 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
     const roomCode = (await hostPage.locator('#room-code').textContent()).trim();
     console.log(`[Screenshot] Host room: "${roomCode}"`);
 
-    // Client joins
+    // Name the local hot-seat players before client joins
+    // Player 2 slot will be taken by Remote player 1
+    // Player 3 = Local player 1
+    // Player 4 = Local player 2
+    const slotInputs = await hostPage.locator('#lobby-players input[type="text"]').all();
+    if (slotInputs.length >= 3) {
+      await slotInputs[1].fill('Local player 1');
+      await slotInputs[2].fill('Local player 2');
+    }
+
+    // Remote player 1 joins via room code
     await clientPage.goto(`${GH_PAGES_URL}?room=${roomCode}`, {
       waitUntil: 'networkidle', timeout: 30000,
     });
@@ -167,15 +175,16 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
       const text = await statusLocator.textContent();
       expect(text).toContain('Joined');
     }).toPass({ timeout: 60000 });
-    console.log('[Screenshot] Client joined room');
+    console.log('[Screenshot] Remote player 1 joined');
+
     await hostPage.waitForTimeout(1000);
 
-    // Check no errors so far
+    // Verify no errors so far
     expect([...hostErrors, ...clientErrors]).toEqual([]);
 
-    // Take lobby screenshot (host view, shows client connected)
+    // Take lobby screenshot (host view, all 4 players visible)
     await hostPage.screenshot({ path: 'screenshots/01-lobby.png', fullPage: true });
-    console.log('✓ Screenshot 1: lobby (P2P with client connected, all expansions)');
+    console.log('✓ Screenshot 1: lobby (Host + Remote player 1 + Local players 1-2, expansions)');
 
     // ── 2. Start game ───────────────────────────────────────────────────
     await hostPage.locator('#start-game-btn').click();
@@ -183,7 +192,7 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
     await hostPage.waitForSelector('#game-svg', { state: 'visible', timeout: 5000 });
     await expect(hostPage.locator('#game-turn-indicator')).not.toBeEmpty();
 
-    // Wait for client game view too
+    // Wait for client game view (P2P sync)
     await clientPage.waitForSelector('#game-container', { timeout: 60000 });
     await clientPage.waitForSelector('#game-svg', { state: 'visible', timeout: 15000 });
     await expect(clientPage.locator('#game-turn-indicator')).not.toBeEmpty();
@@ -195,8 +204,10 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
 
     // ── 3. Place tiles ────────────────────────────────────────────────────
     // Play through the full game (host places tiles for all players).
-    // Take mid-game screenshot when a tile is pinned with the rotation
-    // indicator visible.
+    // The host plays for their own turns AND hot-seat local players.
+    // The remote client plays their own turns via P2P state sync.
+    // tryPlaceTile returns false when it's not the active player's turn,
+    // so the loop naturally cycles between all 4 players.
     let totalPlaced = 0;
     let midGameDone = false;
     let gameOver = false;
@@ -205,20 +216,15 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
     while (!gameOver && totalPlaced < MAX_TILES) {
       const placed = await tryPlaceTile(hostPage, {
         onTilePinned: midGameDone ? null : async (p) => {
-          // Take mid-game screenshot only when the rotation indicator
-          // is actually visible on the pinned tile (opacity > 0).
-          // The indicator only appears on tiles with >1 valid rotation.
-          if (totalPlaced < 18) return; // let the board grow first
-          // Wait for the 750ms tile-pinning transition to complete.
+          if (totalPlaced < 18) return;
           await p.waitForTimeout(1000);
-          // Check if the rotation indicator is currently visible.
           const hasIndicator = await p.evaluate(() => {
             const el = document.querySelector('#game-svg use.active-tile-rotation-indicator');
             if (!el) return false;
             const opacity = parseFloat(el.getAttribute('opacity') || '0');
             return opacity > 0;
           }).catch(() => false);
-          if (!hasIndicator) return; // retry on next tile
+          if (!hasIndicator) return;
           await p.screenshot({ path: 'screenshots/03-mid-game.png', fullPage: true });
           console.log('✓ Screenshot 3: mid-game (with rotation indicator)');
           midGameDone = true;
