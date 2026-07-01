@@ -926,14 +926,12 @@ export class LobbyView extends EventEmitter {
         this.peerManager.emit('msg:game_starting', gameStartingPayload);
       }
 
-      // Listen for host disconnect.
+      // Listen for host disconnect — navigate home immediately.
       this.peerManager.on('peer-disconnected', () => {
         this._setStatus('Host disconnected.');
         if (cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
-        setTimeout(() => {
-          this.destroy();
-          navigate('');
-        }, 3000);
+        this.destroy();
+        navigate('');
       });
     } catch (err) {
       console.error('[LobbyView] Failed to join room:', err);
@@ -1233,14 +1231,18 @@ export class LobbyView extends EventEmitter {
    * Detection methods (tried in order):
    * 1. PeerJS's own open flag (conn.open === false)
    * 2. PeerJS 1.5.5 public dataChannel.readyState
-   * 3. Per-connection message timeout: the host's heartbeat sends PING every 10s,
+   * 3. Per-connection message timeout: the host's heartbeat sends PING every 2s,
    *    and every client auto-responds with PONG.  If we haven't received ANY
-   *    message (including PONG) from the remote for 20s, they're dead.
+   *    message (including PONG) from the remote for 10s, they're dead.
    *
    * NOTE: PeerJS 1.5.5 send() never throws (it catches errors internally and
    * returns false), so a force-send try-catch is useless for detection.
    * _peerConnection is not exposed on DataConnection, so ICE state is
    * unavailable here — we rely on PONG timeout instead.
+   *
+   * The per-connection liveness timer in PeerManager._setupDataConnection
+   * provides the primary detection (6s timeout).  This poll-based health
+   * check is a secondary fallback for any edge case the timer misses.
    */
   _startLobbyHealthCheck() {
     this._stopLobbyHealthCheck();
@@ -1265,7 +1267,7 @@ export class LobbyView extends EventEmitter {
         // _lastMsgTime is set on 'open' and updated on every incoming message
         // (including PONG auto-response when the client receives PING).
         if (!dead && conn._lastMsgTime) {
-          if (Date.now() - conn._lastMsgTime > 20000) {
+          if (Date.now() - conn._lastMsgTime > 5000) {
             dead = true;
           }
         }
@@ -1275,7 +1277,7 @@ export class LobbyView extends EventEmitter {
           this._freeLobbySlot(conn, slotIdx, 'disconnected');
         }
       }
-    }, 5000);
+    }, 2000);
   }
 
   _stopLobbyHealthCheck() {
