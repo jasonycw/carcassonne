@@ -37,5 +37,8 @@ playwright-report/
 .antigravitycli/
 .playwright-mcp/
 
+# Playwright screenshots
+scoring-feed-*.png
+
 # Baseline checkout artifact
 original_962f33ee/

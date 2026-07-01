@@ -33,6 +33,7 @@ import { saveGame, removeGame, loadP2pInfo, saveP2pInfo } from '../network/State
 import { renderScoreboard, getColorHex, escapeHtml } from '../rendering/ScoreBoard.js';
 import { navigate } from './Router.js';
 import { ChatPanel } from './ChatPanel.js';
+import { ScoringFeed } from './ScoringFeed.js';
 import { SettingsPanelUI, initSettings } from './SettingsPanel.js';
 
 // ---------------------------------------------------------------------------
@@ -163,6 +164,7 @@ export class GameView {
     /** @type {''|'placement-selected'|'confirmed'|'sending'} */
     this._confirmPhase = '';
     this.chatPanel = null;
+    this.scoringFeed = null;
     this.settingsPanel = null;
     this.gameHost = null;
     this.gameClient = null;
@@ -238,6 +240,10 @@ export class GameView {
       this._onChatSend(text);
     });
 
+    // Mount ScoringFeed (bottom-left scoring history).
+    this.scoringFeed = new ScoringFeed(this.dom.container);
+    this.scoringFeed.mount();
+
     // Mount SettingsPanel.
     this.settingsPanel = new SettingsPanelUI(this.dom.container);
     this.settingsPanel.mount();
@@ -291,6 +297,7 @@ export class GameView {
           this._renderBoard();
           this._updateTurnIndicator();
           this._showActiveTileIfNeeded();
+          this._updateScoringFeed();
         });
         this.gameHost.on('game-over', () => {
           console.log('[GameView] Host game over');
@@ -350,6 +357,10 @@ export class GameView {
       this._updateTurnIndicator();
       this._showActiveTileIfNeeded();
 
+      // Replay any existing scoring history (handles page-refresh recovery).
+      // Feed auto-shows on first entry — stays hidden when empty.
+      this.scoringFeed.processFeatureScores(this.gamestate);
+
       // Persist game state on first render (enables crash recovery).
       saveGame(this.gamestate);
     }
@@ -367,6 +378,10 @@ export class GameView {
     if (this.chatPanel) {
       this.chatPanel.destroy();
       this.chatPanel = null;
+    }
+    if (this.scoringFeed) {
+      this.scoringFeed.destroy();
+      this.scoringFeed = null;
     }
     if (this.settingsPanel) {
       this.settingsPanel.destroy();
@@ -534,6 +549,13 @@ export class GameView {
     }
   }
 
+  /** Process new scoring entries from gamestate.featureScores. */
+  _updateScoringFeed() {
+    if (this.scoringFeed && this.gamestate) {
+      this.scoringFeed.processFeatureScores(this.gamestate);
+    }
+  }
+
   // ── Host-disconnect detection & reconnection (Issues 2/3) ─────────────
 
   /**
@@ -685,6 +707,7 @@ export class GameView {
       this._showActiveTileIfNeeded();
       this._pendingPlacement = null;
       this._confirmPhase = '';
+      this._updateScoringFeed();
     });
     this.gameClient.on('game-over', () => {
       console.log('[GameView] Client game over');
@@ -859,6 +882,9 @@ export class GameView {
       this._renderBoard();
       this._updateTurnIndicator();
       this._showActiveTileIfNeeded();
+
+      // Process scoring events triggered by this placement.
+      this._updateScoringFeed();
 
       // Persist game state to localStorage (for crash recovery).
       saveGame(this.gamestate);
