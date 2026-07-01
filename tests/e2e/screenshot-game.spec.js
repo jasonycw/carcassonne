@@ -1,21 +1,25 @@
 /**
- * screenshot-game.spec.js — Play a 4-player hot-seat game with available
- * expansions (Inns & Cathedrals, Traders & Builders) and take screenshots
- * showing beginning, middle, and end of the game with meeples placed and
- * scoring visible.
+ * screenshot-game.spec.js — Play a P2P game on the live GitHub Pages site
+ * with expansions (Inns & Cathedrals, Traders & Builders) and take
+ * screenshots showing beginning, middle, and end of the game.
+ *
+ * Uses two browser contexts (host + client) so the lobby screenshot
+ * shows both players connected and verifies state sync throughout.
  *
  * Screenshots are written to screenshots/*.png for the README.
  *
  * Screenshots captured:
- *  01-lobby.png              — Lobby with 4 player slots and all expansions
- *  02-game-started.png        — Board right after game start
- *  03-mid-game.png            — Mid-game with rotation indicator visible on pinned tile
- *  04-game-over.png           — Final board with game-over banner and score breakdown
+ *  01-lobby.png              — Lobby with host + client connected, expansions
+ *  02-game-started.png        — Board right after game start (host view)
+ *  03-mid-game.png            — Mid-game with rotation indicator on pinned tile
+ *  04-game-over.png           — Final board with game-over banner and scores
  */
 
 let meeplePlacementCounter = 0;
 
-import { test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+
+const GH_PAGES_URL = 'https://jasonycw.github.io/carcassonne/';
 
 /**
  * Handle the current game step: place tile, skip tower/capture, or click
@@ -112,50 +116,94 @@ async function tryPlaceTile(page, hooks = {}) {
   return false;
 }
 
-test.describe('Screenshot Game', () => {
-  test('play 4-player game with expansions and capture screenshots', async ({ page }) => {
+test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
+  test('play 4-player game with expansions and capture screenshots', async ({ browser }) => {
     test.setTimeout(600000); // 10 minutes
 
-    // Use a wide tall viewport so tile placements stay visible.
-    await page.setViewportSize({ width: 1280, height: 1000 });
+    // Error tracking for both contexts
+    const hostErrors = [];
+    const clientErrors = [];
 
-    // ── 1. Lobby (4-player slots with all expansions) ────────────────
-    await page.goto('/');
-    await page.waitForSelector('#lobby-container', { timeout: 10000 });
-    await page.locator('#player-name').fill('Alice');
-    await page.locator('#player-count').selectOption('4');
+    // ── Host context ─────────────────────────────────────────────────────
+    const hostContext = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
+    const hostPage = await hostContext.newPage();
+    hostPage.on('console', (msg) => { if (msg.type() === 'error') hostErrors.push(msg.text()); });
+    hostPage.on('pageerror', (err) => hostErrors.push(err.message));
+
+    await hostPage.goto(GH_PAGES_URL, { waitUntil: 'networkidle', timeout: 30000 });
+    await hostPage.waitForSelector('#lobby-container', { timeout: 15000 });
+
+    // ── Client context ───────────────────────────────────────────────────
+    const clientContext = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
+    const clientPage = await clientContext.newPage();
+    clientPage.on('console', (msg) => { if (msg.type() === 'error') clientErrors.push(msg.text()); });
+    clientPage.on('pageerror', (err) => clientErrors.push(err.message));
+
+    // ── 1. Lobby (2-player with all expansions, client connected) ────────
+    await hostPage.locator('#player-name').fill('HostPlayer');
+    await hostPage.locator('#player-count').selectOption('2');
 
     // Enable available expansions (Tower is disabled per baseline commit 962f33ee)
-    await page.locator('input[value="inns-and-cathedrals"]').check();
-    await page.locator('input[value="traders-and-builders"]').check();
+    await hostPage.locator('input[value="inns-and-cathedrals"]').check();
+    await hostPage.locator('input[value="traders-and-builders"]').check();
 
-    await page.locator('#create-game-btn').click();
-    await page.waitForSelector('#lobby-players[style*="block"]', { timeout: 10000 });
-    await page.waitForTimeout(300);
-    await page.screenshot({ path: 'screenshots/01-lobby.png', fullPage: true });
-    console.log('✓ Screenshot 1: lobby (4 players, all expansions)');
+    await hostPage.locator('#create-game-btn').click();
 
-    // ── 2. Start game ─────────────────────────────────────────────────
-    await page.locator('#start-game-btn').click();
-    await page.waitForSelector('#game-container', { timeout: 10000 });
-    await page.waitForTimeout(800);
-    await page.screenshot({ path: 'screenshots/02-game-started.png', fullPage: true });
+    await hostPage.waitForSelector('#room-code:not(:empty)', { timeout: 60000 });
+    await hostPage.waitForSelector('#start-game-btn', { state: 'visible', timeout: 10000 });
+
+    const roomCode = (await hostPage.locator('#room-code').textContent()).trim();
+    console.log(`[Screenshot] Host room: "${roomCode}"`);
+
+    // Client joins
+    await clientPage.goto(`${GH_PAGES_URL}?room=${roomCode}`, {
+      waitUntil: 'networkidle', timeout: 30000,
+    });
+    await clientPage.waitForSelector('#lobby-container', { timeout: 15000 });
+
+    // Wait for join confirmation
+    const statusLocator = clientPage.locator('#lobby-status');
+    await expect(async () => {
+      const text = await statusLocator.textContent();
+      expect(text).toContain('Joined');
+    }).toPass({ timeout: 60000 });
+    console.log('[Screenshot] Client joined room');
+    await hostPage.waitForTimeout(1000);
+
+    // Check no errors so far
+    expect([...hostErrors, ...clientErrors]).toEqual([]);
+
+    // Take lobby screenshot (host view, shows client connected)
+    await hostPage.screenshot({ path: 'screenshots/01-lobby.png', fullPage: true });
+    console.log('✓ Screenshot 1: lobby (P2P with client connected, all expansions)');
+
+    // ── 2. Start game ───────────────────────────────────────────────────
+    await hostPage.locator('#start-game-btn').click();
+    await hostPage.waitForSelector('#game-container', { timeout: 15000 });
+    await hostPage.waitForSelector('#game-svg', { state: 'visible', timeout: 5000 });
+    await expect(hostPage.locator('#game-turn-indicator')).not.toBeEmpty();
+
+    // Wait for client game view too
+    await clientPage.waitForSelector('#game-container', { timeout: 60000 });
+    await clientPage.waitForSelector('#game-svg', { state: 'visible', timeout: 15000 });
+    await expect(clientPage.locator('#game-turn-indicator')).not.toBeEmpty();
+    console.log('[Screenshot] Both game views loaded');
+
+    await hostPage.waitForTimeout(1000);
+    await hostPage.screenshot({ path: 'screenshots/02-game-started.png', fullPage: true });
     console.log('✓ Screenshot 2: game started');
 
-    // ── 3. Place tiles ────────────────────────────────────────────────
-    // With 4 players we need ~36 tiles per cycle to show everyone's moves.
-    // Take mid-game screenshot at a moment when a tile is pinned on the
-    // board with the rotation indicator visible (Issue 1).
-    // Meeple placement cycles through available outlines so all feature
-    // types (roads, cities, farms, cloisters) get played over the game.
+    // ── 3. Place tiles ────────────────────────────────────────────────────
+    // Play through the full game (host places tiles for all players).
+    // Take mid-game screenshot when a tile is pinned with the rotation
+    // indicator visible.
     let totalPlaced = 0;
     let midGameDone = false;
     let gameOver = false;
-    // Well above the ~132 tiles in a game with all expansions combined.
     const MAX_TILES = 200;
 
     while (!gameOver && totalPlaced < MAX_TILES) {
-      const placed = await tryPlaceTile(page, {
+      const placed = await tryPlaceTile(hostPage, {
         onTilePinned: midGameDone ? null : async (p) => {
           // Take mid-game screenshot only when the rotation indicator
           // is actually visible on the pinned tile (opacity > 0).
@@ -163,21 +211,14 @@ test.describe('Screenshot Game', () => {
           if (totalPlaced < 18) return; // let the board grow first
           // Wait for the 750ms tile-pinning transition to complete.
           await p.waitForTimeout(1000);
-          // Check if the rotation indicator is currently visible on the
-          // pinned tile. The indicator is a <use> element with CSS
-          // class "active-tile-rotation-indicator"; it's shown/hidden
-          // via opacity in _updateRotationIndicator().
+          // Check if the rotation indicator is currently visible.
           const hasIndicator = await p.evaluate(() => {
             const el = document.querySelector('#game-svg use.active-tile-rotation-indicator');
             if (!el) return false;
             const opacity = parseFloat(el.getAttribute('opacity') || '0');
             return opacity > 0;
           }).catch(() => false);
-          if (!hasIndicator) {
-            // This tile has only 1 valid rotation — no indicator.
-            // Don't null the hook so we retry on the next tile.
-            return;
-          }
+          if (!hasIndicator) return; // retry on next tile
           await p.screenshot({ path: 'screenshots/03-mid-game.png', fullPage: true });
           console.log('✓ Screenshot 3: mid-game (with rotation indicator)');
           midGameDone = true;
@@ -188,45 +229,39 @@ test.describe('Screenshot Game', () => {
         totalPlaced++;
         if (totalPlaced % 10 === 0) console.log(`Placed ${totalPlaced} tiles`);
       } else {
-        // No move made — likely game over or between turns.
-        // Retry banner detection with longer total wait in case
-        // the end-game scoring animation takes time.
         for (let i = 0; i < 15; i++) {
-          const visible = await page
+          const visible = await hostPage
             .locator('#game-over-banner')
             .isVisible({ timeout: 1000 })
             .catch(() => false);
-          if (visible) {
-            gameOver = true;
-            break;
-          }
+          if (visible) { gameOver = true; break; }
         }
       }
     }
 
     console.log(`Total tiles placed: ${totalPlaced}`);
 
-    // ── 4. Game over screenshot ───────────────────────────────────────
-    // Wait generously for the banner to fully render (it may have just
-    // appeared, and we want to be certain the DOM / CSS transitions finish).
-    if (!gameOver) {
-      await page.waitForTimeout(5000);
-    }
-    await page.waitForTimeout(2000);
-    await page.screenshot({ path: 'screenshots/04-game-over.png', fullPage: true });
+    // ── 4. Game over screenshot ─────────────────────────────────────────
+    if (!gameOver) await hostPage.waitForTimeout(5000);
+    await hostPage.waitForTimeout(2000);
+    await hostPage.screenshot({ path: 'screenshots/04-game-over.png', fullPage: true });
     console.log('✓ Screenshot 4: game over');
 
     // ── 5. Verify cloister scoring in breakdown ─────────────────────────
-    // Check that the game-over banner shows actual numbers for cloisters
-    // (not '-'), confirming all feature types scored correctly.
-    // The breakdown is a table with headers: Player | Cities | Roads | Farms | Cloisters | Total
-    // Cloister column index is 4 (0-based), the 5th <td> in each row.
-    const cloisterCells = await page.locator('#game-over-banner table tbody tr td:nth-child(5)').allTextContents();
+    const cloisterCells = await hostPage.locator('#game-over-banner table tbody tr td:nth-child(5)').allTextContents();
     const nonDashCloister = cloisterCells.filter(v => v.trim() !== '-');
     if (nonDashCloister.length > 0) {
       console.log(`✓ Cloister scores present in breakdown: ${nonDashCloister.join(', ')}`);
     } else {
       console.error('✗ FAIL: All cloister scores show "-" in game-over breakdown!');
     }
+
+    // ── 6. Verify zero errors on both sides ─────────────────────────────
+    console.log(`[Screenshot] Host errors: ${hostErrors.length}, Client errors: ${clientErrors.length}`);
+    expect(hostErrors).toEqual([]);
+    expect(clientErrors).toEqual([]);
+
+    await hostContext.close();
+    await clientContext.close();
   });
 });

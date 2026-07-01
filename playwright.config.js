@@ -11,7 +11,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,                     // One worker to avoid port conflicts
-  reporter: [['html', { outputFolder: 'playwright-report' }]],
+  outputDir: '.playwright/',
+  reporter: [['html', { outputFolder: '.playwright/report' }]],
 
   use: {
     baseURL: 'http://localhost:5173/carcassonne/',
