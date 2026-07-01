@@ -19,7 +19,7 @@ For gameplay changes or new expansions, the README and screenshots MUST be
 updated to reflect the new state of the game.
 -->
 
-- [ ] I have read the [CONTRIBUTING](../CONTRIBUTING.md) guidelines (if present)
+- [ ] I have read the [CONTRIBUTING](../CONTRIBUTING.md) guidelines
 - [ ] Build passes (`npm run build`)
 - [ ] Unit tests pass (`npm run test:unit`)
 - [ ] E2E tests pass (`npm run test:e2e`)
