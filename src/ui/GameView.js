@@ -56,7 +56,7 @@ const GAME_HTML = `
     <button id="game-menu-btn" style="
       background: none; border: 1px solid #555; color: #eee;
       padding: 4px 12px; border-radius: 4px; cursor: pointer;
-    ">Menu</button>
+    ">Chat</button>
   </div>
 
   <!-- Game board area -->

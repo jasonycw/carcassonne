@@ -11,7 +11,7 @@ import { EventEmitter } from '../utils/EventEmitter.js';
 
 const CHAT_HTML = `
 <div id="chat-panel" style="
-  position: absolute; bottom: 70px; right: 12px; width: 260px;
+  position: absolute; bottom: 12px; right: 12px; width: 260px;
   background: rgba(26,26,46,0.92); border-radius: 8px;
   border: 1px solid #333; color: #ddd; font-size: 0.8rem;
   font-family: 'Segoe UI', sans-serif; display: none;
