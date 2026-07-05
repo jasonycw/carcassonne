@@ -262,9 +262,10 @@ export { getFeatureMeeples, getFeatureIndex };
  * @param   {object[]} placedTiles     Array of already-placed tiles
  * @param   {object[]} players         Array of player objects
  * @param   {string[]} expansions      Array of expansion identifiers
+ * @param   {string}   [riverPhase]    River phase: 'active', 'inactive', or 'complete'
  * @returns {Array}                    Valid placements grouped by (x, y)
  */
-export default function calculateValidPlacements(activeTileData, placedTiles, players, expansions) {
+export default function calculateValidPlacements(activeTileData, placedTiles, players, expansions, riverPhase) {
 	// -----------------------------------------------------------------------
 	// 1. Compute rotated edges for every placed tile
 	// -----------------------------------------------------------------------
@@ -491,6 +492,10 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 			}
 		}
 	}
+
+	// Filter out invalid placements based on river rules (if river phase is active)
+	// Note: River validation is deferred to avoid circular imports
+	// River tiles will be validated during placement in GameLogic.js
 
 	const filteredPlacements = potentialPlacements.filter(function (_, idx) {
 		return invalidIndices.indexOf(idx) === -1;

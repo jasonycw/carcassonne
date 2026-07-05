@@ -24,6 +24,8 @@ import {
   mergeFeatures, hasPlayerMeeple, determineMajority,
 } from './FeatureTracker.js';
 import { getFeatureInfo, checkAndFinalizeFeature, completeGame as scoringCompleteGame } from './Scoring.js';
+import { isValidRiverPlacement } from './RiverPlacement.js';
+import { checkAndExecuteAutomaticExchange, buybackMeeple } from './TowerExtensions.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -75,6 +77,7 @@ export function createGameState(expansions, playerCount, tileData) {
     currentPlayerIndex: 0,
     step: 'draw',             // 'draw' | 'place' | 'meeple' | 'tower' | 'capture' | 'done'
     pendingCapture: null,     // { tileIndex, capturableMeeples: [...] }
+    riverPhase: expansions.includes('the-river') ? 'active' : 'inactive',  // 'active' | 'inactive' | 'complete'
     lastModified: new Date(),
   };
 }
@@ -178,6 +181,7 @@ export function drawTile(gamestate) {
     gamestate.placedTiles,
     gamestate.players,
     gamestate.expansions,
+    gamestate.riverPhase,
   );
 
   // If the drawn tile has no valid placements, auto-advance to next player
@@ -192,6 +196,11 @@ export function drawTile(gamestate) {
     tile: drawnTile,
     validPlacements,
   };
+
+  // Check if river phase is complete (lake tile drawn)
+  if (gamestate.riverPhase === 'active' && drawnTile.river && drawnTile.river.isLake) {
+    gamestate.riverPhase = 'complete';
+  }
 
   gamestate.step = 'place';
   return gamestate;
@@ -235,6 +244,13 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
   const rotEntry = placementEntry.rotations.find((r) => r.rotation === rotation);
   if (!rotEntry) {
     return { success: false, message: 'Invalid tile rotation' };
+  }
+
+  // Validate river placement (if in river phase)
+  if (gamestate.riverPhase === 'active' && at.tile.river) {
+    if (!isValidRiverPlacement(at.tile, rotation, x, y, gamestate.placedTiles)) {
+      return { success: false, message: 'Invalid river placement: violates river rules' };
+    }
   }
 
   // Validate meeple placement if provided.
@@ -572,17 +588,20 @@ export function captureMeeple(gamestate, capturedTileIndex, capturedMeepleIndex)
 
   const tile = gamestate.placedTiles[capturedTileIndex];
   const meeple = tile.meeples[capturedMeepleIndex];
-  const owner = gamestate.players[meeple.playerIndex];
+  const captor = getActivePlayer(gamestate);
+  const captorIndex = gamestate.currentPlayerIndex;
 
   // Remove meeple from the tile.
   tile.meeples.splice(capturedMeepleIndex, 1);
 
-  // Return the meeple to its owner's supply.
-  if (meeple.meepleType === 'normal') {
-    owner.remainingMeeples += 1;
-  } else {
-    owner[getMeepleFlag(meeple.meepleType)] = true;
-  }
+  // Store captured meeple in captor's prison
+  captor.capturedMeeples.push({
+    playerIndex: meeple.playerIndex,
+    meepleType: meeple.meepleType,
+  });
+
+  // Check for automatic prisoner exchange
+  checkAndExecuteAutomaticExchange(gamestate, captorIndex, meeple.playerIndex);
 
   // Clear pending capture and end turn.
   gamestate.pendingCapture = null;
@@ -923,4 +942,23 @@ export function getGameSummary(gamestate) {
       : null,
     messages: gamestate.messages,
   };
+}
+
+
+/**
+ * Buy back a captured meeple during the turn.
+ * 
+ * Official rule: Pay 3 points to the player holding your meeple to get it back.
+ * Can only be done once per turn, and only if you have at least 3 points.
+ * 
+ * @param {object} gamestate
+ * @param {number} captorIndex - Index of player holding the meeple
+ * @param {number} meepleIndex - Index of meeple in captor's capturedMeeples
+ * @returns {{ success: boolean, message?: string }}
+ */
+export function buybackCapturedMeeple(gamestate, captorIndex, meepleIndex) {
+  const buyer = getActivePlayer(gamestate);
+  const buyerIndex = gamestate.currentPlayerIndex;
+  
+  return buybackMeeple(gamestate, buyerIndex, captorIndex, meepleIndex);
 }
