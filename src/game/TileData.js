@@ -1521,7 +1521,7 @@ export const THE_RIVER_TILES = [
     river: { directions: ['N', 'S'] },
     imageURL: '/images/tiles/the-river/II.png',
     expansion: 'the-river',
-    count: 2
+    count: 3
   },
   {
     id: 'the-river/RIrI',
