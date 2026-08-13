@@ -954,6 +954,10 @@ export function getGameSummary(gamestate) {
       remainingMeeples: p.remainingMeeples,
       active: p.active,
       goods: p.goods,
+      capturedMeeples: (p.capturedMeeples || []).map((prisoner) => ({
+        playerIndex: prisoner.playerIndex,
+        meepleType: prisoner.meepleType,
+      })),
     })),
     placedTiles: gamestate.placedTiles.map((pt) => ({
       tileId: pt.tile.id,
@@ -965,17 +969,24 @@ export function getGameSummary(gamestate) {
         playerIndex: m.playerIndex,
         placement: m.placement,
         meepleType: m.meepleType,
+        originalMeepleType: m.originalMeepleType,
         scored: m.scored,
       })),
       towerHeight: pt.tower ? pt.tower.height : undefined,
+      towerCompleted: pt.tower ? pt.tower.completed : undefined,
     })),
     currentPlayerIndex: gamestate.currentPlayerIndex,
     activeTile: gamestate.activeTile
       ? {
           tileId: gamestate.activeTile.tile.id,
+          isRiver: Boolean(gamestate.activeTile.isRiver),
           validPlacements: gamestate.activeTile.validPlacements,
         }
       : null,
+    riverTilesCount: (gamestate.riverTiles || []).length,
+    riverPhase: Boolean(gamestate.riverPhase),
+    riverTailIndex: gamestate.riverTailIndex,
+    riverOpenDirection: gamestate.riverOpenDirection,
     step: gamestate.step,
     pendingCapture: gamestate.pendingCapture
       ? {
