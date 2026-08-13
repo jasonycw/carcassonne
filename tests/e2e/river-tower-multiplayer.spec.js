@@ -17,7 +17,7 @@ async function finishOptionalTowerOrCaptureStep(page) {
   }
 }
 
-async function placeRiverOrLandTile(page) {
+async function placeRiverOrLandTile(page, towerEvidencePath) {
   const placement = page.locator('#game-svg image.tile-placement').first();
   if (!(await placement.isVisible({ timeout: 2500 }).catch(() => false))) return false;
 
@@ -41,6 +41,9 @@ async function placeRiverOrLandTile(page) {
   }
 
   const towerVisible = await page.locator('#hud-tower-actions').isVisible().catch(() => false);
+  if (towerVisible && towerEvidencePath) {
+    await page.screenshot({ path: towerEvidencePath, fullPage: true });
+  }
   await finishOptionalTowerOrCaptureStep(page);
   return { placed: true, towerVisible };
 }
@@ -68,7 +71,7 @@ test.describe('The River and The Tower multiplayer flow', () => {
     let riverTurns = 0;
     for (let attempt = 0; attempt < 24 && riverTurns < 12; attempt += 1) {
       const before = await indicator.textContent();
-        const result = await placeRiverOrLandTile(page);
+        const result = await placeRiverOrLandTile(page, testInfo.outputPath('tower-actions.png'));
       if (!result) {
         await page.waitForTimeout(500);
         continue;
@@ -77,7 +80,6 @@ test.describe('The River and The Tower multiplayer flow', () => {
 
       if (result.towerVisible) {
         towerHudSeen = true;
-        await page.screenshot({ path: testInfo.outputPath('tower-actions.png'), fullPage: true });
       }
       await page.waitForTimeout(200);
       if (before?.includes('River phase') && !(await indicator.textContent()).includes('River phase')) break;
