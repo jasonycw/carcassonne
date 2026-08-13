@@ -252,16 +252,10 @@ export function drawTile(gamestate) {
     validPlacements = filterRiverPlacements(validPlacements, riverPlacements);
   }
 
-  // A normal tile with no legal placement is discarded as in the base game.
-  // River tiles are never discarded because their stack is a forced sequence.
+  // A tile with no legal placement is removed from the game, then the same
+  // player draws another tile. This also applies during the River phase and is
+  // the official fallback when the river cannot be completed in its entirety.
   if (validPlacements.length === 0) {
-    if (usingRiver) {
-      gamestate.riverTiles.unshift(drawnTile);
-      gamestate.activeTile = { tile: drawnTile, validPlacements: [], isRiver: true };
-      gamestate.step = 'place';
-      return gamestate;
-    }
-    advanceToNextPlayer(gamestate);
     return drawTile(gamestate);
   }
 
