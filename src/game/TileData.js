@@ -1580,7 +1580,7 @@ export const THE_RIVER_TILES = [
   {
     id: 'the-river/CcII',
     northEdge: 'city',
-    southEdge: 'field',
+    southEdge: 'river',
     westEdge: 'city',
     eastEdge: 'river',
     roads: [],
