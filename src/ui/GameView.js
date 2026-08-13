@@ -539,6 +539,7 @@ export class GameView {
           <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
                background:${colorHex};vertical-align:middle;margin-right:4px;"></span>
           ${escapeHtml(p.user?.username || 'Player')}'s turn
+          ${this.gamestate.riverPhase ? '<span style="margin-left:8px;color:#80cbc4;">River phase</span>' : ''}
         `;
       } else {
         this.dom.turnIndicator.textContent = '';
