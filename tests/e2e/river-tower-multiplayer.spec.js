@@ -40,8 +40,9 @@ async function placeRiverOrLandTile(page) {
     await page.waitForTimeout(350);
   }
 
+  const towerVisible = await page.locator('#hud-tower-actions').isVisible().catch(() => false);
   await finishOptionalTowerOrCaptureStep(page);
-  return true;
+  return { placed: true, towerVisible };
 }
 
 test.describe('The River and The Tower multiplayer flow', () => {
@@ -67,14 +68,14 @@ test.describe('The River and The Tower multiplayer flow', () => {
     let riverTurns = 0;
     for (let attempt = 0; attempt < 24 && riverTurns < 12; attempt += 1) {
       const before = await indicator.textContent();
-      const placed = await placeRiverOrLandTile(page);
-      if (!placed) {
+        const result = await placeRiverOrLandTile(page);
+      if (!result) {
         await page.waitForTimeout(500);
         continue;
       }
       riverTurns += 1;
 
-      if (await page.locator('#hud-tower-actions').isVisible().catch(() => false)) {
+      if (result.towerVisible) {
         towerHudSeen = true;
         await page.screenshot({ path: testInfo.outputPath('tower-actions.png'), fullPage: true });
       }
