@@ -82,8 +82,12 @@ const LOBBY_HTML = `
         <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
           <input type="checkbox" value="traders-and-builders" /> Traders &amp; Builders
         </label>
-        <!-- Tower expansion removed: disabled in the original baseline commit
-             962f33ee and its logic was too complex to re-verify. -->
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+          <input type="checkbox" value="the-river" /> The River
+        </label>
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+          <input type="checkbox" value="the-tower" /> The Tower
+        </label>
       </div>
 
       <div style="display: flex; gap: 12px;">
