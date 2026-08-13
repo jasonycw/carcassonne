@@ -40,6 +40,7 @@ export const MessageType = {
   SKIP_MEEPLE:        'skip_meeple',
   SKIP_TURN:          'skip_turn',
   PLACE_TOWER:        'place_tower',        // { tileIndex }
+  CLOSE_TOWER:        'close_tower',        // { tileIndex, meepleType }
   CAPTURE_MEEPLE:     'capture_meeple',     // { tileIndex, meepleIndex }
 
   // ── Game state (host → client) ──────────────────────────────────────
@@ -152,6 +153,10 @@ export function skipTurnMove() {
 
 export function placeTowerMove(tileIndex) {
   return createMessage(MessageType.PLACE_TOWER, { tileIndex });
+}
+
+export function closeTowerMove(tileIndex, meepleType = 'normal') {
+  return createMessage(MessageType.CLOSE_TOWER, { tileIndex, meepleType });
 }
 
 export function captureMeepleMove(tileIndex, meepleIndex) {

@@ -24,7 +24,14 @@ import {
   updateRotationIndicator,
 } from '../rendering/ActiveTile.js';
 import { img } from '../utils/AssetPaths.js';
-import { placeTile, placeTowerPiece, captureMeeple, skipTowerStep, skipCapture } from '../game/GameLogic.js';
+import {
+  placeTile,
+  placeTowerPiece,
+  placeMeepleOnTower,
+  captureMeeple,
+  skipTowerStep,
+  skipCapture,
+} from '../game/GameLogic.js';
 import { getDetailedScores } from '../game/Scoring.js';
 import { GameHost } from '../network/GameHost.js';
 import { GameClient } from '../network/GameClient.js';
@@ -75,6 +82,10 @@ const GAME_HTML = `
     ">
 
       <div id="hud-meeple-types" style="display:flex; gap:4px; align-items:center;pointer-events:auto;"></div>
+      <div id="hud-tower-actions" style="display:none; gap:4px; align-items:center; pointer-events:auto;">
+        <button class="hud-btn" id="hud-tower-floor" style="padding: 8px 10px; border-radius: 8px; border: 1px solid #8bc34a; background: #334d20; color: #eaffd0; cursor: pointer;">Place Floor</button>
+        <button class="hud-btn" id="hud-tower-close" style="padding: 8px 10px; border-radius: 8px; border: 1px solid #ffca7a; background: #5a3e18; color: #fff0d0; cursor: pointer;">Close Tower</button>
+      </div>
       <button class="hud-btn" id="hud-confirm" style="
         padding: 8px 16px; border-radius: 8px; border: none;
         background: #66bb6a; color: #111; font-weight: bold; cursor: pointer; pointer-events: auto;
@@ -171,6 +182,7 @@ export class GameView {
     /** @type {{ playerName: string, roomCode: string, preferredIndex: number }|null} */
     this._reconnectInfo = null;
     this._reconnecting = false;
+    this._towerAction = 'floor';
   }
 
   mount(container) {
@@ -185,6 +197,9 @@ export class GameView {
       scoreboard: container.querySelector('#game-scoreboard'),
       hud: container.querySelector('#game-hud'),
       meepleTypes: container.querySelector('#hud-meeple-types'),
+      towerActions: container.querySelector('#hud-tower-actions'),
+      towerFloor: container.querySelector('#hud-tower-floor'),
+      towerClose: container.querySelector('#hud-tower-close'),
       confirm: container.querySelector('#hud-confirm'),
       reconnectOverlay: container.querySelector('#game-reconnect-overlay'),
       reconnectFailed: container.querySelector('#reconnect-failed'),
@@ -398,6 +413,14 @@ export class GameView {
 
     this.dom.confirm.addEventListener('click', () => {
       this._confirmPlacement();
+    });
+    this.dom.towerFloor.addEventListener('click', () => {
+      this._towerAction = 'floor';
+      this._showStatusMessage('Select an open tower or foundation to place a floor.');
+    });
+    this.dom.towerClose.addEventListener('click', () => {
+      this._towerAction = 'close';
+      this._showStatusMessage('Select an open tower to close with your meeple.');
     });
 
     this.dom.menuBtn.addEventListener('click', () => {
@@ -752,6 +775,10 @@ export class GameView {
       if (this.dom) {
         this.dom.hud.style.display = 'flex';
         this.dom.meepleTypes.style.display = 'none';
+        this.dom.towerActions.style.display = 'flex';
+        const player = this.gamestate.players[this.playerIndex] || {};
+        this.dom.towerFloor.disabled = (player.towers || 0) <= 0;
+        this.dom.towerClose.disabled = (player.remainingMeeples || 0) <= 0 && !player.hasLargeMeeple;
       }
       this._updateHUD('tower');
       return;
@@ -759,6 +786,7 @@ export class GameView {
 
     // Handle capture step: show capture HUD.
     if (step === 'capture' && isActive) {
+      if (this.dom) this.dom.towerActions.style.display = 'none';
       this._showCaptureUI();
       return;
     }
@@ -771,6 +799,7 @@ export class GameView {
       if (sm) sm.meeple = null;
       if (this.dom) {
         this.dom.hud.style.display = 'flex';
+        this.dom.towerActions.style.display = 'none';
         // Show meeple type selector only when it's the viewer's turn
         this.dom.meepleTypes.style.display = 'flex';
       }
@@ -1040,8 +1069,9 @@ export class GameView {
         btn.disabled = false;
         break;
       case 'tower':
-        // Tower step: offer to skip tower placement.
-        btn.textContent = 'Skip (Place Meeple)';
+        // Tower step: floor/close actions are selected with the adjacent
+        // controls; the primary button skips the optional Tower action.
+        btn.textContent = 'Skip Tower Action';
         btn.style.background = '#78909c';
         btn.style.color = '#fff';
         btn.disabled = false;
@@ -1069,15 +1099,18 @@ export class GameView {
    * Places a tower piece on the clicked tile.
    */
   _handleTowerPiecePlacement(tileIndex) {
+    const closing = this._towerAction === 'close';
     if (this.gameClient) {
-      // P2P client: send tower placement to host.
-      this.gameClient.placeTowerPiece(tileIndex);
+      if (closing) this.gameClient.closeTower(tileIndex, 'normal');
+      else this.gameClient.placeTowerPiece(tileIndex);
       if (this.dom) this.dom.hud.style.display = 'none';
       return;
     }
 
     // Host/solo: validate locally.
-    const result = placeTowerPiece(this.gamestate, tileIndex);
+    const result = closing
+      ? placeMeepleOnTower(this.gamestate, tileIndex, 'normal')
+      : placeTowerPiece(this.gamestate, tileIndex);
 
     if (result.success) {
       this._renderBoard();
