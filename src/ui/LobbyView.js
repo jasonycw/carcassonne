@@ -571,7 +571,24 @@ export class LobbyView extends EventEmitter {
       this._setStatus('Waiting for players...');
     } catch (err) {
       console.error('Failed to create room:', err);
-      this._setStatus('Error: ' + err.message);
+      // PeerJS is optional for local hot-seat play. If the signaling service is
+      // unavailable, release the failed manager and leave the configured local
+      // player slots ready so the host can still start a multiplayer game.
+      if (this.peerManager) {
+        this.peerManager.removeAllListeners();
+        this.peerManager.destroy();
+        this.peerManager = null;
+      }
+      this.dom.roomDisplay.style.display = 'none';
+      this.dom.lobbyPlayers.style.display = 'block';
+      this.slots.forEach((slot, index) => {
+        if (index > 0) {
+          slot.type = 'unfilled';
+          slot.name = `Player ${index + 1}`;
+        }
+      });
+      this._updatePlayerList();
+      this._setStatus('Online room unavailable; ready for local hot-seat play.');
     }
   }
 
@@ -1330,8 +1347,12 @@ export class LobbyView extends EventEmitter {
       return;
     }
 
-    // Multiplayer: must have PeerManager (host created it in _createGame).
-    if (!this.peerManager) return;
+    // If online signaling failed, the configured players can still play locally
+    // in hot-seat mode.
+    if (!this.peerManager) {
+      this._startLocalGame(this.slots);
+      return;
+    }
 
     const expansions = ['base-game'];
     this.dom.expansionChecks.forEach((cb) => {

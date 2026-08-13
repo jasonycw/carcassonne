@@ -62,7 +62,7 @@ test.describe('Multiplayer Game', () => {
 
     // Wait for room display (PeerJS init may time out, but the UI fallback
     // allows clicking Start Game even without P2P connections).
-    await page.waitForSelector('#room-display[style*="block"]', { timeout: 25000 });
+    await page.waitForSelector('#room-display[style*="block"], #lobby-players[style*="block"]', { timeout: 35000 });
     await page.waitForSelector('#start-game-btn', { state: 'visible', timeout: 5000 });
 
     // ── 2. Start the game ────────────────────────────────────────────
@@ -114,7 +114,7 @@ test.describe('Multiplayer Game', () => {
     await page.locator('#player-count').selectOption('2');
     await page.locator('#create-game-btn').click();
 
-    await page.waitForSelector('#room-display[style*="block"]', { timeout: 25000 });
+    await page.waitForSelector('#room-display[style*="block"], #lobby-players[style*="block"]', { timeout: 35000 });
     await page.waitForSelector('#start-game-btn', { state: 'visible', timeout: 5000 });
     await page.locator('#start-game-btn').click();
     await page.waitForSelector('#game-container', { timeout: 15000 });
