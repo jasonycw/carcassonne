@@ -24,6 +24,20 @@ import {
   mergeFeatures, hasPlayerMeeple, determineMajority,
 } from './FeatureTracker.js';
 import { getFeatureInfo, checkAndFinalizeFeature, completeGame as scoringCompleteGame } from './Scoring.js';
+import {
+  filterRiverPlacements,
+  getValidRiverPlacements,
+  rotateRiverDirections,
+  isValidRiverPlacement,
+  isRiverComplete,
+  OPPOSITE,
+} from './RiverPlacement.js';
+import {
+  getCapturableMeeples as getTowerCapturableMeeples,
+  checkAndExchangePrisoners,
+  buyBackPrisoner,
+  returnMeepleToSupply,
+} from './TowerExtensions.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -63,6 +77,10 @@ export function createGameState(expansions, playerCount, tileData) {
     });
   }
 
+  const riverTiles = buildRiverPile(expansions, tileData);
+  const riverSource = tileData.find((tile) => tile.id === 'the-river/I.s');
+  const riverEnabled = expansions.includes('the-river') && Boolean(riverSource) && riverTiles.length > 0;
+
   return {
     name: generateGameName(),
     expansions,
@@ -70,6 +88,11 @@ export function createGameState(expansions, playerCount, tileData) {
     messages: [],
     players,
     unusedTiles: buildTilePile(expansions, tileData),
+    riverTiles,
+    riverSource: riverEnabled ? { ...riverSource } : null,
+    riverPhase: riverEnabled,
+    riverTailIndex: null,
+    riverOpenDirection: null,
     placedTiles: [],
     activeTile: null,          // { tile, validPlacements } — set during drawTile()
     currentPlayerIndex: 0,
@@ -100,7 +123,10 @@ function getTowerCount(playerCount, playerIndex) {
  */
 function buildTilePile(expansions, allTileData) {
   const pile = [];
-  const filtered = allTileData.filter((t) => expansions.includes(t.id.split('/')[0]));
+  const filtered = allTileData.filter((t) => {
+    const expansion = t.id.split('/')[0];
+    return expansion !== 'the-river' && expansions.includes(expansion);
+  });
   for (const tile of filtered) {
     const count = tile.startingTile ? tile.count - 1 : tile.count;
     for (let i = 0; i < count; i++) {
@@ -108,6 +134,26 @@ function buildTilePile(expansions, allTileData) {
     }
   }
   return pile;
+}
+
+/** Build the River stack with the lake forced to the bottom. */
+function buildRiverPile(expansions, allTileData) {
+  if (!expansions.includes('the-river')) return [];
+  const riverTiles = allTileData.filter((tile) => tile.id.startsWith('the-river/'));
+  const lake = riverTiles.find((tile) => tile.river?.isLake);
+  const nonTerminal = riverTiles.filter((tile) => !tile.startingTile && !tile.river?.isLake);
+  const shuffled = [];
+  for (const tile of nonTerminal) {
+    for (let i = 0; i < (tile.count || 1); i += 1) shuffled.push({ ...tile });
+  }
+  // Fisher-Yates shuffle keeps the lake deterministically last while all other
+  // River tiles are randomised, exactly as the rulebook instructs.
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  if (lake) shuffled.push({ ...lake });
+  return shuffled;
 }
 
 // ---------------------------------------------------------------------------
@@ -126,8 +172,10 @@ function buildTilePile(expansions, allTileData) {
  * @returns {object} The updated gamestate.
  */
 export function initializeNewGame(gamestate, startingTile) {
-  // 1. Find or use the starting tile.
-  const startTile = startingTile || gamestate.unusedTiles.find((t) => t.startingTile);
+  // The River source replaces the normal starting tile.
+  const startTile = gamestate.riverPhase
+    ? gamestate.riverSource
+    : (startingTile || gamestate.unusedTiles.find((t) => t.startingTile));
   if (!startTile) {
     throw new Error('No starting tile found in the tile pile');
   }
@@ -142,6 +190,11 @@ export function initializeNewGame(gamestate, startingTile) {
 
   // 3. Create initial feature objects for the starting tile.
   initializeFeatures(startPlaced, gamestate);
+
+  if (gamestate.riverPhase) {
+    gamestate.riverTailIndex = 0;
+    gamestate.riverOpenDirection = rotateRiverDirections(startDef, 0)[0];
+  }
 
   // 4. Draw first tile to begin the game.
   drawTile(gamestate);
@@ -162,28 +215,52 @@ export function initializeNewGame(gamestate, startingTile) {
  * @param {object} gamestate
  */
 export function drawTile(gamestate) {
-  if (gamestate.unusedTiles.length === 0) {
+  const usingRiver = Boolean(gamestate.riverPhase);
+
+  if (usingRiver && gamestate.riverTiles.length === 0) {
+    gamestate.riverPhase = false;
+    gamestate.riverTailIndex = null;
+    gamestate.riverOpenDirection = null;
+    return drawTile(gamestate);
+  }
+
+  if (!usingRiver && gamestate.unusedTiles.length === 0) {
     // No more tiles — end the game.
     completeGame(gamestate);
     return;
   }
 
-  // Pick a random tile from the unused pile.
-  const idx = Math.floor(Math.random() * gamestate.unusedTiles.length);
-  const drawnTile = gamestate.unusedTiles.splice(idx, 1)[0];
+  const pile = usingRiver ? gamestate.riverTiles : gamestate.unusedTiles;
+  const idx = usingRiver ? 0 : Math.floor(Math.random() * pile.length);
+  const drawnTile = pile.splice(idx, 1)[0];
 
-  // Calculate valid placements.
-  const validPlacements = calculateValidPlacements(
+  // Calculate ordinary feature-compatible placements first, then constrain
+  // River tiles to the one legal open river endpoint.
+  let validPlacements = calculateValidPlacements(
     drawnTile,
     gamestate.placedTiles,
     gamestate.players,
     gamestate.expansions,
   );
+  if (usingRiver) {
+    const riverPlacements = getValidRiverPlacements(
+      drawnTile,
+      gamestate.placedTiles,
+      gamestate.riverTailIndex,
+      gamestate.riverOpenDirection,
+    );
+    validPlacements = filterRiverPlacements(validPlacements, riverPlacements);
+  }
 
-  // If the drawn tile has no valid placements, auto-advance to next player
-  // (skip turn — the tile is lost from the pile just as in the original game).
+  // A normal tile with no legal placement is discarded as in the base game.
+  // River tiles are never discarded because their stack is a forced sequence.
   if (validPlacements.length === 0) {
-    // Find the next active player and try drawing again.
+    if (usingRiver) {
+      gamestate.riverTiles.unshift(drawnTile);
+      gamestate.activeTile = { tile: drawnTile, validPlacements: [], isRiver: true };
+      gamestate.step = 'place';
+      return gamestate;
+    }
     advanceToNextPlayer(gamestate);
     return drawTile(gamestate);
   }
@@ -191,6 +268,7 @@ export function drawTile(gamestate) {
   gamestate.activeTile = {
     tile: drawnTile,
     validPlacements,
+    isRiver: usingRiver,
   };
 
   gamestate.step = 'place';
@@ -224,6 +302,18 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
 
   if (!at || !at.tile) {
     return { success: false, message: 'No active tile to place' };
+  }
+
+  if (at.isRiver && !isValidRiverPlacement(
+    at.tile,
+    gamestate.placedTiles,
+    gamestate.riverTailIndex,
+    gamestate.riverOpenDirection,
+    x,
+    y,
+    rotation,
+  )) {
+    return { success: false, message: 'River tile must extend the open river end without an immediate U-turn' };
   }
 
   // ── Validate placement ──────────────────────────────────────────────
@@ -317,6 +407,19 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
 
   gamestate.placedTiles.push(newTile);
 
+  if (at.isRiver) {
+    const rotatedRiver = rotateRiverDirections(at.tile, rotation);
+    if (isRiverComplete(at.tile)) {
+      gamestate.riverPhase = false;
+      gamestate.riverTailIndex = null;
+      gamestate.riverOpenDirection = null;
+    } else {
+      const entryDirection = OPPOSITE[gamestate.riverOpenDirection];
+      gamestate.riverTailIndex = newTileIdx;
+      gamestate.riverOpenDirection = rotatedRiver.find((direction) => direction !== entryDirection);
+    }
+  }
+
   // ── Initialize features for the new tile ────────────────────────────
   initializeFeatures(newTile, gamestate);
 
@@ -370,16 +473,16 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
   // activation the extra turn is suppressed here — skipTowerStep /
   // placeTowerPiece handle the advance when the tower step finishes.
 
-  const canPlaceTower = !meeple
+  const canUseTowerActions = !meeple
     && gamestate.expansions.indexOf('the-tower') !== -1
-    && activePlayer.towers > 0
-    && newTile.tile.tower && newTile.tile.tower.offset != null;
+    && (activePlayer.towers > 0 || activePlayer.remainingMeeples > 0);
 
   // ── Clear active tile ───────────────────────────────────────────────
   gamestate.activeTile = null;
 
-  if (canPlaceTower) {
-    // Offer the tower step — player may place a tower piece or skip.
+  if (canUseTowerActions) {
+    // Officially, the Tower action may target any foundation or open tower on
+    // the board, or close an open tower with one of the active player's meeples.
     gamestate.step = 'tower';
     return { success: true };
   }
@@ -460,135 +563,94 @@ export function placeTowerPiece(gamestate, tileIndex) {
   const player = getActivePlayer(gamestate);
   const tile = gamestate.placedTiles[tileIndex];
 
-  if (gamestate.step !== 'tower') {
-    return { success: false, message: 'Not the tower step' };
-  }
-  if (!tile) {
-    return { success: false, message: 'Tile not found' };
-  }
-  if (!tile.tile.tower || tile.tile.tower.offset == null) {
-    return { success: false, message: 'This tile does not have a tower base' };
-  }
-  if (tile.tower.completed) {
-    return { success: false, message: 'Tower is already complete' };
-  }
-  if (player.towers <= 0) {
-    return { success: false, message: 'No tower pieces remaining' };
+  if (gamestate.step !== 'tower') return { success: false, message: 'Not the tower step' };
+  if (!tile) return { success: false, message: 'Tile not found' };
+  if (player.towers <= 0) return { success: false, message: 'No tower pieces remaining' };
+  if (tile.tower?.completed) return { success: false, message: 'Tower is already closed' };
+  if (!tile.tower && !tile.tile.tower?.offset) {
+    return { success: false, message: 'This tile is not a tower foundation or open tower' };
   }
 
-  // Consume one tower piece.
+  // A floor may be placed on any uncompleted foundation or any open tower.
+  if (!tile.tower) tile.tower = { height: 0, completed: false };
   player.towers -= 1;
   tile.tower.height += 1;
 
-  // Check for capturable opponent meeples within range.
-  const capturable = getCapturableMeeples(gamestate, tileIndex);
-
+  const capturable = getTowerCapturableMeeples(gamestate, tileIndex);
   if (capturable.length > 0) {
-    // Enter capture step — player must choose a meeple to capture.
     gamestate.step = 'capture';
-    gamestate.pendingCapture = {
-      tileIndex,
-      capturableMeeples: capturable,
-    };
+    gamestate.pendingCapture = { tileIndex, capturableMeeples: capturable };
   } else {
-    // No capturable meeples — end turn.
     _endTurnAfterTower(gamestate);
   }
-
   return { success: true };
 }
 
-/**
- * Return all opponent meeples that a tower can capture.
- *
- * A tower at height 1 captures from tiles 1 step away (N/S/E/W).
- * Height 2 captures from up to 2 steps, height 3 from up to 3 steps.
- * Only opponent meeples (different playerIndex) are eligible.
- *
- * @param {object} gamestate
- * @param {number} towerTileIndex
- * @returns {Array<{ tileIndex: number, meepleIndex: number, playerIndex: number, meepleType: string }>}
- */
-function getCapturableMeeples(gamestate, towerTileIndex) {
-  const towerTile = gamestate.placedTiles[towerTileIndex];
-  if (!towerTile || !towerTile.tower || towerTile.tower.height <= 0) return [];
-
-  const range = Math.min(towerTile.tower.height, 3);
-  const activeIdx = gamestate.currentPlayerIndex;
-  const capturable = [];
-
-  for (let i = 0; i < gamestate.placedTiles.length; i++) {
-    const pt = gamestate.placedTiles[i];
-    // Must be in a straight line N/S/E/W (not diagonal).
-    const dx = Math.abs(pt.x - towerTile.x);
-    const dy = Math.abs(pt.y - towerTile.y);
-    const inRange = (dx === 0 && dy > 0 && dy <= range)
-                 || (dy === 0 && dx > 0 && dx <= range);
-    if (!inRange) continue;
-
-    for (let m = 0; m < pt.meeples.length; m++) {
-      const meeple = pt.meeples[m];
-      if (meeple.playerIndex !== activeIdx && !meeple.scored) {
-        capturable.push({
-          tileIndex: i,
-          meepleIndex: m,
-          playerIndex: meeple.playerIndex,
-          meepleType: meeple.meepleType,
-        });
-      }
-    }
-  }
-
-  return capturable;
-}
-
-/**
- * Capture a specific opponent meeple (called from the capture step).
- *
- * Removes the meeple from the tile and returns it to the owner's supply.
- * Then ends the current turn.
- *
- * @param {object} gamestate
- * @param {number} capturedTileIndex   Index of the tile containing the meeple
- * @param {number} capturedMeepleIndex Index of the meeple on that tile
- * @returns {{ success: boolean, message?: string }}
- */
+/** Capture a selected meeple after a tower floor was placed. */
 export function captureMeeple(gamestate, capturedTileIndex, capturedMeepleIndex) {
   const capture = gamestate.pendingCapture;
-  if (!capture) {
+  if (!capture || gamestate.step !== 'capture') {
     return { success: false, message: 'No pending capture' };
   }
-  if (gamestate.step !== 'capture') {
-    return { success: false, message: 'Not the capture step' };
-  }
-
-  // Validate the target.
   const valid = capture.capturableMeeples.some(
-    (m) => m.tileIndex === capturedTileIndex && m.meepleIndex === capturedMeepleIndex,
+    (entry) => entry.tileIndex === capturedTileIndex && entry.meepleIndex === capturedMeepleIndex,
   );
-  if (!valid) {
-    return { success: false, message: 'Invalid capture target' };
-  }
+  if (!valid) return { success: false, message: 'Invalid capture target' };
 
   const tile = gamestate.placedTiles[capturedTileIndex];
   const meeple = tile.meeples[capturedMeepleIndex];
   const owner = gamestate.players[meeple.playerIndex];
-
-  // Remove meeple from the tile.
+  const capturer = getActivePlayer(gamestate);
   tile.meeples.splice(capturedMeepleIndex, 1);
+  const originalType = meeple.originalMeepleType || meeple.meepleType || 'normal';
 
-  // Return the meeple to its owner's supply.
-  if (meeple.meepleType === 'normal') {
-    owner.remainingMeeples += 1;
+  if (meeple.playerIndex === gamestate.currentPlayerIndex) {
+    returnMeepleToSupply(owner, originalType);
   } else {
-    owner[getMeepleFlag(meeple.meepleType)] = true;
+    capturer.capturedMeeples.push({ playerIndex: meeple.playerIndex, meepleType: originalType });
   }
 
-  // Clear pending capture and end turn.
+  checkAndExchangePrisoners(gamestate);
   gamestate.pendingCapture = null;
   _endTurnAfterTower(gamestate);
-
   return { success: true };
+}
+
+/** Close an open tower with one normal or large meeple. */
+export function placeMeepleOnTower(gamestate, tileIndex, meepleType = 'normal') {
+  const player = getActivePlayer(gamestate);
+  const tile = gamestate.placedTiles[tileIndex];
+  if (gamestate.step !== 'tower') return { success: false, message: 'Not the tower step' };
+  if (!tile?.tower || tile.tower.completed) return { success: false, message: 'Tower is not open' };
+
+  if (meepleType === 'normal') {
+    if (player.remainingMeeples <= 0) return { success: false, message: 'No remaining meeples' };
+    player.remainingMeeples -= 1;
+  } else if (meepleType === 'large') {
+    if (!player.hasLargeMeeple) return { success: false, message: 'No large meeple available' };
+    player.hasLargeMeeple = false;
+  } else {
+    return { success: false, message: 'Only normal or large meeples may close a tower' };
+  }
+
+  tile.meeples.push({
+    playerIndex: gamestate.currentPlayerIndex,
+    placement: { locationType: 'tower', index: 0 },
+    meepleType: 'tower',
+    originalMeepleType: meepleType,
+    scored: false,
+  });
+  tile.tower.completed = true;
+  _endTurnAfterTower(gamestate);
+  return { success: true };
+}
+
+/** Buy back one captured meeple during the active player's turn. */
+export function buyBackCapturedMeeple(gamestate, capturerPlayerIndex, prisonerIndex) {
+  if (!gamestate.expansions.includes('the-tower')) {
+    return { success: false, message: 'The Tower expansion is not enabled' };
+  }
+  return buyBackPrisoner(gamestate, capturerPlayerIndex, prisonerIndex);
 }
 
 /**

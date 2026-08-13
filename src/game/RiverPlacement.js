@@ -1,61 +1,118 @@
 /**
- * RiverPlacement.js — Official rules for "The River" expansion.
+ * Helpers for The River (New Edition / C2 River I).
  *
- * Rules implemented:
- * 1. The River consists of 12 tiles (including Source spring tile, Lake end tile, straight, bends, cloister, road, city).
- * 2. The River is placed first before the rest of the game begins.
- * 3. The Source spring tile is placed first at (0, 0) as the starting tile.
- * 4. Subsequent river tiles must connect to the open river end of the previously placed river tile.
- * 5. No 180-degree U-turns are allowed (the river cannot bend back directly on itself immediately).
- * 6. Meeples cannot be placed on the river itself, but can be placed on features (cities, roads, fields, cloisters) on river tiles following normal rules.
+ * The River is a one-ended stack: the source is placed first, the remaining
+ * river tiles are placed in order, and the lake is the final tile. A river
+ * tile must extend the current open end; it may not create a second branch or
+ * reconnect to an earlier river segment.
  */
+
+const CARDINALS = ['N', 'E', 'S', 'W'];
+const OPPOSITE = { N: 'S', E: 'W', S: 'N', W: 'E' };
+const DELTA = {
+  N: { x: 0, y: -1 },
+  E: { x: 1, y: 0 },
+  S: { x: 0, y: 1 },
+  W: { x: -1, y: 0 },
+};
+
+export function rotateRiverDirections(tileDef, rotation = 0) {
+  if (!tileDef?.river?.directions) return [];
+  return tileDef.river.directions.map((direction) => {
+    const index = CARDINALS.indexOf(direction);
+    return CARDINALS[(index + rotation) % CARDINALS.length];
+  });
+}
+
+export function getRiverNeighborPosition(x, y, direction) {
+  return {
+    x: x + DELTA[direction].x,
+    y: y + DELTA[direction].y,
+  };
+}
+
+function hasPlacedTileAt(placedTiles, x, y) {
+  return placedTiles.some((tile) => tile.x === x && tile.y === y);
+}
+
+function getTileAt(placedTiles, x, y) {
+  return placedTiles.find((tile) => tile.x === x && tile.y === y);
+}
 
 /**
- * Check if two river tile edges connect properly and do not form an immediate 180-degree U-turn.
+ * Return every legal (x, y, rotation) for the next river tile.
  *
- * @param {object} parentTilePlaced — The last placed river tile
- * @param {object} candidateTileDef — The candidate river tile being placed
- * @param {number} candidateRotation — The rotation (0-3) of the candidate tile
- * @returns {boolean}
+ * @param {object} tileDef candidate river tile
+ * @param {object[]} placedTiles placed tiles
+ * @param {number} tailIndex index of the current river tail
+ * @returns {Array<{x:number,y:number,rotation:number}>}
  */
-export function isValidRiverPlacement(parentTilePlaced, candidateTileDef, candidateRotation) {
-  if (!parentTilePlaced || !parentTilePlaced.tile.river) return false;
-  if (!candidateTileDef || !candidateTileDef.river) return false;
+export function getValidRiverPlacements(tileDef, placedTiles, tailIndex, openDirection) {
+  if (!tileDef?.river || tailIndex == null) return [];
+  const tail = placedTiles[tailIndex];
+  if (!tail?.tile?.river || !openDirection) return [];
+  const candidates = [];
+  const tailDirections = [openDirection];
 
-  const parentRiver = parentTilePlaced.tile.river;
-  const parentRot = parentTilePlaced.rotation;
+  // The game stores the one currently open endpoint explicitly. This is
+  // important: River I is a single chain, not a branching river network.
+  for (const tailDirection of tailDirections) {
+    const position = getRiverNeighborPosition(tail.x, tail.y, tailDirection);
+    if (hasPlacedTileAt(placedTiles, position.x, position.y)) continue;
 
-  // Find the open exit direction(s) of the parent tile.
-  // In Carcassonne, rotation 0-3 rotates directions clockwise: N=0, E=1, S=2, W=3.
-  const compassMap = { N: 0, E: 1, S: 2, W: 3 };
-  const revCompass = ['N', 'E', 'S', 'W'];
+    const requiredEntry = OPPOSITE[tailDirection];
+    for (let rotation = 0; rotation < 4; rotation += 1) {
+      const candidateDirections = rotateRiverDirections(tileDef, rotation);
+      if (!candidateDirections.includes(requiredEntry)) continue;
 
-  const parentExits = parentRiver.directions.map(d => {
-    const origIdx = compassMap[d];
-    const rotatedIdx = (origIdx + parentRot) % 4;
-    return revCompass[rotatedIdx];
-  });
+      // A candidate may not create a second connection to a previously placed
+      // tile. This prevents loops and the immediate U-turn patterns described
+      // in the official River clarification.
+      const otherDirections = candidateDirections.filter((d) => d !== requiredEntry);
+      const createsLoopOrBranch = otherDirections.some((direction) => {
+        const neighbor = getRiverNeighborPosition(position.x, position.y, direction);
+        const existing = getTileAt(placedTiles, neighbor.x, neighbor.y);
+        return Boolean(existing?.tile?.river);
+      });
+      if (createsLoopOrBranch) continue;
 
-  // Candidate entry directions
-  const candRiver = candidateTileDef.river;
-  const candExits = candRiver.directions.map(d => {
-    const origIdx = compassMap[d];
-    const rotatedIdx = (origIdx + candidateRotation) % 4;
-    return revCompass[rotatedIdx];
-  });
-
-  // Check if candidate has an exit matching the opposite of parent exit
-  const oppMap = { N: 'S', S: 'N', E: 'W', W: 'E' };
-  
-  // At least one parent exit must connect directly to a candidate entrance/exit
-  let connected = false;
-  for (const pExit of parentExits) {
-    const requiredCandDir = oppMap[pExit];
-    if (candExits.includes(requiredCandDir)) {
-      connected = true;
-      break;
+      // The lake must close the river, so it is only valid as the final tile.
+      candidates.push({ x: position.x, y: position.y, rotation, tailDirection });
     }
   }
 
-  return connected;
+  return candidates;
 }
+
+/**
+ * Filter ordinary TilePlacement results down to the official River endpoint.
+ * Keeping the normal result shape means meeple options on cities, roads,
+ * fields, and cloisters continue to be generated by the existing placement
+ * engine.
+ */
+export function filterRiverPlacements(validPlacements, riverPlacements) {
+  return validPlacements.filter((placement) => riverPlacements.some(
+    (riverPlacement) => riverPlacement.x === placement.x
+      && riverPlacement.y === placement.y
+      && placement.rotations.some((rotation) => rotation.rotation === riverPlacement.rotation),
+  )).map((placement) => ({
+    ...placement,
+    rotations: placement.rotations.filter((rotation) => riverPlacements.some(
+      (riverPlacement) => riverPlacement.x === placement.x
+        && riverPlacement.y === placement.y
+        && riverPlacement.rotation === rotation.rotation,
+    )),
+  }));
+}
+
+export function isValidRiverPlacement(tileDef, placedTiles, tailIndex, openDirection, x, y, rotation) {
+  return getValidRiverPlacements(tileDef, placedTiles, tailIndex, openDirection).some(
+    (candidate) => candidate.x === x && candidate.y === y && candidate.rotation === rotation,
+  );
+}
+
+export function isRiverComplete(tileDef) {
+  return Boolean(tileDef?.river?.isLake);
+}
+
+export { CARDINALS, OPPOSITE };
