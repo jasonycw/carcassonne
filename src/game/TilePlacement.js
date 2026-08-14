@@ -471,26 +471,56 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 		};
 	});
 
-	// -----------------------------------------------------------------------
-	// 4. Remove placements that conflict with any already-placed tile
-	// -----------------------------------------------------------------------
-	const invalidIndices = [];
-	for (let k = 0; k < placedTiles.length; k++) {
-		const ct = placedTiles[k];
-		const rt = rotatedTiles[k];
-		for (let j = 0; j < potentialPlacements.length; j++) {
-			const p = potentialPlacements[j];
-			const rp = rotatedPlacements[j];
-			if (
-				(ct.x === p.x && ct.y - 1 === p.y && rt.northEdge !== rp.southEdge) ||
-				(ct.x === p.x && ct.y + 1 === p.y && rt.southEdge !== rp.northEdge) ||
-				(ct.y === p.y && ct.x - 1 === p.x && rt.westEdge !== rp.eastEdge) ||
-				(ct.y === p.y && ct.x + 1 === p.x && rt.eastEdge !== rp.westEdge)
-			) {
-				invalidIndices.push(j);
+		// -----------------------------------------------------------------------
+		// 4. Remove placements that conflict with any already-placed tile
+		// -----------------------------------------------------------------------
+		const invalidIndices = [];
+		for (let k = 0; k < placedTiles.length; k++) {
+			const ct = placedTiles[k];
+			const rt = rotatedTiles[k];
+			for (let j = 0; j < potentialPlacements.length; j++) {
+				const p = potentialPlacements[j];
+				const rp = rotatedPlacements[j];
+				
+				// Strict edge checking across all 4 adjacent directions
+				const checks = [
+					{ dx: 0, dy: -1, edge1: rt.northEdge, edge2: rp.southEdge },
+					{ dx: 0, dy: 1, edge1: rt.southEdge, edge2: rp.northEdge },
+					{ dx: -1, dy: 0, edge1: rt.westEdge, edge2: rp.eastEdge },
+					{ dx: 1, dy: 0, edge1: rt.eastEdge, edge2: rp.westEdge }
+				];
+
+				for (let c = 0; c < checks.length; c++) {
+					const ch = checks[c];
+					const neighbor = getTileAt(placedTiles, p.x + ch.dx, p.y + ch.dy);
+					if (neighbor) {
+						// If there is a neighbor at that position, edges MUST match exactly
+						const nEdges = getRotatedEdges(neighbor.tile, neighbor.rotation);
+						// Determine shared edge type between p and neighbor
+						let edgeA = null;
+						let edgeB = null;
+						if (ch.dx === 0 && ch.dy === -1) { edgeA = rp.northEdge; edgeB = nEdges.southEdge; }
+						else if (ch.dx === 0 && ch.dy === 1) { edgeA = rp.southEdge; edgeB = nEdges.northEdge; }
+						else if (ch.dx === -1 && ch.dy === 0) { edgeA = rp.westEdge; edgeB = nEdges.eastEdge; }
+						else if (ch.dx === 1 && ch.dy === 0) { edgeA = rp.eastEdge; edgeB = nEdges.westEdge; }
+
+						if (edgeA !== edgeB) {
+							invalidIndices.push(j);
+							break;
+						}
+					}
+				}
+
+				if (
+					(ct.x === p.x && ct.y - 1 === p.y && rt.northEdge !== rp.southEdge) ||
+					(ct.x === p.x && ct.y + 1 === p.y && rt.southEdge !== rp.northEdge) ||
+					(ct.y === p.y && ct.x - 1 === p.x && rt.westEdge !== rp.eastEdge) ||
+					(ct.y === p.y && ct.x + 1 === p.x && rt.eastEdge !== rp.westEdge)
+				) {
+					invalidIndices.push(j);
+				}
 			}
 		}
-	}
 
 	const filteredPlacements = potentialPlacements.filter(function (_, idx) {
 		return invalidIndices.indexOf(idx) === -1;
