@@ -128,6 +128,8 @@ test.describe('Carcassonne Comprehensive Expansion & Base Game Matrix E2E', () =
       if (before?.includes('River phase') && !(await indicator.textContent()).includes('River phase')) break;
     }
     expect(riverTurns).toBeGreaterThan(0);
+    // Assert that the river phase has ended
+    await expect(indicator).not.toContainText('River phase');
     await page.screenshot({ path: testInfo.outputPath('river-completed.png'), fullPage: true });
   });
 
