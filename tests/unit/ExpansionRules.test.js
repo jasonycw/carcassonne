@@ -49,12 +49,12 @@ describe('The River official rules', () => {
 
   it('allows a straight river extension and rejects loop candidates', () => {
     const board = [
-      placed(source, 0, 0), // Source exit E at (0,0) connects to straight at (1,0)
+      placed(source, 0, 0), // Source exit S at (0,0) connects to straight at (0,1)
     ];
-    const candidates = getValidRiverPlacements(straight, board, 0, 'E');
+    const candidates = getValidRiverPlacements(straight, board, 0, 'S');
     expect(candidates.length).toBeGreaterThan(0);
-    expect(candidates[0].x).toBe(1);
-    expect(candidates[0].y).toBe(0);
+    expect(candidates[0].x).toBe(0);
+    expect(candidates[0].y).toBe(1);
   });
 });
 

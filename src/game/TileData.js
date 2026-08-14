@@ -1477,15 +1477,15 @@ export const THE_RIVER_TILES = [
   {
     id: 'the-river/I.s',
     northEdge: 'field',
-    southEdge: 'field',
+    southEdge: 'river',
     westEdge: 'field',
-    eastEdge: 'river',
+    eastEdge: 'field',
     roads: [],
     cities: [],
     farms: [
       { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 1/2 } }
     ],
-    river: { directions: ['E'], isSource: true },
+    river: { directions: ['S'], isSource: true },
     imageURL: '/images/tiles/the-river/I.s.png',
     expansion: 'the-river',
     count: 1,
@@ -1509,16 +1509,16 @@ export const THE_RIVER_TILES = [
   },
   {
     id: 'the-river/II',
-    northEdge: 'river',
+    northEdge: 'field',
     southEdge: 'river',
-    westEdge: 'field',
+    westEdge: 'river',
     eastEdge: 'field',
     roads: [],
     cities: [],
     farms: [
       { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 1/2 } }
     ],
-    river: { directions: ['N', 'S'] },
+    river: { directions: ['W', 'S'] },
     imageURL: '/images/tiles/the-river/II.png',
     expansion: 'the-river',
     count: 3
