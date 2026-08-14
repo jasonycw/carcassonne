@@ -50,12 +50,12 @@ describe('The River official rules', () => {
   it('allows a straight river extension and rejects loop candidates', () => {
     const board = [
       placed(source, 0, 0),
-      placed(straight, 1, 0, 0), // Straight has river on W-E natively. At rotation 0, W-E. Exit E.
+      placed(straight, 0, 1, 0), // Source exit S connects to straight entry N at (0,1)
     ];
-    const candidates = getValidRiverPlacements(straight, board, 1, 'E');
+    const candidates = getValidRiverPlacements(straight, board, 1, 'S');
     expect(candidates.length).toBeGreaterThan(0);
-    expect(candidates[0].x).toBe(2);
-    expect(candidates[0].y).toBe(0);
+    expect(candidates[0].x).toBe(0);
+    expect(candidates[0].y).toBe(2);
   });
 });
 
