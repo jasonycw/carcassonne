@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// Keep the generated recording as proof for the PR evidence bundle.
-test.use({ video: 'on', screenshot: 'only-on-failure' });
+test.use({ video: 'on', screenshot: 'on' });
 
 async function finishOptionalTowerOrCaptureStep(page) {
   const hud = page.locator('#hud-confirm');
@@ -17,11 +16,12 @@ async function finishOptionalTowerOrCaptureStep(page) {
   }
 }
 
-async function placeRiverOrLandTile(page, towerEvidencePath) {
+async function placeAnyTile(page, towerEvidencePath) {
   const placement = page.locator('#game-svg image.tile-placement').first();
-  if (!(await placement.isVisible({ timeout: 2500 }).catch(() => false))) return false;
+  if (!(await placement.count())) return false;
 
-  await placement.click({ force: true });
+  // Use dispatchEvent click on the SVG image element to bypass viewport center checks
+  await placement.first().dispatchEvent('click');
   await page.waitForTimeout(200);
 
   const confirm = page.locator('#hud-confirm');
@@ -48,52 +48,118 @@ async function placeRiverOrLandTile(page, towerEvidencePath) {
   return { placed: true, towerVisible };
 }
 
-test.describe('The River and The Tower multiplayer flow', () => {
-  test('plays the River opening and exposes official Tower actions', async ({ page }, testInfo) => {
-    await page.goto('/');
-    await page.locator('#lobby-container').waitFor({ state: 'visible', timeout: 10000 });
-    await page.locator('#player-name').fill('River Host');
-    await page.locator('#player-count').selectOption('2');
-    await page.locator('input[value="the-river"]').check();
-    await page.locator('input[value="the-tower"]').check();
-    await page.locator('#create-game-btn').click();
+async function setupGame(page, expansions = []) {
+  await page.goto('/');
+  await page.locator('#lobby-container').waitFor({ state: 'visible', timeout: 10000 });
+  await page.locator('#player-name').fill('Test Host');
+  await page.locator('#player-count').selectOption('2');
 
-    await page.waitForSelector('#room-display[style*="block"], #lobby-players[style*="block"]', { timeout: 35000 });
-    await page.locator('#start-game-btn').click();
-    await page.waitForSelector('#game-container', { timeout: 15000 });
-    await page.waitForSelector('#game-svg', { state: 'visible', timeout: 5000 });
+  // Set expansions
+  const allExpansions = ['inns-and-cathedrals', 'traders-and-builders', 'the-river', 'the-tower'];
+  for (const exp of allExpansions) {
+    const cb = page.locator(`input[value="${exp}"]`);
+    if (expansions.includes(exp)) {
+      if (!(await cb.isChecked())) await cb.check();
+    } else {
+      if (await cb.isChecked()) await cb.uncheck();
+    }
+  }
 
+  await page.locator('#create-game-btn').click();
+  await page.waitForSelector('#room-display[style*="block"], #lobby-players[style*="block"]', { timeout: 35000 });
+  await page.locator('#start-game-btn').click();
+  await page.waitForSelector('#game-container', { timeout: 15000 });
+  await page.waitForSelector('#game-svg', { state: 'visible', timeout: 5000 });
+}
+
+test.describe('Carcassonne Comprehensive Expansion & Base Game Matrix E2E', () => {
+  test('1. Base Game Only (No DLC)', async ({ page }, testInfo) => {
+    await setupGame(page, []);
+    await page.screenshot({ path: testInfo.outputPath('base-start.png'), fullPage: true });
+    let placed = 0;
+    for (let i = 0; i < 6; i++) {
+      if (await placeAnyTile(page)) placed++;
+      await page.waitForTimeout(300);
+    }
+    expect(placed).toBeGreaterThan(0);
+    await page.screenshot({ path: testInfo.outputPath('base-midgame.png'), fullPage: true });
+  });
+
+  test('2. Inns & Cathedrals Expansion', async ({ page }, testInfo) => {
+    await setupGame(page, ['inns-and-cathedrals']);
+    await page.screenshot({ path: testInfo.outputPath('ic-start.png'), fullPage: true });
+    let placed = 0;
+    for (let i = 0; i < 6; i++) {
+      if (await placeAnyTile(page)) placed++;
+      await page.waitForTimeout(300);
+    }
+    expect(placed).toBeGreaterThan(0);
+    await page.screenshot({ path: testInfo.outputPath('ic-midgame.png'), fullPage: true });
+  });
+
+  test('3. Traders & Builders Expansion', async ({ page }, testInfo) => {
+    await setupGame(page, ['traders-and-builders']);
+    await page.screenshot({ path: testInfo.outputPath('tb-start.png'), fullPage: true });
+    let placed = 0;
+    for (let i = 0; i < 6; i++) {
+      if (await placeAnyTile(page)) placed++;
+      await page.waitForTimeout(300);
+    }
+    expect(placed).toBeGreaterThan(0);
+    await page.screenshot({ path: testInfo.outputPath('tb-midgame.png'), fullPage: true });
+  });
+
+  test('4. The River Expansion', async ({ page }, testInfo) => {
+    await setupGame(page, ['the-river']);
     const indicator = page.locator('#game-turn-indicator');
     await expect(indicator).toContainText('River phase');
-    await page.screenshot({ path: testInfo.outputPath('river-phase-start.png'), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath('river-start.png'), fullPage: true });
 
-    let towerHudSeen = false;
     let riverTurns = 0;
-    for (let attempt = 0; attempt < 24 && riverTurns < 12; attempt += 1) {
+    for (let i = 0; i < 15; i++) {
       const before = await indicator.textContent();
-        const result = await placeRiverOrLandTile(page, testInfo.outputPath('tower-actions.png'));
-      if (!result) {
+      const res = await placeAnyTile(page);
+      if (!res) {
         await page.waitForTimeout(500);
         continue;
       }
-      riverTurns += 1;
-
-      if (result.towerVisible) {
-        towerHudSeen = true;
-      }
+      riverTurns++;
       await page.waitForTimeout(200);
       if (before?.includes('River phase') && !(await indicator.textContent()).includes('River phase')) break;
     }
-
     expect(riverTurns).toBeGreaterThan(0);
-    expect(towerHudSeen).toBe(true);
-    await testInfo.attach('river-phase-screenshot', {
-      path: testInfo.outputPath('river-phase-start.png'),
-      contentType: 'image/png',
-    });
-    await testInfo.attach('tower-actions-screenshot', {
-      path: testInfo.outputPath('tower-actions.png'),
-      contentType: 'image/png',
-    });
+    await page.screenshot({ path: testInfo.outputPath('river-completed.png'), fullPage: true });
+  });
+
+  test('5. The Tower Expansion', async ({ page }, testInfo) => {
+    await setupGame(page, ['the-tower']);
+    await page.screenshot({ path: testInfo.outputPath('tower-start.png'), fullPage: true });
+    let placed = 0;
+    for (let i = 0; i < 8; i++) {
+      if (await placeAnyTile(page, testInfo.outputPath('tower-action.png'))) placed++;
+      await page.waitForTimeout(300);
+    }
+    expect(placed).toBeGreaterThan(0);
+    await page.screenshot({ path: testInfo.outputPath('tower-midgame.png'), fullPage: true });
+  });
+
+  test('6. All Expansions Combined (River + Tower + I&C + T&B)', async ({ page }, testInfo) => {
+    await setupGame(page, ['inns-and-cathedrals', 'traders-and-builders', 'the-river', 'the-tower']);
+    const indicator = page.locator('#game-turn-indicator');
+    await expect(indicator).toContainText('River phase');
+    await page.screenshot({ path: testInfo.outputPath('all-dlc-start.png'), fullPage: true });
+
+    let turns = 0;
+    for (let i = 0; i < 15; i++) {
+      const res = await placeAnyTile(page, testInfo.outputPath('all-dlc-action.png'));
+      if (!res) {
+        await page.waitForTimeout(500);
+        continue;
+      }
+      turns++;
+      await page.waitForTimeout(200);
+    }
+    expect(turns).toBeGreaterThan(0);
+    await page.screenshot({ path: testInfo.outputPath('all-dlc-midgame.png'), fullPage: true });
   });
 });

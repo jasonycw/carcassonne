@@ -38,6 +38,7 @@ import {
   buyBackPrisoner,
   returnMeepleToSupply,
 } from './TowerExtensions.js';
+import { ALL_TILES as TILE_DATA } from './TileData.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -215,14 +216,19 @@ export function initializeNewGame(gamestate, startingTile) {
  * @param {object} gamestate
  */
 export function drawTile(gamestate) {
-  const usingRiver = Boolean(gamestate.riverPhase);
+  while (true) {
+    const usingRiver = Boolean(gamestate.riverPhase);
 
-  if (usingRiver && gamestate.riverTiles.length === 0) {
-    gamestate.riverPhase = false;
-    gamestate.riverTailIndex = null;
-    gamestate.riverOpenDirection = null;
-    return drawTile(gamestate);
-  }
+    if (usingRiver && gamestate.riverTiles.length === 0) {
+      gamestate.riverPhase = false;
+      gamestate.riverTailIndex = null;
+      gamestate.riverOpenDirection = null;
+      // Ensure unusedTiles is fully populated if it was empty
+      if ((!gamestate.unusedTiles || gamestate.unusedTiles.length === 0) && gamestate.expansions) {
+        gamestate.unusedTiles = buildTilePile(gamestate.expansions, TILE_DATA, false);
+      }
+      continue; // Iteratively draw from base pile
+    }
 
   if (!usingRiver && gamestate.unusedTiles.length === 0) {
     // No more tiles — end the game.
@@ -249,14 +255,47 @@ export function drawTile(gamestate) {
       gamestate.riverTailIndex,
       gamestate.riverOpenDirection,
     );
-    validPlacements = filterRiverPlacements(validPlacements, riverPlacements);
+    // During the River phase, the tile placement is strictly governed by the river chain.
+    // We construct valid placements directly from riverPlacements so that non-river
+    // board edges do not incorrectly block valid river extensions or allow non-river spots.
+    validPlacements = riverPlacements.map((rp) => {
+      // Build a standard placement structure with rotations and meeple options
+      const tempPlaced = createPlacedTile(drawnTile, rp.x, rp.y, rp.rotation, -1);
+      // Generate meeple options for this position/rotation
+      const meepleOptions = [];
+      for (let i = 0; i < tempPlaced.tile.cities.length; i++) {
+        meepleOptions.push({ featureType: 'city', featureIndex: i });
+      }
+      for (let i = 0; i < tempPlaced.tile.roads.length; i++) {
+        meepleOptions.push({ featureType: 'road', featureIndex: i });
+      }
+      for (let i = 0; i < tempPlaced.tile.farms.length; i++) {
+        meepleOptions.push({ featureType: 'farm', featureIndex: i });
+      }
+      if (tempPlaced.tile.cloisters && tempPlaced.tile.cloisters.length > 0) {
+        meepleOptions.push({ featureType: 'cloister', featureIndex: 0 });
+      }
+      return {
+        x: rp.x,
+        y: rp.y,
+        rotations: [
+          {
+            rotation: rp.rotation,
+            meeples: meepleOptions,
+          },
+        ],
+      };
+    });
   }
 
-  // A tile with no legal placement is removed from the game, then the same
-  // player draws another tile. This also applies during the River phase and is
-  // the official fallback when the river cannot be completed in its entirety.
   if (validPlacements.length === 0) {
-    return drawTile(gamestate);
+    if (gamestate.messages) {
+      gamestate.messages.push({
+        type: 'system',
+        text: `Tile ${drawnTile.id} had no valid placements and was removed from the game.`,
+      });
+    }
+    continue;
   }
 
   gamestate.activeTile = {
@@ -264,9 +303,9 @@ export function drawTile(gamestate) {
     validPlacements,
     isRiver: usingRiver,
   };
-
   gamestate.step = 'place';
   return gamestate;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -948,6 +987,10 @@ export function getGameSummary(gamestate) {
       remainingMeeples: p.remainingMeeples,
       active: p.active,
       goods: p.goods,
+      towers: p.towers,
+      hasLargeMeeple: p.hasLargeMeeple,
+      hasBuilderMeeple: p.hasBuilderMeeple,
+      hasPigMeeple: p.hasPigMeeple,
       capturedMeeples: (p.capturedMeeples || []).map((prisoner) => ({
         playerIndex: prisoner.playerIndex,
         meepleType: prisoner.meepleType,
