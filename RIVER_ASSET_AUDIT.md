@@ -263,3 +263,9 @@ The following points were re-confirmed by opening the native PNG assets again at
 - `RrII.png`: the river is **west/left** to **south/bottom**; the road occupies the **north/top** to **east/right** corner.
 
 These repeated checks strengthen the conclusion that the remaining likely visual mismatch is not `LIRI`, but another tile whose metadata or test expectations still encode an older orientation model.
+
+## Fresh proof inspection after commit c122144 — 2026-08-14 10:55–10:56
+
+The six-scenario Playwright matrix passed 6/6 after the latest metadata commit. The regenerated River capture is `river-completed.png` at 1280x720 and the combined capture is `all-dlc-midgame.png` at 1280x720, both created during the 10:54–10:56 run.
+
+The River completed screenshot shows a continuous purple river path across the placed River tiles and no stale red annotation. The All-DLC screenshot also shows the River assets rendered from the new run alongside Tower/I&C/T&B elements. These captures are the current visual baseline; they must be reviewed against the source assets before being published as final proof.

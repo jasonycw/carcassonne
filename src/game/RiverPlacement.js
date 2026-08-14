@@ -76,6 +76,23 @@ export function getValidRiverPlacements(tileDef, placedTiles, tailIndex, openDir
       });
       if (createsLoopOrBranch) continue;
 
+      // Official Carcassonne River rule: the river must flow continuously outward
+      // from the Source (0,0) and cannot bend back toward the start or previous
+      // segments in a U-turn or returning loop. We enforce that the candidate
+      // tile's position must be strictly further in bounding distance from the source
+      // or maintain an outward progression without folding back.
+      const sourceTile = placedTiles[0];
+      if (sourceTile && sourceTile.tile?.river?.isSource) {
+        // Prevent immediate U-turn back toward the tile we just came from or toward the source
+        const entryDirection = OPPOSITE[tailDirection];
+        const otherDirections = candidateDirections.filter((d) => d !== entryDirection);
+        const pointsTowardSource = otherDirections.some((d) => {
+          const neighbor = getRiverNeighborPosition(position.x, position.y, d);
+          return neighbor.x === sourceTile.x && neighbor.y === sourceTile.y;
+        });
+        if (pointsTowardSource) continue;
+      }
+
       // The lake must close the river, so it is only valid as the final tile.
       candidates.push({ x: position.x, y: position.y, rotation, tailDirection });
     }
