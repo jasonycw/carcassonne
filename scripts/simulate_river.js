@@ -14,10 +14,17 @@ for (let turn = 1; turn <= 20 && !state.finished; turn += 1) {
   const active = state.activeTile;
   if (!active) break;
   const placement = active.validPlacements[0];
+  if (!placement) {
+    console.log(turn, active.tile.id, 'no placements');
+    break;
+  }
+  const rotationEntry = placement.rotations && placement.rotations[0];
+  if (!rotationEntry) {
+    console.log(turn, active.tile.id, 'no rotations');
+    break;
+  }
   console.log(turn, active.tile.id, 'river', Boolean(active.isRiver), 'open', state.riverOpenDirection, 'tail', state.riverTailIndex, 'valid', active.validPlacements.length, placement);
-  if (!placement) break;
-  const rotation = placement.rotations[0];
-  const result = placeTile(state, placement.x, placement.y, rotation.rotation);
+  const result = placeTile(state, placement.x, placement.y, rotationEntry.rotation);
   if (!result.success) {
     console.log('place failed', result);
     break;
