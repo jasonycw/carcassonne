@@ -147,6 +147,16 @@ function getAdjacentTile(placedTiles, x, y, direction) {
 	return null;
 }
 
+function getTileAt(placedTiles, x, y) {
+	for (let i = 0; i < placedTiles.length; i++) {
+		const t = placedTiles[i];
+		if (t.x === x && t.y === y) {
+			return t;
+		}
+	}
+	return null;
+}
+
 /**
  * Find the index of a feature on a tile by matching a rotated direction.
  *
