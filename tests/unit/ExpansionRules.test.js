@@ -40,21 +40,21 @@ describe('The River official rules', () => {
 
   it('extends only the current open end and matches the river edge', () => {
     const board = [placed(source, 0, 0)];
-    const candidates = getValidRiverPlacements(straight, board, 0, 'S');
+    const candidates = getValidRiverPlacements(straight, board, 0, 'E');
     expect(candidates.length).toBeGreaterThan(0);
-    expect(candidates.every((candidate) => candidate.x === 0 && candidate.y === 1)).toBe(true);
-    expect(isValidRiverPlacement(straight, board, 0, 'S', 0, 1, candidates[0].rotation)).toBe(true);
-    expect(isValidRiverPlacement(straight, board, 0, 'S', 1, 0, candidates[0].rotation)).toBe(false);
+    expect(candidates.every((candidate) => candidate.x === 1 && candidate.y === 0)).toBe(true);
+    expect(isValidRiverPlacement(straight, board, 0, 'E', 1, 0, candidates[0].rotation)).toBe(true);
+    expect(isValidRiverPlacement(straight, board, 0, 'E', 0, 1, candidates[0].rotation)).toBe(false);
   });
 
-  it('allows a straight river extension and rejects loop candidates', () => {
+  it('allows a river extension and rejects loop candidates', () => {
     const board = [
-      placed(source, 0, 0), // Source exit S at (0,0) connects to straight at (0,1)
+      placed(source, 0, 0), // Source exit E at (0,0) connects to tile at (1,0)
     ];
-    const candidates = getValidRiverPlacements(straight, board, 0, 'S');
+    const candidates = getValidRiverPlacements(straight, board, 0, 'E');
     expect(candidates.length).toBeGreaterThan(0);
-    expect(candidates[0].x).toBe(0);
-    expect(candidates[0].y).toBe(1);
+    expect(candidates[0].x).toBe(1);
+    expect(candidates[0].y).toBe(0);
   });
 });
 

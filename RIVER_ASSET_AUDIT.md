@@ -212,3 +212,54 @@ This pass confirms that at least `II` is a bend (`W,S`) and not a vertical strai
 | `the-river/RrII` | The native asset shows a curved road entering from the **top** and exiting to the **right**, while the river enters from the **left** and leaves through the **bottom**. | River touches **W** and **S**; road touches **N** and **E**. |
 
 Critical implication: `LIRI` is currently mis-modeled in code as a vertical river tile (`N,S`) when its native PNG is horizontal (`W,E`). This is sufficient to produce the user's reported visual mismatch after rotation.
+
+## Human-confirmed correction for `LIRI`
+
+The maintainer has explicitly confirmed the native asset semantics for `the-river/LIRI.png`: it is a straight horizontal river from **West to East**; the **North** side is farm/field; the cathedral/building is north of the river; and the road runs from the cathedral toward the **South** edge. The authoritative metadata for this asset is therefore:
+
+| Field | Confirmed value |
+| --- | --- |
+| `northEdge` | `field` |
+| `eastEdge` | `river` |
+| `southEdge` | `road` |
+| `westEdge` | `river` |
+| `river.directions` | `['W', 'E']` |
+| road directions | `['S']` |
+
+The current `TileData.js` entry matches this human-confirmed mapping. Earlier descriptions of `LIRI` as a West-South river bend were incorrect and must not be repeated.
+
+## Definitive audit pass — 2026-08-14 current full reading
+
+The following table records the current direct visual reading from the native PNG assets at rotation 0 after re-opening every unique River tile again.
+
+| Tile ID | Native 0° visual reading | Confirmed edge interpretation |
+| --- | --- | --- |
+| `the-river/I.s` | The spring/source sits on the left side and the river visibly exits through the right side. | River: **E** |
+| `the-river/I.e` | The lake occupies the right side and the incoming river enters from the left side. | River: **W** |
+| `the-river/II` | The plain river tile is a bend: the river enters from the left side and exits through the bottom side. | River: **W, S** |
+| `the-river/RIrI` | The river runs vertically from top to bottom; the bridge road crosses horizontally from left to right. | River: **N, S**; Road: **W, E** |
+| `the-river/CIRI` | The city occupies the top edge; the road comes from the bottom into the city; the river runs horizontally across the tile. | River: **W, E**; Road: **S**; City: **N** |
+| `the-river/CICI` | Cities are at the top and bottom; the river spans horizontally through the middle. | River: **W, E**; City: **N, S** |
+| `the-river/CcII` | The city mass occupies the upper-left; the river curves through the lower-right, entering from the bottom and exiting to the right. | River: **S, E**; City: **N, W** |
+| `the-river/IFI` | The island/cloister sits within a horizontal river spanning left to right. | River: **W, E** |
+| `the-river/LIRI` | The building/cloister is above a straight horizontal river; a road rises from the bottom into the building. | River: **W, E**; Road: **S** |
+| `the-river/RrII` | The road occupies the upper-right corner, connecting the top and right edges; the river occupies the lower-left bend, connecting the left and bottom edges. | River: **W, S**; Road: **N, E** |
+
+This table supersedes earlier contradictory notes and should be treated as the current authoritative basis for `TileData.js` corrections.
+
+## Latest re-check after repeated direct image inspection
+
+The following points were re-confirmed by opening the native PNG assets again at 0°:
+
+- `I.s.png`: the source river exits on the **east/right** edge.
+- `I.e.png`: the lake receives the river from the **west/left** edge.
+- `II.png`: the river is a **bend**, not a straight; it connects **west/left** to **south/bottom**.
+- `RIrI.png`: the river is **north/south**, while the bridge road is **west/east**.
+- `CIRI.png`: the river is **west/east**; the city is on the **north/top** edge; the road reaches the **south/bottom** edge.
+- `CICI.png`: the river is **west/east**, with city on **north/top** and **south/bottom**.
+- `CcII.png`: the river is **south/bottom** to **east/right**; the city mass covers **north/top** and **west/left**.
+- `IFI.png`: the river is **west/east**.
+- `LIRI.png`: the river is **west/east**; the road reaches the **south/bottom** edge and goes up to the building.
+- `RrII.png`: the river is **west/left** to **south/bottom**; the road occupies the **north/top** to **east/right** corner.
+
+These repeated checks strengthen the conclusion that the remaining likely visual mismatch is not `LIRI`, but another tile whose metadata or test expectations still encode an older orientation model.

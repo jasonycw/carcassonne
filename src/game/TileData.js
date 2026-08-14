@@ -1638,7 +1638,9 @@ export const THE_RIVER_TILES = [
     roads: [{ directions: ['N', 'E'], meepleOffset: { x: 3/4, y: 1/2 } }],
     cities: [],
     farms: [
-      { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 1/2 } }
+      { directions: ['NNW', 'ESE', 'SSE'], meepleOffset: { x: 1/2, y: 1/2 } },
+      { directions: ['NNE', 'ENE'], meepleOffset: { x: 7/8, y: 1/8 } },
+      { directions: ['WSW', 'SSW', 'WNW'], meepleOffset: { x: 1/8, y: 7/8 } }
     ],
     river: { directions: ['W', 'S'] },
     imageURL: '/images/tiles/the-river/RrII.png',
