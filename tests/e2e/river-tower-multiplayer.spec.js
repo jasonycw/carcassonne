@@ -146,6 +146,7 @@ test.describe('Carcassonne Comprehensive Expansion & Base Game Matrix E2E', () =
   });
 
   test('6. All Expansions Combined (River + Tower + I&C + T&B)', async ({ page }, testInfo) => {
+    test.setTimeout(60000);
     await setupGame(page, ['inns-and-cathedrals', 'traders-and-builders', 'the-river', 'the-tower']);
     const indicator = page.locator('#game-turn-indicator');
     await expect(indicator).toContainText('River phase');

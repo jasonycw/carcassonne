@@ -358,8 +358,7 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
     .attr('transform', (d) => {
       const x = svgWidth / 2 + d.x * TILE_SIZE;
       const y = svgHeight / 2 + d.y * TILE_SIZE;
-      // Rotate around the tile centre then translate.
-      return `rotate(${90 * d.rotation},${x + TILE_SIZE / 2},${y + TILE_SIZE / 2}) translate(${x},${y})`;
+      return `translate(${x},${y}) rotate(${90 * d.rotation},${TILE_SIZE / 2},${TILE_SIZE / 2})`;
     })
     .attr('href', (d) => img(d.tile.imageURL));
 
@@ -384,7 +383,7 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
     .attr('transform', (d) => {
       const x = svgWidth / 2 + d.x * TILE_SIZE;
       const y = svgHeight / 2 + d.y * TILE_SIZE;
-      return `rotate(${90 * d.rotation},${x + TILE_SIZE / 2},${y + TILE_SIZE / 2}) translate(${x},${y})`;
+      return `translate(${x},${y}) rotate(${90 * d.rotation},${TILE_SIZE / 2},${TILE_SIZE / 2})`;
     });
 
   // ── Meeples on placed tiles ───────────────────────────────────────────
