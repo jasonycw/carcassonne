@@ -255,37 +255,8 @@ export function drawTile(gamestate) {
       gamestate.riverTailIndex,
       gamestate.riverOpenDirection,
     );
-    // During the River phase, the tile placement is strictly governed by the river chain.
-    // We construct valid placements directly from riverPlacements so that non-river
-    // board edges do not incorrectly block valid river extensions or allow non-river spots.
-    validPlacements = riverPlacements.map((rp) => {
-      // Build a standard placement structure with rotations and meeple options
-      const tempPlaced = createPlacedTile(drawnTile, rp.x, rp.y, rp.rotation, -1);
-      // Generate meeple options for this position/rotation
-      const meepleOptions = [];
-      for (let i = 0; i < tempPlaced.tile.cities.length; i++) {
-        meepleOptions.push({ featureType: 'city', featureIndex: i });
-      }
-      for (let i = 0; i < tempPlaced.tile.roads.length; i++) {
-        meepleOptions.push({ featureType: 'road', featureIndex: i });
-      }
-      for (let i = 0; i < tempPlaced.tile.farms.length; i++) {
-        meepleOptions.push({ featureType: 'farm', featureIndex: i });
-      }
-      if (tempPlaced.tile.cloisters && tempPlaced.tile.cloisters.length > 0) {
-        meepleOptions.push({ featureType: 'cloister', featureIndex: 0 });
-      }
-      return {
-        x: rp.x,
-        y: rp.y,
-        rotations: [
-          {
-            rotation: rp.rotation,
-            meeples: meepleOptions,
-          },
-        ],
-      };
-    });
+    // Filter standard edge-matched placements to only those authorized by river rules.
+    validPlacements = filterRiverPlacements(validPlacements, riverPlacements);
   }
 
   if (validPlacements.length === 0) {
