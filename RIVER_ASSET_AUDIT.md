@@ -164,3 +164,51 @@ These observations should override earlier contradictory assumptions and are the
 | `the-river/RIrI` | The river runs vertically from **top** to **bottom**; a road/bridge runs horizontally from **left** to **right**. | River touches **N** and **S**; road touches **W** and **E**. |
 
 These findings supersede my previous contradictory assumptions and should be used in the next metadata correction pass.
+
+## Definitive audit pass: batch 1
+
+| Tile ID | Native 0° visual reading | Confirmed edge interpretation |
+| --- | --- | --- |
+| `the-river/I.s` | The spring is on the left side and the river visibly leaves the tile on the right side. | River touches **E** only. |
+| `the-river/I.e` | The lake basin occupies the right side and the river visibly enters from the left. | River touches **W** only. |
+| `the-river/II` | The river enters from the left side and exits through the bottom side. | River touches **W** and **S**. |
+| `the-river/RIrI` | The river runs from top to bottom, while the bridge road crosses from left to right. | River touches **N** and **S**; road touches **W** and **E**. |
+| `the-river/CIRI` | The city is at the top, the road comes from the bottom into the city, and the river runs horizontally across the tile. | River touches **W** and **E**; road touches **S**; city touches **N**. |
+
+These findings are from direct inspection of the native PNG assets and should override earlier contradictory assumptions.
+
+## Definitive audit pass: batch 2
+
+| Tile ID | Native 0° visual reading | Confirmed edge interpretation |
+| --- | --- | --- |
+| `the-river/CICI` | The river runs horizontally across the center while city segments occupy the top and bottom. | River touches **W** and **E**; city touches **N** and **S**. |
+| `the-river/CcII` | The city mass occupies the upper-left, and the river curve enters from the bottom then exits through the right side. | River touches **S** and **E**; city touches **N** and **W**. |
+| `the-river/IFI` | The river runs horizontally from left to right with the island/cloister in the middle. | River touches **W** and **E**. |
+| `the-river/LIRI` | The building sits at the top, the road enters from the bottom, and the river bends from the left side to the right side behind the building. It is **not** a top-bottom river tile. | River touches **W** and **E**; road touches **S**; building/cloister is central-top. |
+| `the-river/RrII` | The road enters from the top and curves toward the right side, while the river enters from the left and exits through the bottom. | River touches **W** and **S**; road touches **N** and **E**. |
+
+Important correction: the user-provided screenshot clearly shows the circled tile cannot be treated as a vertical river tile. The native `LIRI` art is a horizontal river bend/background with a bottom road into the building, so any placement that visually makes it a north-south river indicates metadata and/or rotation mismatch elsewhere in the chain.
+
+## Definitive re-audit after user screenshot escalation: batch 3
+
+| Tile ID | Native 0° visual reading | Confirmed edge interpretation |
+| --- | --- | --- |
+| `the-river/I.s` | The spring source sits on the left and the visible river outlet reaches the right edge. | River touches **E** only. |
+| `the-river/I.e` | The lake basin fills the right side and the inlet clearly comes from the left edge. | River touches **W** only. |
+| `the-river/II` | The plain river tile is a bend, with water entering from the left edge and leaving through the bottom edge. | River touches **W** and **S**. |
+| `the-river/RIrI` | The river is vertical from top to bottom and a road/bridge crosses horizontally from left to right. | River touches **N** and **S**; road touches **W** and **E**. |
+| `the-river/CIRI` | The city occupies the top, the road enters from the bottom, and the river runs laterally under the bridge from left to right. | River touches **W** and **E**; road touches **S**; city touches **N**. |
+
+This pass confirms that at least `II` is a bend (`W,S`) and not a vertical straight, which is critical for fixing visual river continuity.
+
+## Definitive re-audit after user screenshot escalation: batch 4
+
+| Tile ID | Native 0° visual reading | Confirmed edge interpretation |
+| --- | --- | --- |
+| `the-river/CICI` | The river crosses horizontally through the center, while city walls occupy the top and bottom edges. | River touches **W** and **E**; city touches **N** and **S**. |
+| `the-river/CcII` | The city occupies the upper-left wedge, and the river curve passes through the lower-right region from bottom to right. | River touches **S** and **E**; city touches **N** and **W**. |
+| `the-river/IFI` | The river is clearly horizontal across the center with the island/cloister in the middle. | River touches **W** and **E**. |
+| `the-river/LIRI` | The native asset shows the river entering from the **left** and leaving through the **right**; the road enters from the **bottom** into the building. When rotated 90° clockwise, this becomes a vertical river with road on the **left**, exactly matching the user's screenshot. | River touches **W** and **E**; road touches **S**. |
+| `the-river/RrII` | The native asset shows a curved road entering from the **top** and exiting to the **right**, while the river enters from the **left** and leaves through the **bottom**. | River touches **W** and **S**; road touches **N** and **E**. |
+
+Critical implication: `LIRI` is currently mis-modeled in code as a vertical river tile (`N,S`) when its native PNG is horizontal (`W,E`). This is sufficient to produce the user's reported visual mismatch after rotation.

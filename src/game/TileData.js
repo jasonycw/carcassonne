@@ -1612,28 +1612,28 @@ export const THE_RIVER_TILES = [
   },
   {
     id: 'the-river/LIRI',
-    northEdge: 'river',
-    southEdge: 'river',
-    westEdge: 'field',
-    eastEdge: 'field',
+    northEdge: 'field',
+    southEdge: 'road',
+    westEdge: 'river',
+    eastEdge: 'river',
     roads: [{ directions: ['S'], meepleOffset: { x: 1/2, y: 3/4 } }],
     cities: [],
     farms: [
       { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 1/2 } }
     ],
     cloister: { meepleOffset: { x: 1/2, y: 1/2 } },
-    river: { directions: ['N', 'S'] },
+    river: { directions: ['W', 'E'] },
     imageURL: '/images/tiles/the-river/LIRI.png',
     expansion: 'the-river',
     count: 1
   },
   {
     id: 'the-river/RrII',
-    northEdge: 'field',
+    northEdge: 'road',
     southEdge: 'river',
     westEdge: 'river',
     eastEdge: 'road',
-    roads: [{ directions: ['E'], meepleOffset: { x: 3/4, y: 1/2 } }],
+    roads: [{ directions: ['N', 'E'], meepleOffset: { x: 3/4, y: 1/2 } }],
     cities: [],
     farms: [
       { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 1/2 } }
