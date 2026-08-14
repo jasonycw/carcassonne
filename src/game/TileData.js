@@ -1493,16 +1493,16 @@ export const THE_RIVER_TILES = [
   },
   {
     id: 'the-river/I.e',
-    northEdge: 'river',
+    northEdge: 'field',
     southEdge: 'field',
-    westEdge: 'field',
+    westEdge: 'river',
     eastEdge: 'field',
     roads: [],
     cities: [],
     farms: [
       { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 3/4 } }
     ],
-    river: { directions: ['N'], isLake: true },
+    river: { directions: ['W'], isLake: true },
     imageURL: '/images/tiles/the-river/I.e.png',
     expansion: 'the-river',
     count: 1
@@ -1545,15 +1545,15 @@ export const THE_RIVER_TILES = [
   {
     id: 'the-river/CIRI',
     northEdge: 'city',
-    southEdge: 'river',
-    westEdge: 'field',
+    southEdge: 'road',
+    westEdge: 'river',
     eastEdge: 'river',
-    roads: [],
+    roads: [{ directions: ['S'], meepleOffset: { x: 1/2, y: 3/4 } }],
     cities: [{ directions: ['N'], meepleOffset: { x: 1/2, y: 1/8 } }],
     farms: [
       { directions: ['WNW', 'WSW', 'SSW', 'ENE', 'ESE'], meepleOffset: { x: 1/2, y: 5/8 }, adjacentCityIndices: [0] }
     ],
-    river: { directions: ['S', 'E'] },
+    river: { directions: ['W', 'E'] },
     imageURL: '/images/tiles/the-river/CIRI.png',
     expansion: 'the-river',
     count: 1
@@ -1588,33 +1588,16 @@ export const THE_RIVER_TILES = [
     farms: [
       { directions: ['SSW', 'SSE', 'ESE', 'ENE'], meepleOffset: { x: 3/4, y: 3/4 }, adjacentCityIndices: [0] }
     ],
-    river: { directions: ['E', 'S'] },
+    river: { directions: ['S', 'E'] },
     imageURL: '/images/tiles/the-river/CcII.png',
     expansion: 'the-river',
     count: 1
   },
   {
     id: 'the-river/IFI',
-    northEdge: 'river',
-    southEdge: 'river',
-    westEdge: 'field',
-    eastEdge: 'field',
-    roads: [],
-    cities: [],
-    farms: [
-      { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 1/2 } }
-    ],
-    cloister: { meepleOffset: { x: 1/2, y: 1/2 } },
-    river: { directions: ['N', 'S'] },
-    imageURL: '/images/tiles/the-river/IFI.png',
-    expansion: 'the-river',
-    count: 1
-  },
-  {
-    id: 'the-river/LIRI',
     northEdge: 'field',
-    southEdge: 'river',
-    westEdge: 'field',
+    southEdge: 'field',
+    westEdge: 'river',
     eastEdge: 'river',
     roads: [],
     cities: [],
@@ -1622,7 +1605,24 @@ export const THE_RIVER_TILES = [
       { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 1/2 } }
     ],
     cloister: { meepleOffset: { x: 1/2, y: 1/2 } },
-    river: { directions: ['S', 'E'] },
+    river: { directions: ['W', 'E'] },
+    imageURL: '/images/tiles/the-river/IFI.png',
+    expansion: 'the-river',
+    count: 1
+  },
+  {
+    id: 'the-river/LIRI',
+    northEdge: 'field',
+    southEdge: 'road',
+    westEdge: 'river',
+    eastEdge: 'river',
+    roads: [{ directions: ['S'], meepleOffset: { x: 1/2, y: 3/4 } }],
+    cities: [],
+    farms: [
+      { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 1/2 } }
+    ],
+    cloister: { meepleOffset: { x: 1/2, y: 1/2 } },
+    river: { directions: ['W', 'E'] },
     imageURL: '/images/tiles/the-river/LIRI.png',
     expansion: 'the-river',
     count: 1
@@ -1631,9 +1631,9 @@ export const THE_RIVER_TILES = [
     id: 'the-river/RrII',
     northEdge: 'river',
     southEdge: 'river',
-    westEdge: 'road',
-    eastEdge: 'field',
-    roads: [{ directions: ['W'], meepleOffset: { x: 1/4, y: 1/2 } }],
+    westEdge: 'field',
+    eastEdge: 'road',
+    roads: [{ directions: ['E'], meepleOffset: { x: 3/4, y: 1/2 } }],
     cities: [],
     farms: [
       { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 1/2 } }

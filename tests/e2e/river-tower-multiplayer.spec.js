@@ -31,7 +31,7 @@ async function placeAnyTile(page, towerEvidencePath) {
 
   const meeple = page.locator('#game-svg image.meeple-outline').first();
   if (await meeple.isVisible({ timeout: 500 }).catch(() => false)) {
-    await meeple.click({ force: true });
+    await meeple.dispatchEvent('click');
     await page.waitForTimeout(100);
   }
 
