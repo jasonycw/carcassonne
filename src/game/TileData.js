@@ -1619,9 +1619,11 @@ export const THE_RIVER_TILES = [
     roads: [{ directions: ['S'], meepleOffset: { x: 1/2, y: 3/4 } }],
     cities: [],
     farms: [
-      { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 1/2 } }
+      { directions: ['NNW', 'NNE'], meepleOffset: { x: 1/2, y: 1/8 } },
+      { directions: ['WSW', 'SSW'], meepleOffset: { x: 1/8, y: 3/4 } },
+      { directions: ['SSE', 'ESE'], meepleOffset: { x: 7/8, y: 3/4 } }
     ],
-    cloister: { meepleOffset: { x: 1/2, y: 1/2 } },
+    cloister: { meepleOffset: { x: 1/2, y: 1/4 } },
     river: { directions: ['W', 'E'] },
     imageURL: '/images/tiles/the-river/LIRI.png',
     expansion: 'the-river',
