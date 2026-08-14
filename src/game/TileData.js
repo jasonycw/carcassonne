@@ -1477,15 +1477,15 @@ export const THE_RIVER_TILES = [
   {
     id: 'the-river/I.s',
     northEdge: 'field',
-    southEdge: 'river',
+    southEdge: 'field',
     westEdge: 'field',
-    eastEdge: 'field',
+    eastEdge: 'river',
     roads: [],
     cities: [],
     farms: [
       { directions: ['NNW', 'NNE', 'ENE', 'ESE', 'SSE', 'SSW', 'WSW', 'WNW'], meepleOffset: { x: 1/2, y: 1/2 } }
     ],
-    river: { directions: ['S'], isSource: true },
+    river: { directions: ['E'], isSource: true },
     imageURL: '/images/tiles/the-river/I.s.png',
     expansion: 'the-river',
     count: 1,
