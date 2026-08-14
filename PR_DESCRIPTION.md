@@ -16,18 +16,18 @@ This Pull Request implements **The River** and **The Tower** extensions for Carc
 
 #### 3. Visual Proof Matrix (Base Game + All DLC Combinations)
 
-The following high-definition session recordings demonstrate the game running successfully across all expansion combinations and base game with native GitHub inline playback:
+The following up-to-date, high-definition screenshots and session recordings demonstrate the game running successfully across all expansion combinations and base game with native GitHub inline playback:
 
-| Scenario / Expansion Mode | Board State (Screenshot) | Session Recording (HD Inline Video) |
+| Scenario / Expansion Mode | Board State (Fresh Screenshot) | Session Recording (HD Inline Video) |
 | --- | --- | --- |
-| **Base Game Only** | ![Base Start](https://github.com/jasonycw/carcassonne/raw/fix/river-tower-official-rules/docs/evidence/base-start.png) | https://github.com/user-attachments/assets/6f76b429-ca35-4748-a484-ca44ef30d9e0 |
-| **Inns & Cathedrals (I&C)** | ![IC Start](https://github.com/jasonycw/carcassonne/raw/fix/river-tower-official-rules/docs/evidence/ic-start.png) | https://github.com/user-attachments/assets/e45abf09-7dec-4611-a2a7-fd68f9dcf5d9 |
-| **Traders & Builders (T&B)** | ![TB Start](https://github.com/jasonycw/carcassonne/raw/fix/river-tower-official-rules/docs/evidence/tb-start.png) | https://github.com/user-attachments/assets/acee6bf1-8135-45a7-994b-5a1f22d4f392 |
-| **The River Extension** | ![River Start](https://github.com/jasonycw/carcassonne/raw/fix/river-tower-official-rules/docs/evidence/river-start.png) | https://github.com/user-attachments/assets/15491ca5-ef46-46ef-89bc-ca5dd5de634e |
-| **The Tower Extension** | ![Tower Action](https://github.com/jasonycw/carcassonne/raw/fix/river-tower-official-rules/docs/evidence/all-dlc-action.png) | https://github.com/user-attachments/assets/625760e1-7a92-4905-aaf2-3d1b1b6f6f7b |
-| **All DLC Combined** | ![All DLC Start](https://github.com/jasonycw/carcassonne/raw/fix/river-tower-official-rules/docs/evidence/all-dlc-start.png) | https://github.com/user-attachments/assets/6823b600-a9fc-4f34-82ce-13f2e1f6a819 |
+| **Base Game Only** | ![Base Game Only](https://github.com/user-attachments/assets/e5188914-381c-482d-a9d9-6853f847c40d) | https://github.com/user-attachments/assets/6f76b429-ca35-4748-a484-ca44ef30d9e0 |
+| **Inns & Cathedrals (I&C)** | ![Inns & Cathedrals](https://github.com/user-attachments/assets/a1cc5fd5-19ea-436a-8240-33e2af049672) | https://github.com/user-attachments/assets/e45abf09-7dec-4611-a2a7-fd68f9dcf5d9 |
+| **Traders & Builders (T&B)** | ![Traders & Builders](https://github.com/user-attachments/assets/071c5777-41c9-4074-a922-13c940cbcaea) | https://github.com/user-attachments/assets/acee6bf1-8135-45a7-994b-5a1f22d4f392 |
+| **The River Extension** | ![The River Extension](https://github.com/user-attachments/assets/113a566f-2b94-497c-b783-0f8e359d065f) | https://github.com/user-attachments/assets/15491ca5-ef46-46ef-89bc-ca5dd5de634e |
+| **The Tower Extension** | ![The Tower Extension](https://github.com/user-attachments/assets/e590fad5-c437-4274-a33c-a43bdf18a8a1) | https://github.com/user-attachments/assets/625760e1-7a92-4905-aaf2-3d1b1b6f6f7b |
+| **All DLC Combined** | ![All DLC Combined](https://github.com/user-attachments/assets/4e7deb3c-be9f-4212-9122-dfdf519fd4df) | https://github.com/user-attachments/assets/6823b600-a9fc-4f34-82ce-13f2e1f6a819 |
 
 #### 4. Verification & Testing
 - **Unit Tests**: 289/289 passing.
-- **E2E Tests**: Playwright test suite successfully executed across all 6 scenario combinations with HD recording enabled.
+- **E2E Tests**: Playwright test suite successfully executed across all 6 scenario combinations with HD recording and fresh screenshot capture enabled.
 - **Visual Audit**: High-resolution pixel audit confirmed all river tile edges. `LIRI` confirmed as straight horizontal.
