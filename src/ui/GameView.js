@@ -791,6 +791,7 @@ export class GameView {
         this.dom.towerClose.disabled = (player.remainingMeeples || 0) <= 0 && !player.hasLargeMeeple;
       }
       this._updateHUD('tower');
+      this._showStatusMessage('Tower expansion active: Select an action and click a foundation on the board.');
       return;
     }
 

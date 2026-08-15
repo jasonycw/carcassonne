@@ -76,6 +76,36 @@ describe('The River official rules', () => {
     expect(candidates.some((candidate) => candidate.rotation === 0)).toBe(false);
     expect(candidates.every((candidate) => candidate.x === 1 && candidate.y === 1)).toBe(true);
   });
+
+  it('rejects a reverse bend after intervening straight tiles, not only an immediate U-turn', () => {
+    const southBend = {
+      ...straight,
+      id: 'test/south-bend',
+      river: { directions: ['W', 'S'] },
+    };
+    const straightSegment = {
+      ...straight,
+      id: 'test/straight-segment',
+      river: { directions: ['N', 'S'] },
+    };
+    const delayedReverseBend = {
+      ...straight,
+      id: 'test/delayed-reverse-bend',
+      river: { directions: ['W', 'S'] },
+    };
+    const board = [
+      placed(source, 0, 0),
+      placed(southBend, 1, 0, 0),
+      placed(straightSegment, 1, 1, 0),
+      placed(straightSegment, 1, 2, 0),
+    ];
+
+    const candidates = getValidRiverPlacements(delayedReverseBend, board, 3, 'S');
+    expect(candidates.every((candidate) => candidate.x === 1 && candidate.y === 3)).toBe(true);
+    // Rotation 1 presents N as the entry edge and W as the outgoing edge,
+    // which would send the river back toward the Source after two straights.
+    expect(candidates.some((candidate) => candidate.rotation === 1)).toBe(false);
+  });
 });
 
 describe('The Tower official rules', () => {

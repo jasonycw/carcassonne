@@ -39,6 +39,53 @@ function getTileAt(placedTiles, x, y) {
   return placedTiles.find((tile) => tile.x === x && tile.y === y);
 }
 
+function getSourceFlowDirection(sourceTile) {
+  return rotateRiverDirections(sourceTile.tile, sourceTile.rotation || 0)[0];
+}
+
+function getDownstreamProjection(position, sourceTile, sourceFlowDirection) {
+  const axis = DELTA[sourceFlowDirection];
+  return ((position.x - sourceTile.x) * axis.x) + ((position.y - sourceTile.y) * axis.y);
+}
+
+/**
+ * The single-ended River variant must never reverse its source-to-lake flow.
+ * We model downstream as the projection on the Source's original flow axis.
+ * Sideways movement is allowed, but the projection may never decrease and no
+ * outgoing edge may point toward the Source. This catches a reverse bend even
+ * when one or more straight tiles lie between the two bends.
+ */
+function isGloballyDownstream(placedTiles, tailIndex, sourceTile, tail, candidatePosition, outgoingDirections) {
+  const sourceFlowDirection = getSourceFlowDirection(sourceTile);
+  if (!sourceFlowDirection) return true;
+
+  const tailProjection = getDownstreamProjection(tail, sourceTile, sourceFlowDirection);
+  const candidateProjection = getDownstreamProjection(candidatePosition, sourceTile, sourceFlowDirection);
+  if (candidateProjection < tailProjection) return false;
+
+  const axis = DELTA[sourceFlowDirection];
+  if (outgoingDirections.some((direction) => {
+    const vector = DELTA[direction];
+    return (vector.x * axis.x) + (vector.y * axis.y) < 0;
+  })) {
+    return false;
+  }
+
+  // Re-check the entire existing River path, not just the current tail. This
+  // protects against malformed/replayed states and makes the invariant
+  // explicit for network clients and deterministic simulations.
+  let previousProjection = -Infinity;
+  for (let index = 0; index <= tailIndex; index += 1) {
+    const placed = placedTiles[index];
+    if (!placed?.tile?.river) continue;
+    const projection = getDownstreamProjection(placed, sourceTile, sourceFlowDirection);
+    if (projection < previousProjection) return false;
+    previousProjection = projection;
+  }
+
+  return true;
+}
+
 /**
  * Return every legal (x, y, rotation) for the next river tile.
  *
@@ -76,31 +123,24 @@ export function getValidRiverPlacements(tileDef, placedTiles, tailIndex, openDir
       });
       if (createsLoopOrBranch) continue;
 
-      // Official River flow rule: once the Source is placed, the chain must move
-      // continuously downstream. A candidate cannot fold back toward the Source,
-      // return toward an earlier segment, or create a U-turn.
+      // Official River flow rule plus this project's single-ended invariant:
+      // once the Source is placed, the chain must move continuously downstream.
+      // A candidate cannot fold back toward the Source, return toward an earlier
+      // segment, or create a loop. The global projection check is deliberately
+      // independent of the immediately previous tile, so a reverse bend after
+      // any number of straight tiles is rejected as well.
       const sourceTile = placedTiles.find((pt) => pt.tile?.river?.isSource) || placedTiles[0];
       if (sourceTile && sourceTile.tile?.river?.isSource) {
-        const sourceVector = {
-          x: position.x - sourceTile.x,
-          y: position.y - sourceTile.y,
-        };
+        if (!isGloballyDownstream(
+          placedTiles,
+          tailIndex,
+          sourceTile,
+          tail,
+          position,
+          otherDirections,
+        )) continue;
 
-        // 1. Downstream vector constraint: Reject any outgoing edge whose vector
-        // points back toward the Source.
-        const pointsUpstream = otherDirections.some((direction) => {
-          const vector = DELTA[direction];
-          return (vector.x * sourceVector.x) + (vector.y * sourceVector.y) < 0;
-        });
-        if (pointsUpstream) continue;
-
-        // 2. Distance constraint: The candidate position itself must not move
-        // closer to the Source (Manhattan distance).
-        const currentDist = Math.abs(tail.x - sourceTile.x) + Math.abs(tail.y - sourceTile.y);
-        const nextDist = Math.abs(position.x - sourceTile.x) + Math.abs(position.y - sourceTile.y);
-        if (nextDist < currentDist && !tileDef.river.isLake) continue;
-
-        // 3. Immediate U-turn constraint: Prohibit two consecutive bends in the
+        // Immediate U-turn constraint: Prohibit two consecutive bends in the
         // same direction (clockwise or counter-clockwise).
         const tailDirections = rotateRiverDirections(tail.tile, tail.rotation);
         const isTailBend = tailDirections.length === 2 && tailDirections[0] !== OPPOSITE[tailDirections[1]];
@@ -114,7 +154,10 @@ export function getValidRiverPlacements(tileDef, placedTiles, tailIndex, openDir
           };
 
           // Find how the river entered the tail tile
-          const prevTile = placedTiles[tailIndex - 1];
+          const prevTile = placedTiles
+            .slice(0, tailIndex)
+            .reverse()
+            .find((placed) => placed?.tile?.river);
           if (prevTile) {
             const tailExit = tailDirection;
             const tailEntry = OPPOSITE[CARDINALS.find(d => 

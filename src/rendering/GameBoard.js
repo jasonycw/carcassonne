@@ -485,9 +485,9 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
       (exit) => exit.remove()
     )
     .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 6)
-    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6 - towerVerticalSize * d.towerHeight)
+    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6)
     .attr('transform', (d) =>
-      `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE})`);
+      `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE}) translate(0,${-towerVerticalSize * d.towerHeight})`);
 
   // Determine whether tower outlines are interactive (The Tower expansion step).
   const isTowerStep = step === 'tower';
@@ -495,12 +495,12 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
   // Tower outlines (unplaced, clickable). Visible only during tower step.
   tileGroups.selectAll('image.tower-outline')
     .data((d, i) => {
-      if (!d.tile.tower || d.tower.completed) return [];
+      if (!d.tile.tower || (d.tower && d.tower.completed)) return [];
       return [{
         offset: d.tile.tower.offset,
         tileRotation: d.rotation,
         tileIndex: i,
-        towerHeight: d.tower.height,
+        towerHeight: d.tower ? d.tower.height : 0,
       }];
     })
     .join(
@@ -517,13 +517,21 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
             callbacks.onTowerOutlineClick(d.tileIndex);
           }
         }),
-      (update) => update,
+      (update) => update
+        .attr('visibility', isTowerStep ? 'visible' : 'hidden')
+        .style('cursor', isTowerStep ? 'pointer' : 'default')
+        .on('click', function (event, d) {
+          if (!isTowerStep) return;
+          if (callbacks.onTowerOutlineClick) {
+            callbacks.onTowerOutlineClick(d.tileIndex);
+          }
+        }),
       (exit) => exit.remove()
     )
     .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 6)
-    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6 - towerVerticalSize * d.towerHeight)
+    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6)
     .attr('transform', (d) =>
-      `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE})`)
+      `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE}) translate(0,${-towerVerticalSize * d.towerHeight})`)
     .attr('visibility', isTowerStep ? 'visible' : 'hidden')
     .style('cursor', isTowerStep ? 'pointer' : 'default');
 

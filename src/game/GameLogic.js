@@ -477,8 +477,12 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
   // activation the extra turn is suppressed here — skipTowerStep /
   // placeTowerPiece handle the advance when the tower step finishes.
 
+  const hasValidTowerTarget = gamestate.placedTiles.some(
+    (pt) => pt.tile.tower && (!pt.tower || !pt.tower.completed)
+  );
   const canUseTowerActions = !meeple
     && gamestate.expansions.indexOf('the-tower') !== -1
+    && hasValidTowerTarget
     && (activePlayer.towers > 0 || activePlayer.remainingMeeples > 0);
 
   // ── Clear active tile ───────────────────────────────────────────────
