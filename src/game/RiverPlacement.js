@@ -55,15 +55,20 @@ function getDownstreamProjection(position, sourceTile, sourceFlowDirection) {
  * outgoing edge may point toward the Source. This catches a reverse bend even
  * when one or more straight tiles lie between the two bends.
  */
-function isGloballyDownstream(placedTiles, tailIndex, sourceTile, tail, candidatePosition, outgoingDirections) {
+function isGloballyDownstream(placedTiles, tailIndex, sourceTile, tail, candidatePosition, candidateDirections, requiredEntry) {
   const sourceFlowDirection = getSourceFlowDirection(sourceTile);
   if (!sourceFlowDirection) return true;
 
+  const outgoingDirections = candidateDirections.filter(d => d !== requiredEntry);
   const tailProjection = getDownstreamProjection(tail, sourceTile, sourceFlowDirection);
   const candidateProjection = getDownstreamProjection(candidatePosition, sourceTile, sourceFlowDirection);
+  
+  // Rule: River must always move downstream (projection cannot decrease)
   if (candidateProjection < tailProjection) return false;
 
   const axis = DELTA[sourceFlowDirection];
+  
+  // Rule: No outgoing edge may point back toward the source
   if (outgoingDirections.some((direction) => {
     const vector = DELTA[direction];
     return (vector.x * axis.x) + (vector.y * axis.y) < 0;
@@ -71,16 +76,87 @@ function isGloballyDownstream(placedTiles, tailIndex, sourceTile, tail, candidat
     return false;
   }
 
-  // Re-check the entire existing River path, not just the current tail. This
-  // protects against malformed/replayed states and makes the invariant
-  // explicit for network clients and deterministic simulations.
-  let previousProjection = -Infinity;
-  for (let index = 0; index <= tailIndex; index += 1) {
-    const placed = placedTiles[index];
-    if (!placed?.tile?.river) continue;
-    const projection = getDownstreamProjection(placed, sourceTile, sourceFlowDirection);
-    if (projection < previousProjection) return false;
-    previousProjection = projection;
+  // Rule: Prohibit two consecutive bends in the same direction (immediate or with straights).
+  // Implementation: Find the last bend in the river. If the candidate is also a bend,
+  // ensure it does not turn in the same direction as the last one.
+  const getTurn = (from, to) => {
+    const fIdx = CARDINALS.indexOf(from);
+    const tIdx = CARDINALS.indexOf(to);
+    // from is the entry direction (where river enters the tile)
+    // to is the exit direction (where river leaves the tile)
+    // CARDINALS: ['N', 'E', 'S', 'W'] (indices 0, 1, 2, 3)
+    // N (0) -> E (1) is CW (1 step)
+    // N (0) -> W (3) is CCW (3 steps)
+    // entry 'N' (0) means the river is coming FROM the north, entering at the TOP edge.
+    // exit 'E' (1) means the river is going TO the east, leaving at the RIGHT edge.
+    // In our coordinate system (N=0, E=1, S=2, W=3):
+    // If entry is N (0) and exit is E (1), it's a CW turn.
+    // If entry is N (0) and exit is W (3), it's a CCW turn.
+    // If entry is N (0) and exit is S (2), it's a Straight.
+    
+    // entry 'N' (0) means the river is coming FROM the north, entering at the TOP edge.
+    // The river is effectively moving TOWARD the south when it enters.
+    // So the travel direction is OPPOSITE[from].
+    const travelDir = OPPOSITE[from];
+    const travelIdx = CARDINALS.indexOf(travelDir);
+    
+    // The turn is (exitIdx - travelIdx + 4) % 4
+    // 0 = Straight
+    // 1 = CW turn
+    // 2 = Reverse (not possible)
+    // 3 = CCW turn
+    // Relative turn:
+    // entry 'N' means travelDir is 'S' (2).
+    // exit 'E' (1) -> turn = (1 - 2 + 4) % 4 = 3.
+    // exit 'W' (3) -> turn = (3 - 2 + 4) % 4 = 1.
+    // CW is 1, CCW is 3.
+    return (tIdx - travelIdx + 4) % 4;
+  };
+
+  const isBend = (dirs) => dirs.length === 2 && dirs[0] !== OPPOSITE[dirs[1]];
+  
+  if (isBend(candidateDirections)) {
+    const candTurn = getTurn(requiredEntry, outgoingDirections[0]);
+    
+    // Trace back to find the last bend
+    let lastBendTurn = null;
+    for (let i = tailIndex; i >= 0; i--) {
+      const pt = placedTiles[i];
+      if (!pt?.tile?.river) continue;
+      
+      const ptDirs = rotateRiverDirections(pt.tile, pt.rotation);
+      if (isBend(ptDirs)) {
+        // Find entry for this historical tile
+        // It must be connected to some tile placed before it.
+        const prev = placedTiles.find(p => {
+          if (p === pt || !p.tile?.river) return false;
+          if (placedTiles.indexOf(p) >= i) return false;
+          const pDirs = rotateRiverDirections(p.tile, p.rotation);
+          return pDirs.some(d => {
+            const neighbor = getRiverNeighborPosition(p.x, p.y, d);
+            return neighbor.x === pt.x && neighbor.y === pt.y;
+          });
+        });
+        
+        if (!prev) continue;
+        
+        const exitDirFromPrev = CARDINALS.find(d => {
+          const neighbor = getRiverNeighborPosition(prev.x, prev.y, d);
+          return neighbor.x === pt.x && neighbor.y === pt.y;
+        });
+        const entry = OPPOSITE[exitDirFromPrev];
+        const exit = ptDirs.find(d => d !== entry);
+        
+        if (entry && exit) {
+          lastBendTurn = getTurn(entry, exit);
+          break;
+        }
+      }
+    }
+
+    if (lastBendTurn === candTurn && (candTurn === 1 || candTurn === 3)) {
+      return false;
+    }
   }
 
   return true;
@@ -137,46 +213,9 @@ export function getValidRiverPlacements(tileDef, placedTiles, tailIndex, openDir
           sourceTile,
           tail,
           position,
-          otherDirections,
+          candidateDirections,
+          requiredEntry,
         )) continue;
-
-        // Immediate U-turn constraint: Prohibit two consecutive bends in the
-        // same direction (clockwise or counter-clockwise).
-        const tailDirections = rotateRiverDirections(tail.tile, tail.rotation);
-        const isTailBend = tailDirections.length === 2 && tailDirections[0] !== OPPOSITE[tailDirections[1]];
-        const isCandidateBend = candidateDirections.length === 2 && candidateDirections[0] !== OPPOSITE[candidateDirections[1]];
-
-        if (isTailBend && isCandidateBend) {
-          const getTurn = (from, to) => {
-            const fIdx = CARDINALS.indexOf(from);
-            const tIdx = CARDINALS.indexOf(to);
-            return (tIdx - fIdx + 4) % 4;
-          };
-
-          // Find how the river entered the tail tile
-          const prevTile = placedTiles
-            .slice(0, tailIndex)
-            .reverse()
-            .find((placed) => placed?.tile?.river);
-          if (prevTile) {
-            const tailExit = tailDirection;
-            const tailEntry = OPPOSITE[CARDINALS.find(d => 
-              getRiverNeighborPosition(prevTile.x, prevTile.y, d).x === tail.x &&
-              getRiverNeighborPosition(prevTile.x, prevTile.y, d).y === tail.y
-            ) || 'N'];
-            
-            const candEntry = requiredEntry;
-            const candExit = otherDirections[0];
-
-            const tailTurn = getTurn(tailEntry, tailExit);
-            const candTurn = getTurn(candEntry, candExit);
-
-            // If both are 90-degree turns (1=CW, 3=CCW) in the same direction, reject.
-            if (tailTurn === candTurn && (tailTurn === 1 || tailTurn === 3)) {
-              continue;
-            }
-          }
-        }
       }
 
       // The lake must close the river, so it is only valid as the final tile.

@@ -106,6 +106,91 @@ describe('The River official rules', () => {
     // which would send the river back toward the Source after two straights.
     expect(candidates.some((candidate) => candidate.rotation === 1)).toBe(false);
   });
+
+  it('strictly prohibits two consecutive bends in the same direction, even with intervening straights', () => {
+    // 1. Source at (0,0) exits E
+    // 2. Bend at (1,0) enters W, exits S (CW turn)
+    // 3. Straight at (1,1) enters N, exits S
+    // 4. Candidate Bend at (1,2) enters N, exits W (CW turn) - SHOULD BE REJECTED
+    const cwBend = {
+      ...bend,
+      id: 'test/cw-bend',
+      river: { directions: ['W', 'S'] }, // Rotation 0: enters W, exits S (CW)
+    };
+    const straightSegment = {
+      ...straight,
+      id: 'test/straight',
+      river: { directions: ['N', 'S'] },
+    };
+    
+    const board = [
+      placed(source, 0, 0, 0),
+      placed(cwBend, 1, 0, 0),
+      placed(straightSegment, 1, 1, 0),
+    ];
+    
+    // Attempt to place another CW bend at (1,2)
+    // Entry N, Exit W is a CW turn:
+    // N = 0, W = 3. Turn = (3 - 0 + 4) % 4 = 3 (CCW in our CARDINALS ['N', 'E', 'S', 'W'])
+    // Wait, let's re-verify the turn math:
+    // CARDINALS = ['N', 'E', 'S', 'W']
+    // N->E is 1 (CW)
+    // E->S is 1 (CW)
+    // S->W is 1 (CW)
+    // W->N is 1 (CW)
+    // N->W is 3 (CCW)
+    
+    // Let's use specific rotations for the test:
+    // Tail is at (1,1), openDirection is 'S'
+    // Candidate at (1,2) must enter 'N' (OPPOSITE of 'S')
+    // If candidate exits 'W', it's N->W which is 3 (CCW)
+    // If candidate exits 'E', it's N->E which is 1 (CW)
+    
+    // Tail at (1,0) entered 'W', exited 'S'. W->S is 2 steps in CARDINALS (W=3, S=2).
+    // (2 - 3 + 4) % 4 = 3 (CCW)
+    
+    const board2 = [
+      placed(source, 0, 0, 0), // index 0: (0,0) exits E
+      placed(bend, 1, 0, 1),   // index 1: (1,0) enters N, exits W (Turn 3 CCW)
+      placed(straight, 1, 1, 0), // index 2: (1,1) enters N, exits S
+    ];
+    
+    // Candidate at (1,2) enters N. 
+    // Any rotation of 'bend' [W, S] that enters N will be a CW turn (1).
+    // Historical at index 1 was CCW (3). 
+    // Candidate at (1,2) enters N. 
+    // The 'bend' tile [W, S] has directions that will always result in a CW turn (1)
+    // when it matches an entry.
+    // e.g., Rot 1: [N, W] -> Enters N, Exits W. Travel dir is S. S->W is CW (1).
+    // Since 1 (CW) != 3 (CCW), it should be ALLOWED.
+    const candidates = getValidRiverPlacements(bend, board2, 2, 'S');
+    expect(candidates.length).toBeGreaterThan(0);
+    
+    // Now test a direct CCW U-turn (should be rejected)
+    // 1. Source at (0,0) exits E
+    // 2. Bend at (1,0) enters W, exits N (Rotation 2: [E, N] -> enters E, exits N. Travel W->N is 3 CCW)
+    // 3. Straight at (1,-1) enters S, exits N
+    // 4. Candidate Bend at (1,-2) enters S, exits W (Rotation 3: [S, E] -> enters S, exits E. Travel N->E is 1 CW. Wait.)
+    
+    // Let's use a simple direct sequence:
+    // (0,0) Source E
+    // (1,0) Bend [W, S] (Rot 0) -> Entry W, Exit S (Travel E->S is 1 CW)
+    // (1,1) Straight [N, S] (Rot 0) -> Entry N, Exit S
+    // (1,2) Bend [N, W] (Rot 1) -> Entry N, Exit W (Travel S->W is 1 CW) - REJECTED
+    
+    const board3 = [
+      placed(source, 0, 0, 0), // index 0: (0,0) exits E
+      placed(bend, 1, 0, 2),   // index 1: (1,0) enters E, exits N (CCW)
+      placed(straight, 1, -1, 0), // index 2: (1,-1) enters S, exits N
+    ];
+    
+    const candidates2 = getValidRiverPlacements(bend, board3, 2, 'N');
+    // bend [W, S] rotated:
+    // Rot 2: [E, N] -> enters E, exits N (CCW)
+    // Historical at index 1 was CCW (3). So any CCW turns at index 3 should be rejected.
+    const hasRot2 = candidates2.some(c => c.rotation === 2);
+    expect(hasRot2).toBe(false);
+  });
 });
 
 describe('The Tower official rules', () => {

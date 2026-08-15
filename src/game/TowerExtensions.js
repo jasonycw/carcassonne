@@ -114,7 +114,7 @@ export function buyBackPrisoner(gamestate, capturerPlayerIndex, prisonerIndex) {
   if (owner.points < 3) return { success: false, message: 'Not enough points (requires 3 points)' };
 
   // Official rules: one buy-back per turn.
-  const turnTile = gamestate.placedTiles[gamestate.placedTiles.length - 1];
+  const turnTile = gamestate.placedTiles ? gamestate.placedTiles[gamestate.placedTiles.length - 1] : null;
   if (turnTile && turnTile.tower && turnTile.tower.buyBackCount >= 1) {
     return { success: false, message: 'Only one buy-back allowed per turn' };
   }
