@@ -77,20 +77,22 @@ export function getValidRiverPlacements(tileDef, placedTiles, tailIndex, openDir
       if (createsLoopOrBranch) continue;
 
       // Official Carcassonne River rule: the river must flow continuously outward
-      // from the Source (0,0) and cannot bend back toward the start or previous
-      // segments in a U-turn or returning loop. We enforce that the candidate
-      // tile's position must be strictly further in bounding distance from the source
-      // or maintain an outward progression without folding back.
+      // from the Source and MUST NEVER circle back, fold, or loop toward the source
+      // or any previously placed tile in the river chain.
       const sourceTile = placedTiles[0];
       if (sourceTile && sourceTile.tile?.river?.isSource) {
-        // Prevent immediate U-turn back toward the tile we just came from or toward the source
-        const entryDirection = OPPOSITE[tailDirection];
-        const otherDirections = candidateDirections.filter((d) => d !== entryDirection);
-        const pointsTowardSource = otherDirections.some((d) => {
+        // Check if any outgoing river exit points back to any already-placed river tile coordinate
+        const otherDirections = candidateDirections.filter((d) => d !== OPPOSITE[tailDirection]);
+        const hitsExistingRiver = otherDirections.some((d) => {
           const neighbor = getRiverNeighborPosition(position.x, position.y, d);
-          return neighbor.x === sourceTile.x && neighbor.y === sourceTile.y;
+          return placedTiles.some((pt) => pt.x === neighbor.x && pt.y === neighbor.y);
         });
-        if (pointsTowardSource) continue;
+        if (hitsExistingRiver) continue;
+
+        // Also enforce net outward distance progression from the source to prevent U-turns
+        const currentDist = Math.abs(tail.x - sourceTile.x) + Math.abs(tail.y - sourceTile.y);
+        const nextDist = Math.abs(position.x - sourceTile.x) + Math.abs(position.y - sourceTile.y);
+        if (nextDist < currentDist && !tileDef.river.isLake) continue;
       }
 
       // The lake must close the river, so it is only valid as the final tile.

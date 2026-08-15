@@ -13,7 +13,9 @@ console.log('source', state.placedTiles[0].tile.id, 'active', state.activeTile?.
 for (let turn = 1; turn <= 20 && !state.finished; turn += 1) {
   const active = state.activeTile;
   if (!active) break;
-  const placement = active.validPlacements[0];
+  // Prefer non-lake placements if available to build out the river before closing with the lake
+  const nonLakePlacement = active.validPlacements.find((p) => !p.tile?.river?.isLake);
+  const placement = nonLakePlacement || active.validPlacements[0];
   if (!placement) {
     console.log(turn, active.tile.id, 'no placements');
     break;
