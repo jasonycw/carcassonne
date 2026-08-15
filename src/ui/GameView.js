@@ -29,6 +29,7 @@ import {
   placeTowerPiece,
   placeMeepleOnTower,
   captureMeeple,
+  buyBackCapturedMeeple,
   skipTowerStep,
   skipCapture,
 } from '../game/GameLogic.js';
@@ -1118,8 +1119,11 @@ export class GameView {
    */
   _handleTowerPiecePlacement(tileIndex) {
     const closing = this._towerAction === 'close';
+    const activePlayer = this.gamestate.players[this.gamestate.currentPlayerIndex];
+    const meepleType = (activePlayer.remainingMeeples > 0) ? 'normal' : 'large';
+
     if (this.gameClient) {
-      if (closing) this.gameClient.closeTower(tileIndex, 'normal');
+      if (closing) this.gameClient.closeTower(tileIndex, meepleType);
       else this.gameClient.placeTowerPiece(tileIndex);
       if (this.dom) this.dom.hud.style.display = 'none';
       return;
@@ -1127,7 +1131,7 @@ export class GameView {
 
     // Host/solo: validate locally.
     const result = closing
-      ? placeMeepleOnTower(this.gamestate, tileIndex, 'normal')
+      ? placeMeepleOnTower(this.gamestate, tileIndex, meepleType)
       : placeTowerPiece(this.gamestate, tileIndex);
 
     if (result.success) {

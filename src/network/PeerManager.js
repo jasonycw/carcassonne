@@ -668,6 +668,7 @@ export class HostPeerManager extends PeerManager {
         })),
         towerHeight: pt.tower ? pt.tower.height : undefined,
         completed: pt.tower ? pt.tower.completed : undefined,
+        buyBackCount: pt.tower ? pt.tower.buyBackCount : undefined,
       })),
       currentPlayerIndex: state.currentPlayerIndex,
       activeTile: state.activeTile

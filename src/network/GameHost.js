@@ -22,6 +22,7 @@ import {
   placeTowerPiece as glPlaceTowerPiece,
   placeMeepleOnTower as glPlaceMeepleOnTower,
   captureMeeple as glCaptureMeeple,
+  buyBackCapturedMeeple as glBuyBackCapturedMeeple,
   skipTowerStep as glSkipTowerStep,
   skipCapture as glSkipCapture,
 } from '../game/GameLogic.js';

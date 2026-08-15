@@ -73,8 +73,15 @@ export function checkAndExchangePrisoners(gamestate) {
       for (let j = i + 1; j < players.length; j += 1) {
         const first = players[i];
         const second = players[j];
-        const firstIndex = (first.capturedMeeples || []).findIndex((p) => p.playerIndex === j);
-        const secondIndex = (second.capturedMeeples || []).findIndex((p) => p.playerIndex === i);
+        // Official rules: exchange occurs immediately. If multiple figures are held,
+        // the player whose turn it is chooses (for their own) or the owner chooses.
+        // Implementation: favor large meeples as they are more valuable.
+        const findBest = (list, ownerIdx) => {
+          const largeIdx = list.findIndex(p => p.playerIndex === ownerIdx && p.meepleType === 'large');
+          return largeIdx !== -1 ? largeIdx : list.findIndex(p => p.playerIndex === ownerIdx);
+        };
+        const firstIndex = findBest(first.capturedMeeples || [], j);
+        const secondIndex = findBest(second.capturedMeeples || [], i);
         if (firstIndex === -1 || secondIndex === -1) continue;
 
         const firstPrisoner = first.capturedMeeples.splice(firstIndex, 1)[0];
@@ -106,10 +113,21 @@ export function buyBackPrisoner(gamestate, capturerPlayerIndex, prisonerIndex) {
   if (prisoner.playerIndex !== ownerIndex) return { success: false, message: 'You do not own this prisoner' };
   if (owner.points < 3) return { success: false, message: 'Not enough points (requires 3 points)' };
 
+  // Official rules: one buy-back per turn.
+  const turnTile = gamestate.placedTiles[gamestate.placedTiles.length - 1];
+  if (turnTile && turnTile.tower && turnTile.tower.buyBackCount >= 1) {
+    return { success: false, message: 'Only one buy-back allowed per turn' };
+  }
+
   owner.points -= 3;
   capturer.points += 3;
   capturer.capturedMeeples.splice(prisonerIndex, 1);
   returnMeepleToSupply(owner, prisoner.meepleType);
+  
+  if (turnTile && turnTile.tower) {
+    turnTile.tower.buyBackCount = (turnTile.tower.buyBackCount || 0) + 1;
+  }
+
   gamestate.messages.push({
     text: `${owner.user.username} bought back a captured meeple from ${capturer.user.username} for 3 points.`,
     timestamp: Date.now(),

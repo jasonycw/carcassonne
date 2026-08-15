@@ -162,6 +162,7 @@ export class GameClient extends EventEmitter {
     gs.finished = sanitized.finished;
     gs.messages = sanitized.messages || [];
     gs.featureScores = sanitized.featureScores || [];
+    gs.expansions = sanitized.expansions || gs.expansions;
 
     // Update unused tile count for display (actual tiles stay on host).
     const count = sanitized.unusedTilesCount != null ? sanitized.unusedTilesCount : 0;
@@ -183,7 +184,11 @@ export class GameClient extends EventEmitter {
           originalMeepleType: m.originalMeepleType,
           scored: m.scored !== false,
         })),
-        tower: (pt.towerHeight != null || pt.completed != null) ? { height: pt.towerHeight, completed: pt.completed } : undefined,
+        tower: (pt.towerHeight != null || pt.completed != null) ? { 
+          height: pt.towerHeight, 
+          completed: pt.completed,
+          buyBackCount: pt.buyBackCount || 0
+        } : undefined,
         features: { cities: [], roads: [], farms: [], cloister: null },
         northTileIndex: undefined,
         southTileIndex: undefined,

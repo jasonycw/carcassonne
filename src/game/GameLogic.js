@@ -374,7 +374,7 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
 
   // Set up tower if applicable.
   if (newTile.tile.tower && newTile.tile.tower.offset && newTile.tile.tower.offset.x != null) {
-    newTile.tower = { height: 0, completed: false };
+    newTile.tower = { height: 0, completed: false, buyBackCount: 0 };
   }
 
   // Attach meeple to the tile.
@@ -413,14 +413,16 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
 
   if (at.isRiver) {
     const rotatedRiver = rotateRiverDirections(at.tile, rotation);
-    if (isRiverComplete(at.tile)) {
+    const entryDirection = OPPOSITE[gamestate.riverOpenDirection];
+    const nextDir = rotatedRiver.find((direction) => direction !== entryDirection);
+
+    if (isRiverComplete(at.tile) || !nextDir) {
       gamestate.riverPhase = false;
       gamestate.riverTailIndex = null;
       gamestate.riverOpenDirection = null;
     } else {
-      const entryDirection = OPPOSITE[gamestate.riverOpenDirection];
       gamestate.riverTailIndex = newTileIdx;
-      gamestate.riverOpenDirection = rotatedRiver.find((direction) => direction !== entryDirection);
+      gamestate.riverOpenDirection = nextDir;
     }
   }
 
@@ -478,7 +480,7 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
   // placeTowerPiece handle the advance when the tower step finishes.
 
   const hasValidTowerTarget = gamestate.placedTiles.some(
-    (pt) => pt.tile.tower && (!pt.tower || !pt.tower.completed)
+    (pt) => pt.tile.tower && pt.tile.tower.offset && pt.tile.tower.offset.x != null && (!pt.tower || !pt.tower.completed)
   );
   const canUseTowerActions = !meeple
     && gamestate.expansions.indexOf('the-tower') !== -1
