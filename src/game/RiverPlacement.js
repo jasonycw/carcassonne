@@ -76,20 +76,27 @@ export function getValidRiverPlacements(tileDef, placedTiles, tailIndex, openDir
       });
       if (createsLoopOrBranch) continue;
 
-      // Official Carcassonne River rule: the river must flow continuously outward
-      // from the Source and MUST NEVER circle back, fold, or loop toward the source
-      // or any previously placed tile in the river chain.
-      const sourceTile = placedTiles[0];
+      // Official River flow rule: once the Source is placed, the chain must move
+      // continuously downstream. A candidate cannot fold back toward the Source,
+      // return toward an earlier segment, or create a U-turn.
+      const sourceTile = placedTiles.find((pt) => pt.tile?.river?.isSource) || placedTiles[0];
       if (sourceTile && sourceTile.tile?.river?.isSource) {
-        // Check if any outgoing river exit points back to any already-placed river tile coordinate
         const otherDirections = candidateDirections.filter((d) => d !== OPPOSITE[tailDirection]);
-        const hitsExistingRiver = otherDirections.some((d) => {
-          const neighbor = getRiverNeighborPosition(position.x, position.y, d);
-          return placedTiles.some((pt) => pt.x === neighbor.x && pt.y === neighbor.y);
-        });
-        if (hitsExistingRiver) continue;
+        const sourceVector = {
+          x: position.x - sourceTile.x,
+          y: position.y - sourceTile.y,
+        };
 
-        // Also enforce net outward distance progression from the source to prevent U-turns
+        // Reject any outgoing edge whose vector points back toward the Source.
+        // A zero dot product is lateral and remains legal; a negative dot product
+        // is upstream and is forbidden.
+        const pointsUpstream = otherDirections.some((direction) => {
+          const vector = DELTA[direction];
+          return (vector.x * sourceVector.x) + (vector.y * sourceVector.y) < 0;
+        });
+        if (pointsUpstream) continue;
+
+        // The candidate position itself must not move closer to the Source.
         const currentDist = Math.abs(tail.x - sourceTile.x) + Math.abs(tail.y - sourceTile.y);
         const nextDist = Math.abs(position.x - sourceTile.x) + Math.abs(position.y - sourceTile.y);
         if (nextDist < currentDist && !tileDef.river.isLake) continue;

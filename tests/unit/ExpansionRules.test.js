@@ -56,6 +56,26 @@ describe('The River official rules', () => {
     expect(candidates[0].x).toBe(1);
     expect(candidates[0].y).toBe(0);
   });
+
+  it('rejects a downstream bend whose outgoing edge points upstream toward the Source', () => {
+    const tail = {
+      ...straight,
+      id: 'test/tail',
+      river: { directions: ['N', 'S'] },
+    };
+    const upstreamBend = {
+      ...straight,
+      id: 'test/upstream-bend',
+      river: { directions: ['N', 'W'] },
+    };
+    const board = [
+      placed(source, 0, 0),
+      placed(tail, 1, 0),
+    ];
+    const candidates = getValidRiverPlacements(upstreamBend, board, 1, 'S');
+    expect(candidates.some((candidate) => candidate.rotation === 0)).toBe(false);
+    expect(candidates.every((candidate) => candidate.x === 1 && candidate.y === 1)).toBe(true);
+  });
 });
 
 describe('The Tower official rules', () => {
