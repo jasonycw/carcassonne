@@ -847,4 +847,14 @@ export class ClientPeerManager extends PeerManager {
   captureMeeple(tileIndex, meepleIndex) {
     this.sendMove(createMessage(MessageType.CAPTURE_MEEPLE, { tileIndex, meepleIndex }));
   }
+
+  /** Skip the capture step. */
+  skipCapture() {
+    this.sendMove(createMessage(MessageType.SKIP_CAPTURE, {}));
+  }
+
+  /** Buy back a captured meeple. */
+  buyBackPrisoner(capturerPlayerIndex, prisonerIndex) {
+    this.sendMove(createMessage(MessageType.BUY_BACK_PRISONER, { capturerPlayerIndex, prisonerIndex }));
+  }
 }

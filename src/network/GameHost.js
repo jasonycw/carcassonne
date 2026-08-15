@@ -67,6 +67,12 @@ export class GameHost extends EventEmitter {
         case MessageType.CAPTURE_MEEPLE:
           this._handleCaptureMeeple(message.payload, conn);
           break;
+        case MessageType.SKIP_CAPTURE:
+          this._handleSkipCapture(conn);
+          break;
+        case MessageType.BUY_BACK_PRISONER:
+          this._handleBuyBackPrisoner(message.payload, conn);
+          break;
         case MessageType.JOIN_REQUEST:
           this._handleJoinRequest(message.payload, conn);
           break;
@@ -303,6 +309,29 @@ export class GameHost extends EventEmitter {
     if (result.success) {
       this._afterStateChange();
     }
+  }
+
+  /** Handle a SKIP_CAPTURE move from a client. */
+  _handleSkipCapture(conn) {
+    if (!this._validateTurn(conn)) return;
+    const result = glSkipCapture(this.gamestate);
+    if (conn) {
+      this.hostPeerManager.send(conn, createMessage(MessageType.MOVE_RESULT, { success: result.success }));
+    }
+    if (result.success) this._afterStateChange();
+  }
+
+  /** Handle a BUY_BACK_PRISONER move from a client. */
+  _handleBuyBackPrisoner(payload, conn) {
+    if (!this._validateTurn(conn)) return;
+    const result = glBuyBackCapturedMeeple(this.gamestate, payload.capturerPlayerIndex, payload.prisonerIndex);
+    if (conn) {
+      this.hostPeerManager.send(conn, createMessage(MessageType.MOVE_RESULT, {
+        success: result.success,
+        message: result.message || null,
+      }));
+    }
+    if (result.success) this._afterStateChange();
   }
 
   /** Relay a chat message from a client to all connected peers. */

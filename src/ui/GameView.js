@@ -570,6 +570,15 @@ export class GameView {
         this.gamestate.finished,
         this._connectedPlayers,
       );
+
+      // Bind buy-back clicks
+      this.dom.scoreboard.querySelectorAll('.prisoner-buyback').forEach(el => {
+        el.addEventListener('click', () => {
+          const capturerIdx = parseInt(el.dataset.capturer, 10);
+          const prisonerIdx = parseInt(el.dataset.index, 10);
+          this._handleBuyBackPrisoner(capturerIdx, prisonerIdx);
+        });
+      });
     }
   }
 
@@ -1033,6 +1042,13 @@ export class GameView {
 
   /** Skip the capture step (decline to capture any meeple). */
   _handleSkipCapture() {
+    if (this.gameClient) {
+      // P2P client: tell host we're skipping the capture step.
+      this.gameClient.skipCapture();
+      if (this.dom) this.dom.hud.style.display = 'none';
+      return;
+    }
+
     const result = skipCapture(this.gamestate);
     if (result.success) {
       this._renderBoard();
@@ -1176,6 +1192,25 @@ export class GameView {
       }
     } else {
       this._showStatusMessage(result.message || 'Cannot capture meeple');
+    }
+  }
+
+  /** Handle a prisoner buy-back action. */
+  _handleBuyBackPrisoner(capturerPlayerIndex, prisonerIndex) {
+    if (this.gameClient) {
+      this.gameClient.buyBackPrisoner(capturerPlayerIndex, prisonerIndex);
+      return;
+    }
+
+    const result = buyBackCapturedMeeple(this.gamestate, capturerPlayerIndex, prisonerIndex);
+    if (result.success) {
+      this._renderBoard();
+      this._updateTurnIndicator();
+      this._showActiveTileIfNeeded();
+      saveGame(this.gamestate);
+      if (this.gameHost) this.gameHost.broadcastState();
+    } else {
+      this._showStatusMessage(result.message || 'Cannot buy back prisoner');
     }
   }
 

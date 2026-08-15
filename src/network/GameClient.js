@@ -106,6 +106,16 @@ export class GameClient extends EventEmitter {
     this.clientPeerManager.captureMeeple(tileIndex, meepleIndex);
   }
 
+  /** Send SKIP_CAPTURE to the host. */
+  skipCapture() {
+    this.clientPeerManager.skipCapture();
+  }
+
+  /** Send BUY_BACK_PRISONER to the host. */
+  buyBackPrisoner(capturerPlayerIndex, prisonerIndex) {
+    this.clientPeerManager.buyBackPrisoner(capturerPlayerIndex, prisonerIndex);
+  }
+
   // ── State reconstruction ────────────────────────────────────────────
 
   /**

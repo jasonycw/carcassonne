@@ -108,6 +108,27 @@ export function renderScoreboard(container, gamestate, currentPlayerIndex, gameO
       html += tokenIcon('/images/meeples/tower.png', `${player.towers}`);
     }
 
+    // ── Captured meeples (The Tower) ────────────────────────────────
+    if (hasTower && player.capturedMeeples && player.capturedMeeples.length > 0) {
+      const viewerIsActive = !gameOver && i === currentPlayerIndex;
+      html += `<div style="display:flex; align-items:center; gap:2px; margin-left:4px; padding-left:4px; border-left:1px solid rgba(255,255,255,0.1);">`;
+      player.capturedMeeples.forEach((prisoner, pIdx) => {
+        const pColor = players[prisoner.playerIndex]?.color || 'blue';
+        const pSrc = img(`/images/meeples/${pColor}_standing.png`);
+        const activePlayerIdx = currentPlayerIndex;
+        const isOwnerActive = prisoner.playerIndex === activePlayerIdx;
+        const hasPoints = players[activePlayerIdx].points >= 3;
+        
+        html += `<img src="${pSrc}" 
+          class="prisoner-icon ${isOwnerActive && hasPoints ? 'prisoner-buyback' : ''}" 
+          data-capturer="${i}" data-index="${pIdx}"
+          style="width:14px; height:14px; border-radius:2px; cursor:${isOwnerActive && hasPoints ? 'pointer' : 'default'}; 
+          filter: grayscale(0.5) brightness(0.8); border: 1px solid rgba(255,255,255,0.2);" 
+          title="${isOwnerActive && hasPoints ? 'Click to buy back for 3 points' : 'Captured meeple'}" />`;
+      });
+      html += `</div>`;
+    }
+
     html += `</div>`;
   });
 
