@@ -110,6 +110,9 @@ function meepleImageSuffix(meepleType, location) {
 /** Build the full image path for a meeple. */
 function meepleImagePath(colorName, meepleType, location) {
   const suffix = meepleImageSuffix(meepleType, location);
+  if (meepleType === 'tower') {
+    return img('/images/meeples/tower.png');
+  }
   return img(`/images/meeples/${colorName}_${suffix}.png`);
 }
 
@@ -496,6 +499,8 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
   tileGroups.selectAll('image.tower-outline')
     .data((d, i) => {
       if (!d.tile.tower || (d.tower && d.tower.completed)) return [];
+      // Rule: Towers have a maximum height of 5 floors.
+      if (d.tower && d.tower.height >= 5) return [];
       return [{
         offset: d.tile.tower.offset,
         tileRotation: d.rotation,
