@@ -76,88 +76,11 @@ function isGloballyDownstream(placedTiles, tailIndex, sourceTile, tail, candidat
     return false;
   }
 
-  // Rule: Prohibit two consecutive bends in the same direction (immediate or with straights).
-  // Implementation: Find the last bend in the river. If the candidate is also a bend,
-  // ensure it does not turn in the same direction as the last one.
-  const getTurn = (from, to) => {
-    const fIdx = CARDINALS.indexOf(from);
-    const tIdx = CARDINALS.indexOf(to);
-    // from is the entry direction (where river enters the tile)
-    // to is the exit direction (where river leaves the tile)
-    // CARDINALS: ['N', 'E', 'S', 'W'] (indices 0, 1, 2, 3)
-    // N (0) -> E (1) is CW (1 step)
-    // N (0) -> W (3) is CCW (3 steps)
-    // entry 'N' (0) means the river is coming FROM the north, entering at the TOP edge.
-    // exit 'E' (1) means the river is going TO the east, leaving at the RIGHT edge.
-    // In our coordinate system (N=0, E=1, S=2, W=3):
-    // If entry is N (0) and exit is E (1), it's a CW turn.
-    // If entry is N (0) and exit is W (3), it's a CCW turn.
-    // If entry is N (0) and exit is S (2), it's a Straight.
-    
-    // entry 'N' (0) means the river is coming FROM the north, entering at the TOP edge.
-    // The river is effectively moving TOWARD the south when it enters.
-    // So the travel direction is OPPOSITE[from].
-    const travelDir = OPPOSITE[from];
-    const travelIdx = CARDINALS.indexOf(travelDir);
-    
-    // The turn is (exitIdx - travelIdx + 4) % 4
-    // 0 = Straight
-    // 1 = CW turn
-    // 2 = Reverse (not possible)
-    // 3 = CCW turn
-    // Relative turn:
-    // entry 'N' means travelDir is 'S' (2).
-    // exit 'E' (1) -> turn = (1 - 2 + 4) % 4 = 3.
-    // exit 'W' (3) -> turn = (3 - 2 + 4) % 4 = 1.
-    // CW is 1, CCW is 3.
-    return (tIdx - travelIdx + 4) % 4;
-  };
-
-  const isBend = (dirs) => dirs.length === 2 && dirs[0] !== OPPOSITE[dirs[1]];
-  
-  if (isBend(candidateDirections)) {
-    const candTurn = getTurn(requiredEntry, outgoingDirections[0]);
-    
-    // Trace back to find the last bend
-    let lastBendTurn = null;
-    for (let i = tailIndex; i >= 0; i--) {
-      const pt = placedTiles[i];
-      if (!pt?.tile?.river) continue;
-      
-      const ptDirs = rotateRiverDirections(pt.tile, pt.rotation);
-      if (isBend(ptDirs)) {
-        // Find entry for this historical tile
-        // It must be connected to some tile placed before it.
-        const prev = placedTiles.find(p => {
-          if (p === pt || !p.tile?.river) return false;
-          if (placedTiles.indexOf(p) >= i) return false;
-          const pDirs = rotateRiverDirections(p.tile, p.rotation);
-          return pDirs.some(d => {
-            const neighbor = getRiverNeighborPosition(p.x, p.y, d);
-            return neighbor.x === pt.x && neighbor.y === pt.y;
-          });
-        });
-        
-        if (!prev) continue;
-        
-        const exitDirFromPrev = CARDINALS.find(d => {
-          const neighbor = getRiverNeighborPosition(prev.x, prev.y, d);
-          return neighbor.x === pt.x && neighbor.y === pt.y;
-        });
-        const entry = OPPOSITE[exitDirFromPrev];
-        const exit = ptDirs.find(d => d !== entry);
-        
-        if (entry && exit) {
-          lastBendTurn = getTurn(entry, exit);
-          break;
-        }
-      }
-    }
-
-    if (lastBendTurn === candTurn && (candTurn === 1 || candTurn === 3)) {
-      return false;
-    }
-  }
+  // Official River I Rule (New Edition/C3.1): The river must not flow back toward the spring.
+  // We already verify this with the global projection check (candidateProjection < tailProjection).
+  // The user clarified: "There is nothing in river extension to 'Prohibit two consecutive bends in the same direction'.
+  // The rule is to prevent the river to double back and flow directly toward the spring."
+  // Thus, we remove the consecutive bend check and rely on the projection and loop checks.
 
   return true;
 }
