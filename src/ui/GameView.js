@@ -1348,6 +1348,7 @@ export class GameView {
   _renderGameOverBanner() {
     const banner = this.dom && this.dom.container.querySelector('#game-over-banner');
     if (!banner) return;
+    banner.style.display = 'block';
 
     const winner = this.gamestate.players.reduce((best, p) =>
       p.points > best.points ? p : best,
