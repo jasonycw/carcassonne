@@ -116,15 +116,19 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
   if (!gameOver) {
     // If not over naturally, force it for the proof of scoreboard
     await page.evaluate(() => {
-      if (window.game?.gamestate) {
-        window.game.gamestate.unusedTiles = [];
-        window.game.gamestate.riverTiles = [];
-        window.game.gamestate.riverPhase = false;
-        // The game should show the banner if gamestate.isGameOver is true
-        window.game.gamestate.isGameOver = true;
-        // Force a re-render if possible, or just trigger the banner
-        const banner = document.getElementById('game-over-banner');
-        if (banner) banner.style.display = 'block';
+      if (window.game) {
+        if (window.game.gamestate) {
+          window.game.gamestate.unusedTiles = [];
+          window.game.gamestate.riverTiles = [];
+          window.game.gamestate.riverPhase = false;
+          window.game.gamestate.isGameOver = true;
+        }
+        if (typeof window.game._showGameOver === 'function') {
+          window.game._showGameOver();
+        } else {
+          const banner = document.getElementById('game-over-banner');
+          if (banner) banner.style.display = 'block';
+        }
       }
     });
   }
