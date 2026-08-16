@@ -580,6 +580,9 @@ export function placeTowerPiece(gamestate, tileIndex) {
   if (!tile.tower && !tile.tile.tower?.offset) {
     return { success: false, message: 'This tile is not a tower foundation or open tower' };
   }
+  if (tile.tower && tile.tower.height >= 5) {
+    return { success: false, message: 'Tower has reached maximum height of 5 floors' };
+  }
 
   // A floor may be placed on any uncompleted foundation or any open tower.
   if (!tile.tower) tile.tower = { height: 0, completed: false };
