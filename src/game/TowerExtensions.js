@@ -102,11 +102,29 @@ export function checkAndExchangePrisoners(gamestate) {
 }
 
 /**
- * Official C3.1 Rule: Ransom buyback is not used in this version.
- * Towers have a maximum height of 5.
+ * Official Rule: If two players hold each other's figure, they are exchanged immediately.
+ * Otherwise, a player may pay 3 points to buy back one of their figures.
  */
-export function buyBackPrisoner() {
-  return { success: false, message: 'Ransom buyback is not enabled in this version.' };
+export function buyBackPrisoner(gamestate, holderIndex, meepleIndex) {
+  const holder = gamestate.players[holderIndex];
+  const prisoner = holder.capturedMeeples[meepleIndex];
+  const owner = gamestate.players[prisoner.playerIndex];
+
+  if (owner.points < 3) {
+    return { success: false, message: 'Not enough points for ransom.' };
+  }
+
+  owner.points -= 3;
+  holder.points += 3;
+  holder.capturedMeeples.splice(meepleIndex, 1);
+  returnMeepleToSupply(owner, prisoner.meepleType);
+
+  gamestate.messages.push({
+    text: `${owner.user.username} paid 3 points ransom to ${holder.user.username} for their ${prisoner.meepleType} meeple.`,
+    timestamp: Date.now(),
+  });
+
+  return { success: true };
 }
 
 export function canAddTowerFloor(towerTile) {
