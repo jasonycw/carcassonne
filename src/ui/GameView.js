@@ -783,14 +783,16 @@ export class GameView {
     if (step === 'tower' && isActive) {
       this._confirmPhase = '';
       this._pendingPlacement = null;
+      const player = this.gamestate.players[this.playerIndex] || {};
       if (this.dom) {
         this.dom.hud.style.display = 'flex';
-        this.dom.meepleTypes.style.display = 'none';
+        // Show meeple selector for tower-closing choice if player has both or just large.
+        this.dom.meepleTypes.style.display = 'flex';
         this.dom.towerActions.style.display = 'flex';
-        const player = this.gamestate.players[this.playerIndex] || {};
         this.dom.towerFloor.disabled = (player.towers || 0) <= 0;
         this.dom.towerClose.disabled = (player.remainingMeeples || 0) <= 0 && !player.hasLargeMeeple;
       }
+      this._updateMeepleTypeSelector(player);
       this._updateHUD('tower');
       this._showStatusMessage('Tower expansion active: Select an action and click a foundation on the board.');
       return;
@@ -1120,7 +1122,11 @@ export class GameView {
   _handleTowerPiecePlacement(tileIndex) {
     const closing = this._towerAction === 'close';
     const activePlayer = this.gamestate.players[this.gamestate.currentPlayerIndex];
-    const meepleType = (activePlayer.remainingMeeples > 0) ? 'normal' : 'large';
+    // Allow using the selected meeple type from the HUD (normal or large) for closing.
+    let meepleType = meeplePlacementMode;
+    if (meepleType !== 'normal' && meepleType !== 'large') {
+      meepleType = (activePlayer.remainingMeeples > 0) ? 'normal' : 'large';
+    }
 
     if (this.gameClient) {
       if (closing) this.gameClient.closeTower(tileIndex, meepleType);
