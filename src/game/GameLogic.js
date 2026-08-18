@@ -88,7 +88,7 @@ export function createGameState(expansions, playerCount, tileData) {
     finished: false,
     messages: [],
     players,
-    unusedTiles: buildTilePile(expansions, tileData),
+    unusedTiles: buildTilePile(expansions, tileData, riverEnabled),
     riverTiles,
     riverSource: riverEnabled ? { ...riverSource } : null,
     riverPhase: riverEnabled,
@@ -103,7 +103,11 @@ export function createGameState(expansions, playerCount, tileData) {
   };
 }
 
-/** Generate a random game name (adjective-noun style). */
+/**
+ * Generate a random game name using an adjective-noun pair.
+ *
+ * @returns {string} Random game name.
+ */
 function generateGameName() {
   const adjs = ['Misty', 'Quiet', 'Lost', 'Silly', 'Calm', 'Rapid', 'Happy', 'Mad'];
   const nouns = ['Prairie', 'Forest', 'Ridge', 'Hollow', 'Brook', 'Thicket', 'Glen', 'Peak'];
@@ -111,7 +115,13 @@ function generateGameName() {
          nouns[Math.floor(Math.random() * nouns.length)];
 }
 
-/** Compute tower piece count per player based on player count. */
+/**
+ * Compute the initial tower piece count per player.
+ *
+ * @param {number} playerCount  Number of players in the game.
+ * @param {number} playerIndex  Index of the player.
+ * @returns {number} Initial tower piece count.
+ */
 function getTowerCount(playerCount, playerIndex) {
   if (playerCount === 1) return 30;
   const pool = [0, 10, 9, 7, 6, 5]; // index by playerCount
@@ -119,17 +129,24 @@ function getTowerCount(playerCount, playerIndex) {
 }
 
 /**
- * Build the unused-tile pile: for each tile, push it `count` times
- * (skip one copy of the starting tile).
+ * Build the unused-tile pile from selected expansions.
+ *
+ * @param {string[]} expansions  List of active expansion IDs.
+ * @param {object[]} allTileData Full tile definition catalog.
+ * @param {boolean} [riverPhase=false] Whether the game starts with a River source.
+ *   If true, the base game starting tile is NOT removed from the pile.
+ * @returns {object[]} Shuffled (later) tile pile.
  */
-function buildTilePile(expansions, allTileData) {
+function buildTilePile(expansions, allTileData, riverPhase = false) {
   const pile = [];
   const filtered = allTileData.filter((t) => {
     const expansion = t.id.split('/')[0];
     return expansion !== 'the-river' && expansions.includes(expansion);
   });
   for (const tile of filtered) {
-    const count = tile.startingTile ? tile.count - 1 : tile.count;
+    // Only subtract one copy if this tile IS the starting tile AND we aren't using the River.
+    const isActualStart = tile.startingTile && !riverPhase;
+    const count = isActualStart ? tile.count - 1 : tile.count;
     for (let i = 0; i < count; i++) {
       pile.push({ ...tile }); // shallow copy so counts aren't mutated
     }
@@ -479,11 +496,15 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
   // activation the extra turn is suppressed here — skipTowerStep /
   // placeTowerPiece handle the advance when the tower step finishes.
 
+  // The Tower expansion: a player may take a tower action ONLY if they
+  // just placed a tile with a tower foundation.
+  const placedTileHasTower = newTile.tile.tower && newTile.tile.tower.offset && newTile.tile.tower.offset.x != null;
   const hasValidTowerTarget = gamestate.placedTiles.some(
     (pt) => pt.tile.tower && pt.tile.tower.offset && pt.tile.tower.offset.x != null && (!pt.tower || !pt.tower.completed)
   );
   const canUseTowerActions = !meeple
     && gamestate.expansions.indexOf('the-tower') !== -1
+    && placedTileHasTower
     && hasValidTowerTarget
     && (activePlayer.towers > 0 || activePlayer.remainingMeeples > 0);
 
