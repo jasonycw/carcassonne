@@ -107,6 +107,10 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
     }
 
     if (turn === 12) {
+      if (hasRiver) {
+        const indicator = await page.locator('#game-turn-indicator').textContent();
+        expect(indicator).not.toContain('River phase');
+      }
       await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-midgame.png`), fullPage: true });
     }
   }
