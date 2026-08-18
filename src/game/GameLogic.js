@@ -499,13 +499,9 @@ export function placeTile(gamestate, x, y, rotation, meeple) {
   // The Tower expansion: a player may take a tower action ONLY if they
   // just placed a tile with a tower foundation.
   const placedTileHasTower = newTile.tile.tower && newTile.tile.tower.offset && newTile.tile.tower.offset.x != null;
-  const hasValidTowerTarget = gamestate.placedTiles.some(
-    (pt) => pt.tile.tower && pt.tile.tower.offset && pt.tile.tower.offset.x != null && (!pt.tower || !pt.tower.completed)
-  );
   const canUseTowerActions = !meeple
     && gamestate.expansions.indexOf('the-tower') !== -1
     && placedTileHasTower
-    && hasValidTowerTarget
     && (activePlayer.towers > 0 || activePlayer.remainingMeeples > 0);
 
   // ── Clear active tile ───────────────────────────────────────────────
