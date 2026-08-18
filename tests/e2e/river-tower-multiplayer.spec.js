@@ -143,7 +143,7 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
 }
 
 async function setupGame(page, expansions = []) {
-  await page.goto('/');
+  await page.goto('/carcassonne/');
   await page.locator('#lobby-container').waitFor({ state: 'visible', timeout: 10000 });
   await page.locator('#player-name').fill('Carcassonne Host');
   await page.locator('#player-count').selectOption('2');
