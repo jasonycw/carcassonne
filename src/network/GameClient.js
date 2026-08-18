@@ -184,9 +184,9 @@ export class GameClient extends EventEmitter {
           originalMeepleType: m.originalMeepleType,
           scored: m.scored !== false,
         })),
-        tower: (pt.towerHeight != null || pt.completed != null) ? { 
+        tower: (pt.towerHeight != null || pt.towerCompleted != null) ? { 
           height: pt.towerHeight, 
-          completed: pt.completed,
+          completed: pt.towerCompleted,
           buyBackCount: pt.buyBackCount || 0
         } : undefined,
         features: { cities: [], roads: [], farms: [], cloister: null },
