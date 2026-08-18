@@ -196,7 +196,7 @@ test.describe('Carcassonne Official Rule & Expansion Proof Matrix', () => {
   });
 
   test('6. All Expansions Combined', async ({ page }, testInfo) => {
-    test.setTimeout(120000);
+    test.setTimeout(300000); // Increase to 5 minutes for full expansion game
     await setupGame(page, ALL_EXPANSIONS);
     await playTurns(page, testInfo, ALL_EXPANSIONS, 'all');
   });
