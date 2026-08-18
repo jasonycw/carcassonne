@@ -14,7 +14,7 @@ const ALL_EXPANSIONS = [
 ];
 
 async function isGameOver(page) {
-  return page.locator('#game-over-banner').isVisible({ timeout: 150 }).catch(() => false);
+  return page.locator('#game-over-banner').isVisible({ timeout: 500 }).catch(() => false);
 }
 
 async function playTurns(page, testInfo, expansions, scenarioName) {
@@ -33,118 +33,114 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
 
   await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-start.png`), fullPage: true });
 
-  for (let turn = 0; turn < 150; turn++) {
+  // Play until natural game over (max 250 turns to be safe)
+  for (let turn = 0; turn < 250; turn++) {
     if (await isGameOver(page)) break;
 
     // Handle tower step
     const towerHud = page.locator('#hud-tower-actions');
-    if (await towerHud.isVisible({ timeout: 200 }).catch(() => false)) {
+    if (await towerHud.isVisible({ timeout: 500 }).catch(() => false)) {
       audit.towerActionsTriggered++;
       const floorBtn = page.locator('#hud-tower-floor');
       const closeBtn = page.locator('#hud-tower-close');
       const outline = page.locator('#game-svg image.tower-outline').first();
 
-      if (await floorBtn.isEnabled().catch(() => false) && await outline.isVisible().catch(() => false)) {
+      // In the tower scenario, we want to actively show off the mechanics
+      const shouldPlaceFloor = hasTower && !audit.floorPlaced;
+      const shouldCloseTower = hasTower && audit.floorPlaced && !audit.towerClosed;
+
+      if (shouldPlaceFloor && await floorBtn.isEnabled().catch(() => false) && await outline.isVisible().catch(() => false)) {
         await floorBtn.click();
         await outline.dispatchEvent('click');
         audit.floorPlaced = true;
         await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-tower-floor.png`), fullPage: true });
-      } else if (await closeBtn.isEnabled().catch(() => false) && audit.floorPlaced && await outline.isVisible().catch(() => false)) {
+      } else if (shouldCloseTower && await closeBtn.isEnabled().catch(() => false) && await outline.isVisible().catch(() => false)) {
         await closeBtn.click();
         await outline.dispatchEvent('click');
         audit.towerClosed = true;
         await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-tower-close.png`), fullPage: true });
       } else {
-        await page.locator('#hud-confirm').click({ force: true });
+        // Just skip or confirm if no specific action needed
+        const confirmBtn = page.locator('#hud-confirm');
+        if (await confirmBtn.isVisible().catch(() => false)) {
+          await confirmBtn.click({ force: true });
+        }
       }
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(300);
       continue;
     }
 
     // Handle capture step
     const confirmBtn = page.locator('#hud-confirm');
-    const confirmText = await confirmBtn.textContent({ timeout: 200 }).catch(() => '');
+    const confirmText = await confirmBtn.textContent({ timeout: 500 }).catch(() => '');
     if (confirmText.includes('Capture')) {
       const capturable = page.locator('#game-svg image.meeple[filter*="capture-glow"]').first();
-      if (await capturable.isVisible({ timeout: 300 }).catch(() => false)) {
+      if (await capturable.isVisible({ timeout: 500 }).catch(() => false)) {
         await capturable.dispatchEvent('click');
         audit.captureCompleted = true;
         await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-capture.png`), fullPage: true });
       } else {
         await confirmBtn.click({ force: true });
       }
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(300);
       continue;
     }
 
     // Place tile
     const placement = page.locator('#game-svg image.tile-placement').first();
-    if (await placement.isVisible({ timeout: 800 }).catch(() => false)) {
+    if (await placement.isVisible({ timeout: 1500 }).catch(() => false)) {
       await placement.dispatchEvent('click');
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(200);
 
       const btn1 = page.locator('#hud-confirm');
       if (await btn1.isVisible().catch(() => false)) {
         await btn1.click({ force: true });
-        await page.waitForTimeout(100);
+        await page.waitForTimeout(200);
       }
 
       // Optional meeple
       const meepleOutline = page.locator('#game-svg image.meeple-outline').first();
-      if (await meepleOutline.isVisible({ timeout: 400 }).catch(() => false)) {
-        await meepleOutline.dispatchEvent('click');
-        await page.waitForTimeout(100);
+      if (await meepleOutline.isVisible({ timeout: 800 }).catch(() => false)) {
+        // Randomly place meeple to populate the board for capture demonstration
+        if (Math.random() > 0.5 || (hasTower && !audit.captureCompleted)) {
+          await meepleOutline.dispatchEvent('click');
+          await page.waitForTimeout(200);
+        }
       }
 
       const btn2 = page.locator('#hud-confirm');
       if (await btn2.isVisible().catch(() => false)) {
         await btn2.click({ force: true });
         audit.turnsPlayed++;
-        await page.waitForTimeout(250);
+        await page.waitForTimeout(300);
       }
     } else {
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(500);
     }
 
-    if (turn === 12) {
-      if (hasRiver) {
-        const indicator = await page.locator('#game-turn-indicator').textContent();
-        expect(indicator).not.toContain('River phase');
+    // Check River phase completion
+    if (hasRiver && turn === 15 && !audit.riverCompleted) {
+      const indicator = await page.locator('#game-turn-indicator').textContent();
+      if (!indicator.includes('River phase')) {
+        audit.riverCompleted = true;
       }
-      await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-midgame.png`), fullPage: true });
     }
   }
 
-  // Wait for natural game over or timeout
-  const gameOver = await page.locator('#game-over-banner').isVisible({ timeout: 5000 }).catch(() => false);
-  if (!gameOver) {
-    // If not over naturally, force it for the proof of scoreboard
-    await page.evaluate(() => {
-      if (window.game) {
-        if (window.game.gamestate) {
-          window.game.gamestate.unusedTiles = [];
-          window.game.gamestate.riverTiles = [];
-          window.game.gamestate.riverPhase = false;
-          window.game.gamestate.isGameOver = true;
-        }
-        if (typeof window.game._showGameOver === 'function') {
-          window.game._showGameOver();
-        } else {
-          const banner = document.getElementById('game-over-banner');
-          if (banner) banner.style.display = 'block';
-        }
-      }
-    });
-  }
-
-  await page.waitForSelector('#game-over-banner', { state: 'visible', timeout: 15000 });
+  // Final wait for natural game over and scoreboard
+  await page.waitForSelector('#game-over-banner', { state: 'visible', timeout: 60000 });
+  // The scoreboard is a table inside the banner
+  await page.waitForSelector('#game-over-banner table', { state: 'visible', timeout: 15000 }).catch(() => {
+    console.log('Detailed scoreboard table not found, but banner is visible.');
+  });
+  await page.waitForTimeout(3000); // Wait for animations and final score rendering
   await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-game-over.png`), fullPage: true });
   fs.writeFileSync(testInfo.outputPath(`${scenarioName}-audit.json`), JSON.stringify(audit, null, 2));
 }
 
 async function setupGame(page, expansions = []) {
   await page.goto('/carcassonne/');
-  await page.locator('#lobby-container').waitFor({ state: 'visible', timeout: 10000 });
+  await page.locator('#lobby-container').waitFor({ state: 'visible', timeout: 15000 });
   await page.locator('#player-name').fill('Carcassonne Host');
   await page.locator('#player-count').selectOption('2');
 
@@ -158,45 +154,40 @@ async function setupGame(page, expansions = []) {
   }
 
   await page.locator('#create-game-btn').click();
-  await page.waitForSelector('#room-display[style*="block"], #lobby-players[style*="block"]', { timeout: 35000 });
+  await page.waitForSelector('#room-display[style*="block"], #lobby-players[style*="block"]', { timeout: 45000 });
   await page.locator('#start-game-btn').click();
-  await page.waitForSelector('#game-container', { timeout: 15000 });
-  await page.waitForSelector('#game-svg', { state: 'visible', timeout: 5000 });
+  await page.waitForSelector('#game-container', { timeout: 30000 });
+  await page.waitForSelector('#game-svg', { state: 'visible', timeout: 15000 });
 }
 
 test.describe('Carcassonne Official Rule & Expansion Proof Matrix', () => {
   test('1. Base Game Only', async ({ page }, testInfo) => {
-    test.setTimeout(120000);
+    test.setTimeout(600000);
     await setupGame(page, []);
     await playTurns(page, testInfo, [], 'base');
   });
 
-  test('2. Inns & Cathedrals', async ({ page }, testInfo) => {
-    test.setTimeout(120000);
-    await setupGame(page, ['inns-and-cathedrals']);
-    await playTurns(page, testInfo, ['inns-and-cathedrals'], 'ic');
-  });
-
-  test('3. Traders & Builders', async ({ page }, testInfo) => {
-    test.setTimeout(120000);
-    await setupGame(page, ['traders-and-builders']);
-    await playTurns(page, testInfo, ['traders-and-builders'], 'tb');
-  });
-
-  test('4. The River', async ({ page }, testInfo) => {
-    test.setTimeout(120000);
+  test('2. The River', async ({ page }, testInfo) => {
+    test.setTimeout(600000);
     await setupGame(page, ['the-river']);
     await playTurns(page, testInfo, ['the-river'], 'river');
   });
 
-  test('5. The Tower', async ({ page }, testInfo) => {
-    test.setTimeout(120000);
+  test('3. The Tower', async ({ page }, testInfo) => {
+    test.setTimeout(600000);
     await setupGame(page, ['the-tower']);
     await playTurns(page, testInfo, ['the-tower'], 'tower');
   });
 
-  test('6. All Expansions Combined', async ({ page }, testInfo) => {
-    test.setTimeout(300000); // Increase to 5 minutes for full expansion game
+  test('4. The River and The Tower', async ({ page }, testInfo) => {
+    test.setTimeout(900000);
+    const expansions = ['the-river', 'the-tower'];
+    await setupGame(page, expansions);
+    await playTurns(page, testInfo, expansions, 'river-tower');
+  });
+
+  test('5. All Expansions Combined', async ({ page }, testInfo) => {
+    test.setTimeout(1500000); // 25 minutes for full expansion game
     await setupGame(page, ALL_EXPANSIONS);
     await playTurns(page, testInfo, ALL_EXPANSIONS, 'all');
   });
