@@ -467,11 +467,11 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
   // Already-placed tower floors.
   tileGroups.select('g.tower-pieces').selectAll('image.tower')
     .data((d) => {
-      if (!d.tower) return [];
+      if (!d.tower || !d.tile.tower || !d.tile.tower.offset) return [];
       const arr = [];
       for (let i = 0; i < d.tower.height; i++) {
         arr.push({
-          offset: d.tile.tower ? d.tile.tower.offset : { x: 0.5, y: 0.5 },
+          offset: d.tile.tower.offset,
           tileRotation: d.rotation,
           towerHeight: i,
         });
