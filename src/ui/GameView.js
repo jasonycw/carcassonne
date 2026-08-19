@@ -187,6 +187,7 @@ export class GameView {
   }
 
   mount(container) {
+    window.gameView = this;
     // Prevent double game-over alert from STATE_UPDATE + GAME_OVER messages.
     this._gameOverShown = false;
     container.innerHTML = GAME_HTML;
