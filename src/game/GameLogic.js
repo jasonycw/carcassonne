@@ -652,6 +652,7 @@ export function placeMeepleOnTower(gamestate, tileIndex, meepleType = 'normal') 
   const tile = gamestate.placedTiles[tileIndex];
   if (gamestate.step !== 'tower') return { success: false, message: 'Not the tower step' };
   if (!tile?.tower || tile.tower.completed) return { success: false, message: 'Tower is not open' };
+  if (tile.tower.height <= 0) return { success: false, message: 'Cannot place meeple on an empty tower foundation' };
 
   if (meepleType === 'normal') {
     if (player.remainingMeeples <= 0) return { success: false, message: 'No remaining meeples' };
