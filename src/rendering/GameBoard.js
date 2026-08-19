@@ -134,6 +134,10 @@ function resolveMeepleOffset(placement, tile) {
   if (placement.locationType === 'cloister') {
     return { x: 0.5, y: 0.5 };
   }
+  if (placement.locationType === 'tower') {
+    // Return the tower foundation offset if available, otherwise center.
+    return tile.tower?.offset || { x: 0.5, y: 0.5 };
+  }
   const key = placement.locationType === 'city' ? 'cities' : placement.locationType + 's';
   const features = tile[key];
   if (features && features[placement.index] && features[placement.index].meepleOffset) {

@@ -1382,7 +1382,7 @@ export const THE_TOWER_TILES = [
       { directions: ['WNW', 'NNW', 'NNE', 'ENE', 'ESE', 'SSE'], meepleOffset: { x: 13/16, y: 3/16 } },
       { directions: ['SSW', 'WSW'], meepleOffset: { x: 1/4, y: 3/4 } }
     ],
-    tower: { offset: { x: 1/2, y: 1/2 } },
+    tower: { offset: { x: 3/4, y: 3/4 } },
     imageURL: '/images/tiles/the-tower/RR.png',
     expansion: 'the-tower',
     count: 1
@@ -1421,7 +1421,7 @@ export const THE_TOWER_TILES = [
       { directions: ['NNE', 'ENE'], meepleOffset: { x: 3/4, y: 1/4 } },
       { directions: ['SSW', 'WSW', 'ESE', 'SSE'], meepleOffset: { x: 1/2, y: 7/8 } }
     ],
-    tower: { offset: { x: 1/2, y: 1/2 } },
+    tower: { offset: { x: 3/4, y: 3/4 } },
     imageURL: '/images/tiles/the-tower/RRR.png',
     expansion: 'the-tower',
     count: 1
@@ -1445,7 +1445,7 @@ export const THE_TOWER_TILES = [
       { directions: ['ESE', 'SSE'], meepleOffset: { x: 13/16, y: 13/16 } },
       { directions: ['SSW', 'WSW'], meepleOffset: { x: 3/16, y: 13/16 } }
     ],
-    tower: { offset: { x: 1/2, y: 1/2 } },
+    tower: { offset: { x: 3/4, y: 3/4 } },
     imageURL: '/images/tiles/the-tower/RRRR.1.png',
     expansion: 'the-tower',
     count: 1

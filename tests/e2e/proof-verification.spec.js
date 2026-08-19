@@ -121,6 +121,20 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
       return btn && btn.style.display !== 'none' && !btn.disabled && btn.offsetParent !== null;
     })) {
       const btnText = await page.evaluate(() => document.querySelector('#hud-confirm').textContent);
+      
+      // If we are in the 'confirmed' phase, we can place a meeple before sending the move.
+      const isConfirmedPhase = await page.evaluate(() => window.gameView._confirmPhase === 'confirmed');
+      if (isConfirmedPhase && Math.random() < 0.4) {
+        const meepleOutline = page.locator('#game-svg image.meeple-outline').first();
+        if (await meepleOutline.isVisible({ timeout: 1000 }).catch(() => false)) {
+          console.log('Clicking meeple outline to place scoring meeple');
+          await meepleOutline.evaluate(el => {
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          });
+          await page.waitForTimeout(300);
+        }
+      }
+
       console.log(`Confirming "${btnText}" via GameView`);
       await page.evaluate(() => window.gameView._confirmPlacement());
       
