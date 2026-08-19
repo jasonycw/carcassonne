@@ -39,7 +39,7 @@ export function getCapturableMeeples(gamestate, towerTileIndex) {
   // Official C3.1: Max height 5.
   const range = Math.min(towerTile.tower.height, 5);
   const capturable = [];
-  const eligible = (meeple) => !['builder', 'pig', 'shepherd'].includes(meeple.meepleType);
+  const eligible = (meeple) => !['builder', 'pig', 'shepherd', 'tower'].includes(meeple.meepleType);
 
   for (let i = 0; i < gamestate.placedTiles.length; i += 1) {
     const target = gamestate.placedTiles[i];
