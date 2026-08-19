@@ -88,34 +88,41 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
 
     // Place tile
     const placement = page.locator('#game-svg image.tile-placement').first();
-    if (await placement.isVisible({ timeout: 1500 }).catch(() => false)) {
+    if (await placement.isVisible({ timeout: 2000 }).catch(() => false)) {
       await placement.dispatchEvent('click');
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(300);
 
       const btn1 = page.locator('#hud-confirm');
-      if (await btn1.isVisible().catch(() => false)) {
+      if (await btn1.isVisible({ timeout: 1000 }).catch(() => false)) {
         await btn1.click({ force: true });
-        await page.waitForTimeout(200);
+        await page.waitForTimeout(300);
       }
 
       // Optional meeple
       const meepleOutline = page.locator('#game-svg image.meeple-outline').first();
-      if (await meepleOutline.isVisible({ timeout: 800 }).catch(() => false)) {
+      if (await meepleOutline.isVisible({ timeout: 1000 }).catch(() => false)) {
         // Randomly place meeple to populate the board for capture demonstration
-        if (Math.random() > 0.5 || (hasTower && !audit.captureCompleted)) {
+        if (Math.random() > 0.4 || (hasTower && !audit.captureCompleted)) {
           await meepleOutline.dispatchEvent('click');
-          await page.waitForTimeout(200);
+          await page.waitForTimeout(300);
         }
       }
 
       const btn2 = page.locator('#hud-confirm');
-      if (await btn2.isVisible().catch(() => false)) {
+      if (await btn2.isVisible({ timeout: 1000 }).catch(() => false)) {
         await btn2.click({ force: true });
         audit.turnsPlayed++;
-        await page.waitForTimeout(300);
+        await page.waitForTimeout(500);
       }
     } else {
-      await page.waitForTimeout(500);
+      // If no placement visible, check if we need to cycle rotations or wait
+      const activeTile = page.locator('#game-svg image.active-tile');
+      if (await activeTile.isVisible().catch(() => false)) {
+         // Maybe it's just not placed yet
+         await page.waitForTimeout(500);
+      } else {
+         await page.waitForTimeout(1000);
+      }
     }
 
     // Check River phase completion
