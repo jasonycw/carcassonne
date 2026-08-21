@@ -307,17 +307,25 @@ test('6. Tower Floor Placement Demo', async ({ page }, testInfo) => {
       const floorBtn = page.locator('#hud-tower-floor');
       const outline = page.locator('#game-svg image.tower-outline').first();
       if (await floorBtn.isEnabled().catch(() => false) && await outline.isVisible().catch(() => false)) {
-        console.log('Tower demo: placing a real tower floor');
-        await page.evaluate(() => { window.gameView._towerAction = 'floor'; });
+        console.log('Tower demo: selecting Place Floor and placing a real tower floor');
+        await floorBtn.click();
         await outline.evaluate(el => {
           const d = el.__data__;
           window.gameView._handleTowerPiecePlacement(d.tileIndex);
         });
         await page.waitForTimeout(1000);
-        await expect(page.locator('#game-svg image.tower'), 'Tower floor must be rendered in the demo').toHaveCount(1);
+        const towerImage = page.locator('#game-svg image.tower').first();
+        await expect(towerImage, 'Tower floor must be rendered in the demo').toHaveCount(1);
+        const towerBox = await towerImage.boundingBox();
+        if (towerBox) {
+          // Use the real board zoom gesture so the tower block is unmistakable in video.
+          await page.mouse.move(towerBox.x + towerBox.width / 2, towerBox.y + towerBox.height / 2);
+          await page.mouse.wheel(0, -900);
+          await page.waitForTimeout(1200);
+        }
         await page.screenshot({ path: testInfo.outputPath('tower-demo-floor-placed.png'), fullPage: true });
         await page.locator('#game-svg').screenshot({ path: testInfo.outputPath('tower-demo-floor-board.png') });
-        // Keep the rendered result on screen long enough to be unambiguous in video.
+        // Keep the enlarged rendered result on screen long enough to be unambiguous in video.
         await page.waitForTimeout(5000);
         return;
       }
