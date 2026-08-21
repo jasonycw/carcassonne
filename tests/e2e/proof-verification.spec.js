@@ -23,6 +23,7 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
     floorPlaced: false,
     captureCompleted: false,
     towerClosed: false,
+    ransomCompleted: false,
     turnsPlayed: 0,
     midGameCaptured: false,
     midGameTurn: null,
@@ -38,63 +39,80 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
       break;
     }
 
-    // Handle tower step
+    // Handle tower step. Only place a floor when the selected foundation has
+    // an eligible opponent meeple in the official capture range and that
+    // owner can afford the 3-point ransom. This makes the proof deterministic
+    // without mutating game state behind the rules engine.
     const towerHud = page.locator('#hud-tower-actions');
     if (await towerHud.isVisible({ timeout: 500 }).catch(() => false)) {
       console.log('Tower HUD visible');
       audit.towerActionsTriggered++;
       const floorBtn = page.locator('#hud-tower-floor');
       const closeBtn = page.locator('#hud-tower-close');
-      const outline = page.locator('#game-svg image.tower-outline').first();
+      const candidate = await page.evaluate(() => {
+        const gs = window.gameView.gamestate;
+        if (!gs || gs.step !== 'tower') return null;
+        const currentPlayer = gs.currentPlayerIndex;
+        const outlines = Array.from(document.querySelectorAll('#game-svg image.tower-outline'));
+        for (const outline of outlines) {
+          const tileIndex = outline.__data__?.tileIndex;
+          if (tileIndex == null) continue;
+          const towerTile = gs.placedTiles[tileIndex];
+          if (!towerTile) continue;
+          const nextHeight = Math.min((towerTile.tower?.height || 0) + 1, 5);
+          const hasRansomTarget = gs.placedTiles.some(target => {
+            const dx = Math.abs(target.x - towerTile.x);
+            const dy = Math.abs(target.y - towerTile.y);
+            const inRange = (dx === 0 && dy <= nextHeight) || (dy === 0 && dx <= nextHeight);
+            return inRange && (target.meeples || []).some(meeple =>
+              meeple.playerIndex !== currentPlayer &&
+              !['builder', 'pig', 'shepherd', 'tower'].includes(meeple.meepleType) &&
+              (gs.players[meeple.playerIndex]?.points || 0) >= 3
+            );
+          });
+          if (hasRansomTarget) return { tileIndex };
+        }
+        return null;
+      });
 
-      // In the tower scenario, we want to actively show off the mechanics
-      const shouldPlaceFloor = hasTower && !audit.floorPlaced;
-      const shouldCloseTower = hasTower && audit.floorPlaced && !audit.towerClosed;
-
-      if (shouldPlaceFloor && await floorBtn.isEnabled().catch(() => false) && await outline.isVisible().catch(() => false)) {
-        console.log('Placing tower floor via GameView');
-        await page.evaluate(() => {
-          window.gameView._towerAction = 'floor';
-        });
-        await outline.evaluate(el => {
-          const d = el.__data__;
-          window.gameView._handleTowerPiecePlacement(d.tileIndex);
-        });
+      const shouldPlaceFloor = hasTower && !audit.ransomCompleted && candidate;
+      if (shouldPlaceFloor && await floorBtn.isEnabled().catch(() => false)) {
+        console.log(`Placing tower floor on authentic ransom target ${candidate.tileIndex}`);
+        await floorBtn.click();
+        await page.evaluate((tileIndex) => {
+          window.gameView._handleTowerPiecePlacement(tileIndex);
+        }, candidate.tileIndex);
         audit.floorPlaced = true;
         await page.waitForTimeout(500);
         const placedTowerCount = await page.locator('#game-svg image.tower').count();
         expect(placedTowerCount, `Tower floor was placed but no rendered tower image exists in ${scenarioName}`).toBeGreaterThan(0);
         await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-tower-floor.png`), fullPage: true });
         await page.locator('#game-svg').screenshot({ path: testInfo.outputPath(`${scenarioName}-tower-floor-board.png`) });
-      } else if (shouldCloseTower && await closeBtn.isEnabled().catch(() => false) && await outline.isVisible().catch(() => false)) {
-        console.log('Closing tower via GameView');
-        await page.evaluate(() => {
-          window.gameView._towerAction = 'close';
-        });
-        await outline.evaluate(el => {
-          const d = el.__data__;
-          window.gameView._handleTowerPiecePlacement(d.tileIndex);
-        });
-        audit.towerClosed = true;
-        await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-tower-close.png`), fullPage: true });
-      } else {
-        // Just skip or confirm if no specific action needed
-        const confirmBtn = page.locator('#hud-confirm');
-        if (await confirmBtn.isVisible().catch(() => false)) {
-          await confirmBtn.click({ force: true });
+      } else if (hasTower && audit.ransomCompleted && !audit.towerClosed && await closeBtn.isEnabled().catch(() => false)) {
+        const closeTarget = page.locator('#game-svg image.tower-outline').first();
+        if (await closeTarget.isVisible().catch(() => false)) {
+          console.log('Closing tower via GameView after ransom proof');
+          await closeBtn.click();
+          await closeTarget.evaluate(el => window.gameView._handleTowerPiecePlacement(el.__data__.tileIndex));
+          audit.towerClosed = true;
+          await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-tower-close.png`), fullPage: true });
         }
+      } else {
+        // No legal ransom setup is available on this turn; skip the optional action.
+        const confirmBtn = page.locator('#hud-confirm');
+        if (await confirmBtn.isVisible().catch(() => false)) await confirmBtn.click({ force: true });
       }
       await page.waitForTimeout(300);
       continue;
     }
 
-    // Handle capture step
-    const confirmBtn = page.locator('#hud-confirm');
-    const confirmText = await confirmBtn.textContent({ timeout: 500 }).catch(() => '');
-    if (confirmText.includes('Capture')) {
+    // Handle a real capture step produced by placeTowerPiece().
+    const captureConfirm = page.locator('#hud-confirm');
+    const captureText = await captureConfirm.textContent({ timeout: 500 }).catch(() => '');
+    if (hasTower && captureText.includes('Capture')) {
       const capturable = page.locator('#game-svg image.meeple[filter*="capture-glow"]').first();
       if (await capturable.isVisible({ timeout: 500 }).catch(() => false)) {
-        console.log('Capturing meeple via GameView');
+        console.log('Capturing an authentic opponent meeple via GameView');
         await capturable.evaluate(el => {
           const d = el.__data__;
           window.gameView._handleCaptureMeeple(d.tileIndex, d.meepleIndex);
@@ -102,63 +120,37 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
         audit.captureCompleted = true;
         await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-capture.png`), fullPage: true });
       } else {
-        console.log('Skipping capture via GameView');
         await page.evaluate(() => window.gameView._handleSkipCapture());
       }
       await page.waitForTimeout(300);
       continue;
     }
 
-    // Handle tower mechanics for proof (ensure at least one capture and ransom)
-    if (hasTower && !audit.captureCompleted && audit.turnsPlayed > 20) {
-      const captured = await page.evaluate(() => {
-        const gs = window.gameView.gamestate;
-        if (!gs || !gs.placedTiles) return false;
-        for (let tIdx = 0; tIdx < gs.placedTiles.length; tIdx++) {
-          const tile = gs.placedTiles[tIdx];
-          if (tile.meeples && tile.meeples.length > 0) {
-            const meeple = tile.meeples[0];
-            const capturerIdx = (meeple.playerIndex + 1) % gs.players.length;
-            const capturer = gs.players[capturerIdx];
-            capturer.capturedMeeples = capturer.capturedMeeples || [];
-            capturer.capturedMeeples.push({
-              playerIndex: meeple.playerIndex,
-              meepleType: meeple.meepleType || 'normal'
-            });
-            tile.meeples.splice(0, 1);
-            return true;
-          }
-        }
-        return false;
-      });
-      if (captured) {
-        console.log('Forced a capture for tower proof');
-        audit.captureCompleted = true;
-      }
-    }
-
-    // Handle ransom buy-back (if any prisoners exist)
-    if (hasTower && audit.captureCompleted && Math.random() < 0.5) {
+    // Buy back the actual prisoner through the game action. Do not alter
+    // points or capturedMeeples directly; wait until the owner has 3 points.
+    if (hasTower && audit.captureCompleted && !audit.ransomCompleted) {
       const ransomed = await page.evaluate(() => {
         const gs = window.gameView.gamestate;
-        if (!gs || !gs.players) return false;
+        if (!gs?.players) return false;
         for (let cIdx = 0; cIdx < gs.players.length; cIdx++) {
           const capturer = gs.players[cIdx];
-          if (capturer.capturedMeeples && capturer.capturedMeeples.length > 0) {
-            for (let pIdx = 0; pIdx < capturer.capturedMeeples.length; pIdx++) {
-              const prisoner = capturer.capturedMeeples[pIdx];
-              const owner = gs.players[prisoner.playerIndex];
-              // Ensure owner has enough points for ransom in the simulation
-              if (owner && owner.points < 3) owner.points = 3; 
-              window.gameView._handleBuyBackPrisoner(cIdx, pIdx);
-              return true;
-            }
+          for (let pIdx = 0; pIdx < (capturer.capturedMeeples || []).length; pIdx++) {
+            const prisoner = capturer.capturedMeeples[pIdx];
+            const owner = gs.players[prisoner.playerIndex];
+            if (!owner || owner.points < 3) continue;
+            const before = (gs.featureScores || []).length;
+            window.gameView._handleBuyBackPrisoner(cIdx, pIdx);
+            const newEvents = (gs.featureScores || []).slice(before);
+            return newEvents.some(event => event.type === 'tower' &&
+              event.players.some(award => award.playerIndex === cIdx && award.points === 3) &&
+              event.players.some(award => award.playerIndex === prisoner.playerIndex && award.points === -3));
           }
         }
         return false;
       });
       if (ransomed) {
-        console.log('Triggered automatic tower ransom');
+        console.log('Completed authentic 3-point Tower ransom');
+        audit.ransomCompleted = true;
         await page.waitForTimeout(300);
       }
     }
@@ -252,6 +244,7 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
   const towerHeaderCount = await page.locator('#game-over-banner th', { hasText: 'Towers' }).count();
   expect(towerHeaderCount, `Unexpected Towers column in ${scenarioName} final scoreboard`).toBe(hasTower ? 1 : 0);
   expect(audit.midGameCaptured, `Missing authentic mid-game screenshot in ${scenarioName}`).toBe(true);
+  if (hasTower) expect(audit.ransomCompleted, `Missing non-zero Tower ransom proof in ${scenarioName}`).toBe(true);
   await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-game-over.png`), fullPage: true });
   fs.writeFileSync(testInfo.outputPath(`${scenarioName}-audit.json`), JSON.stringify(audit, null, 2));
 }
