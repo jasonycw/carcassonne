@@ -235,6 +235,8 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
     console.log('Detailed scoreboard table not found, but banner is visible.');
   });
   await page.waitForTimeout(3000); // Wait for animations and final score rendering
+  const towerHeaderCount = await page.locator('#game-over-banner th', { hasText: 'Towers' }).count();
+  expect(towerHeaderCount, `Unexpected Towers column in ${scenarioName} final scoreboard`).toBe(hasTower ? 1 : 0);
   await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-game-over.png`), fullPage: true });
   fs.writeFileSync(testInfo.outputPath(`${scenarioName}-audit.json`), JSON.stringify(audit, null, 2));
 }

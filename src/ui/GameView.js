@@ -1376,6 +1376,8 @@ export class GameView {
     // Compute per-category breakdown
     const detailed = getDetailedScores(this.gamestate);
     const hasGoods = detailed.players.some(p => p.categories.goods);
+    const hasTower = Array.isArray(this.gamestate.expansions)
+      && this.gamestate.expansions.includes('the-tower');
 
     banner.innerHTML = `
       <div style="
@@ -1396,7 +1398,7 @@ export class GameView {
           <span style="font-weight:bold;">${escapeHtml(winner.user?.username || 'Player')}</span>
           wins with <span style="font-weight:bold;">${winner.points}</span> points!
         </div>
-        ${this._renderScoreBreakdown(detailed, hasGoods)}
+        ${this._renderScoreBreakdown(detailed, hasGoods, hasTower)}
         <button id="game-over-lobby-btn" style="
           background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.5);
           color: #fff; padding: 8px 24px; border-radius: 8px;
@@ -1421,9 +1423,10 @@ export class GameView {
    * Render a per-category score breakdown table.
    * @param {Object} detailed - Result from getDetailedScores()
    * @param {boolean} hasGoods - Whether goods categories exist
+   * @param {boolean} hasTower - Whether The Tower expansion is enabled
    * @returns {string} HTML string for the breakdown table
    */
-  _renderScoreBreakdown(detailed, hasGoods) {
+  _renderScoreBreakdown(detailed, hasGoods, hasTower = false) {
     if (!detailed || !detailed.players) return '';
 
     // Category definitions in display order
@@ -1434,8 +1437,10 @@ export class GameView {
       { key: 'road', label: 'Roads' },
       { key: 'farm', label: 'Farms' },
       { key: 'cloister', label: 'Cloisters' },
-      { key: 'tower', label: 'Towers' },
     ];
+    if (hasTower) {
+      categories.push({ key: 'tower', label: 'Towers' });
+    }
     if (hasGoods) {
       categories.push({ key: 'goods', label: 'Goods' });
     }
