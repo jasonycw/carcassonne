@@ -293,3 +293,56 @@ test('5. All Expansions Combined', async ({ page }, testInfo) => {
   await setupGame(page, ALL_EXPANSIONS);
   await playTurns(page, testInfo, ALL_EXPANSIONS, 'all');
 });
+
+// Dedicated visual proof: stop immediately after a real Tower floor placement so
+// the recorded video clearly shows the action and the rendered tower block.
+test('6. Tower Floor Placement Demo', async ({ page }, testInfo) => {
+  test.setTimeout(180000);
+  await setupGame(page, ['the-tower']);
+  await page.screenshot({ path: testInfo.outputPath('tower-demo-before.png'), fullPage: true });
+
+  for (let iteration = 0; iteration < 120; iteration++) {
+    const towerHud = page.locator('#hud-tower-actions');
+    if (await towerHud.isVisible({ timeout: 500 }).catch(() => false)) {
+      const floorBtn = page.locator('#hud-tower-floor');
+      const outline = page.locator('#game-svg image.tower-outline').first();
+      if (await floorBtn.isEnabled().catch(() => false) && await outline.isVisible().catch(() => false)) {
+        console.log('Tower demo: placing a real tower floor');
+        await page.evaluate(() => { window.gameView._towerAction = 'floor'; });
+        await outline.evaluate(el => {
+          const d = el.__data__;
+          window.gameView._handleTowerPiecePlacement(d.tileIndex);
+        });
+        await page.waitForTimeout(1000);
+        await expect(page.locator('#game-svg image.tower'), 'Tower floor must be rendered in the demo').toHaveCount(1);
+        await page.screenshot({ path: testInfo.outputPath('tower-demo-floor-placed.png'), fullPage: true });
+        await page.locator('#game-svg').screenshot({ path: testInfo.outputPath('tower-demo-floor-board.png') });
+        // Keep the rendered result on screen long enough to be unambiguous in video.
+        await page.waitForTimeout(5000);
+        return;
+      }
+    }
+
+    const placement = page.locator('#game-svg image.tile-placement').first();
+    const isConfirmedPhase = await page.evaluate(() => window.gameView._confirmPhase !== '');
+    if (!isConfirmedPhase && await placement.isVisible({ timeout: 500 }).catch(() => false)) {
+      await placement.evaluate(el => {
+        const d = el.__data__;
+        const rotation = d.rotations?.[0]?.rotation || 0;
+        window.gameView._pendingPlacement = { x: d.x, y: d.y, rotation };
+        window.gameView._showActiveTileAt(d.x, d.y, rotation);
+      });
+      await page.waitForTimeout(500);
+    } else if (await page.evaluate(() => {
+      const btn = document.querySelector('#hud-confirm');
+      return btn && btn.style.display !== 'none' && !btn.disabled && btn.offsetParent !== null;
+    })) {
+      await page.evaluate(() => window.gameView._confirmPlacement());
+      await page.waitForTimeout(500);
+    } else {
+      await page.waitForTimeout(500);
+    }
+  }
+
+  throw new Error('Tower Floor Placement Demo did not reach a visible Tower action');
+});
