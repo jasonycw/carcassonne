@@ -24,6 +24,8 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
     captureCompleted: false,
     towerClosed: false,
     turnsPlayed: 0,
+    midGameCaptured: false,
+    midGameTurn: null,
   };
 
   await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-start.png`), fullPage: true });
@@ -219,6 +221,18 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
       }
     }
 
+    // Capture an authentic mid-game state after substantial progress. This is
+    // deliberately separate from the start screenshot and occurs after 30
+    // completed moves, when the board contains real gameplay history.
+    if (!audit.midGameCaptured && audit.turnsPlayed >= 30 && !(await isGameOver(page))) {
+      audit.midGameCaptured = true;
+      audit.midGameTurn = audit.turnsPlayed;
+      console.log(`Capturing authentic mid-game proof at turn ${audit.turnsPlayed}`);
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-mid-game.png`), fullPage: true });
+      await page.locator('#game-svg').screenshot({ path: testInfo.outputPath(`${scenarioName}-mid-game-board.png`) });
+    }
+
     // Check River phase completion
     if (hasRiver && !audit.riverCompleted) {
       const indicator = await page.locator('#game-turn-indicator').textContent().catch(() => '');
@@ -237,6 +251,7 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
   await page.waitForTimeout(3000); // Wait for animations and final score rendering
   const towerHeaderCount = await page.locator('#game-over-banner th', { hasText: 'Towers' }).count();
   expect(towerHeaderCount, `Unexpected Towers column in ${scenarioName} final scoreboard`).toBe(hasTower ? 1 : 0);
+  expect(audit.midGameCaptured, `Missing authentic mid-game screenshot in ${scenarioName}`).toBe(true);
   await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-game-over.png`), fullPage: true });
   fs.writeFileSync(testInfo.outputPath(`${scenarioName}-audit.json`), JSON.stringify(audit, null, 2));
 }
