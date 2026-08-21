@@ -114,10 +114,23 @@ export function buyBackPrisoner(gamestate, holderIndex, meepleIndex) {
     return { success: false, message: 'Not enough points for ransom.' };
   }
 
-  owner.points -= 3;
+    owner.points -= 3;
   holder.points += 3;
   holder.capturedMeeples.splice(meepleIndex, 1);
   returnMeepleToSupply(owner, prisoner.meepleType);
+
+  if (!gamestate.featureScores) {
+    gamestate.featureScores = [];
+  }
+  gamestate.featureScores.push({
+    type: 'tower',
+    complete: true,
+    count: 1,
+    players: [
+      { playerIndex: prisoner.playerIndex, points: -3 },
+      { playerIndex: holderIndex, points: 3 }
+    ]
+  });
 
   gamestate.messages.push({
     text: `${owner.user.username} paid 3 points ransom to ${holder.user.username} for their ${prisoner.meepleType} meeple.`,

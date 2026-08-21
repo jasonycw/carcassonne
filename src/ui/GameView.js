@@ -1434,6 +1434,7 @@ export class GameView {
       { key: 'road', label: 'Roads' },
       { key: 'farm', label: 'Farms' },
       { key: 'cloister', label: 'Cloisters' },
+      { key: 'tower', label: 'Towers' },
     ];
     if (hasGoods) {
       categories.push({ key: 'goods', label: 'Goods' });
@@ -1458,9 +1459,9 @@ export class GameView {
       for (const cat of categories) {
         const data = p.categories[cat.key];
         let cellContent = '-';
-        if (data && data.score > 0) {
+        if (data && data.score !== 0) {
           const countLabel = data.count > 1 ? ` (${data.count})` : '';
-          cellContent = `${data.score}${countLabel}`;
+          cellContent = `${data.score > 0 ? '+' : ''}${data.score}${countLabel}`;
         } else if (data && data.score === 0 && data.count > 0) {
           cellContent = `0 (${data.count})`;
         } else if (data && data.score === 0) {
@@ -1468,8 +1469,8 @@ export class GameView {
         }
         cells += `<td style="padding:3px 10px; text-align:center;
                    border-bottom:1px solid rgba(255,255,255,0.1);
-                   color:${data && data.score > 0 ? colorHex : 'rgba(255,255,255,0.4)'};
-                   font-weight:${data && data.score > 0 ? 'bold' : 'normal'};">${cellContent}</td>`;
+                   color:${data && data.score !== 0 ? (data.score > 0 ? colorHex : '#ff4444') : 'rgba(255,255,255,0.4)'};
+                   font-weight:${data && data.score !== 0 ? 'bold' : 'normal'};">${cellContent}</td>`;
       }
 
       // Total column
