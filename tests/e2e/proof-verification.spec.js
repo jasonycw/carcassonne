@@ -59,7 +59,11 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
           window.gameView._handleTowerPiecePlacement(d.tileIndex);
         });
         audit.floorPlaced = true;
+        await page.waitForTimeout(500);
+        const placedTowerCount = await page.locator('#game-svg image.tower').count();
+        expect(placedTowerCount, `Tower floor was placed but no rendered tower image exists in ${scenarioName}`).toBeGreaterThan(0);
         await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-tower-floor.png`), fullPage: true });
+        await page.locator('#game-svg').screenshot({ path: testInfo.outputPath(`${scenarioName}-tower-floor-board.png`) });
       } else if (shouldCloseTower && await closeBtn.isEnabled().catch(() => false) && await outline.isVisible().catch(() => false)) {
         console.log('Closing tower via GameView');
         await page.evaluate(() => {
