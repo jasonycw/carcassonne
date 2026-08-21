@@ -1472,9 +1472,12 @@ export class GameView {
         } else if (data && data.score === 0) {
           cellContent = '0';
         }
+        const scoreColor = data && data.score !== 0
+          ? (data.score > 0 ? '#74d680' : '#ff6b6b')
+          : 'rgba(255,255,255,0.4)';
         cells += `<td style="padding:3px 10px; text-align:center;
                    border-bottom:1px solid rgba(255,255,255,0.1);
-                   color:${data && data.score !== 0 ? (data.score > 0 ? colorHex : '#ff4444') : 'rgba(255,255,255,0.4)'};
+                   color:${scoreColor};
                    font-weight:${data && data.score !== 0 ? 'bold' : 'normal'};">${cellContent}</td>`;
       }
 
