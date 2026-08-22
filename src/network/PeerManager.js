@@ -667,7 +667,7 @@ export class HostPeerManager extends PeerManager {
           scored: m.scored,
         })),
         towerHeight: pt.tower ? pt.tower.height : undefined,
-        completed: pt.tower ? pt.tower.completed : undefined,
+        towerCompleted: pt.tower ? pt.tower.completed : undefined,
         buyBackCount: pt.tower ? pt.tower.buyBackCount : undefined,
       })),
       currentPlayerIndex: state.currentPlayerIndex,

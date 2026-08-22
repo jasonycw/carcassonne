@@ -723,6 +723,9 @@ function _endTurnAfterTower(gamestate) {
 function _endTurn(gamestate, builderActivated, activeIdx) {
   gamestate.step = 'draw';
 
+  // Reset turn-based state flags (e.g. Tower buybacks)
+  gamestate.players.forEach(p => { p.buyBackCount = 0; });
+
   // Advance to next player or keep same if builder activated.
   const prevTile = gamestate.placedTiles.length >= 2
     ? gamestate.placedTiles[gamestate.placedTiles.length - 2]

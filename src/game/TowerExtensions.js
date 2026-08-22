@@ -64,7 +64,7 @@ export function getCapturableMeeples(gamestate, towerTileIndex) {
 }
 
 /** Immediately return one prisoner from each side when players hold each other's figures. */
-export function checkAndExchangePrisoners(gamestate) {
+export function checkAndExchangePrisoners(gamestate, preferredSelections = {}) {
   const players = gamestate.players || [];
   let changed = true;
 
@@ -76,13 +76,18 @@ export function checkAndExchangePrisoners(gamestate) {
         const second = players[j];
         // Official rules: exchange occurs immediately. If multiple figures are held,
         // the player whose turn it is chooses (for their own) or the owner chooses.
-        // Implementation: favor large meeples as they are more valuable.
-        const findBest = (list, ownerIdx) => {
+        // Implementation: favor large meeples as they are more valuable, or use preference.
+        const findBest = (list, holderIdx, ownerIdx) => {
+          const pref = preferredSelections[holderIdx];
+          if (pref !== undefined) {
+            const idx = list.findIndex((p, index) => p.playerIndex === ownerIdx && (p.meepleType === pref || index === pref));
+            if (idx !== -1) return idx;
+          }
           const largeIdx = list.findIndex(p => p.playerIndex === ownerIdx && p.meepleType === 'large');
           return largeIdx !== -1 ? largeIdx : list.findIndex(p => p.playerIndex === ownerIdx);
         };
-        const firstIndex = findBest(first.capturedMeeples || [], j);
-        const secondIndex = findBest(second.capturedMeeples || [], i);
+        const firstIndex = findBest(first.capturedMeeples || [], i, j);
+        const secondIndex = findBest(second.capturedMeeples || [], j, i);
         if (firstIndex === -1 || secondIndex === -1) continue;
 
         const firstPrisoner = first.capturedMeeples.splice(firstIndex, 1)[0];
@@ -114,8 +119,14 @@ export function buyBackPrisoner(gamestate, holderIndex, meepleIndex) {
     return { success: false, message: 'Not enough points for ransom.' };
   }
 
-    owner.points -= 3;
+  // Official Rule: Only one buyback per turn.
+  if (owner.buyBackCount > 0) {
+    return { success: false, message: 'Already bought back a prisoner this turn.' };
+  }
+
+  owner.points -= 3;
   holder.points += 3;
+  owner.buyBackCount = (owner.buyBackCount || 0) + 1;
   holder.capturedMeeples.splice(meepleIndex, 1);
   returnMeepleToSupply(owner, prisoner.meepleType);
 
