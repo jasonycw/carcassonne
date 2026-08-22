@@ -1311,7 +1311,8 @@ export const THE_TOWER_TILES = [
       { directions: ['SSW'], meepleOffset: { x: 5/16, y: 7/8 }, adjacentCityIndices: [0] },
       { directions: ['SSE'], meepleOffset: { x: 3/4, y: 7/8 }, adjacentCityIndices: [0] }
     ],
-    tower: { offset: { x: 1/2, y: 1/2 } },
+    // CRcr.png places the foundation in the upper-left quadrant.
+    tower: { offset: { x: 1/4, y: 1/4 } },
     imageURL: '/images/tiles/the-tower/CRcr.png',
     expansion: 'the-tower',
     count: 1
