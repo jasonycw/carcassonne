@@ -1477,9 +1477,13 @@ export class GameView {
         const scoreColor = data && data.score !== 0
           ? (data.score > 0 ? colorHex : '#ff4444')
           : 'rgba(255,255,255,0.4)';
+        // Apply the player-specific color directly to the value. The explicit
+        // span prevents inherited/legacy table styles from flattening every
+        // player's category scores to the same green.
+        cellContent = `<span class="score-breakdown-value" style="color:${scoreColor} !important;">${cellContent}</span>`;
         cells += `<td style="padding:3px 10px; text-align:center;
                    border-bottom:1px solid rgba(255,255,255,0.1);
-                   color:${scoreColor};
+                   color:${scoreColor} !important;
                    font-weight:${data && data.score !== 0 ? 'bold' : 'normal'};">${cellContent}</td>`;
       }
 
