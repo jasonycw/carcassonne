@@ -493,8 +493,11 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
     )
     .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 6)
     .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6)
+    // The parent placed-tile group already applies the tile rotation. Applying
+    // another rotation here moves the floor away from its foundation, notably
+    // on rotated CRcr/CcR! tower tiles.
     .attr('transform', (d) =>
-      `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE}) translate(0,${-towerVerticalSize * d.towerHeight})`);
+      `translate(0,${-towerVerticalSize * d.towerHeight})`);
 
   // Determine whether tower outlines are interactive (The Tower expansion step).
   const isTowerStep = step === 'tower';
