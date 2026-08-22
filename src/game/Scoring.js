@@ -148,17 +148,17 @@ export function getFeatureInfo(currentTile, featureIndex, featureType, gameState
     // Cloister point total ranges from 1 (the tile itself) to 9 (fully surrounded)
     results.complete = results.points === 9;
 
-    // Find if anyone has a meeple on this cloister
+        // Find if anyone has a meeple on this cloister
     for (let i = 0; i < currentTile.meeples.length; i++) {
-      if (currentTile.meeples[i].placement.locationType === 'cloister') {
+      const meeple = currentTile.meeples[i];
+      if (meeple.placement.locationType === 'cloister') {
         results.tilesWithMeeples.push({
           placedTile: currentTile,
           meepleIndex: i,
         });
-        break;
+        // Note: cloisters only have one meeple slot (index 0)
       }
     }
-
     return results;
   }
 
@@ -554,7 +554,7 @@ export function checkAndFinalizeFeature(placedTile, featureIndex, featureType, g
       type: featureType,
       players: playerAwards,
       count: 1,
-      complete: featureInfo.complete,
+      complete: featureInfo.complete || (featureType === 'cloister' && scoredPoints === 9),
     });
   }
 

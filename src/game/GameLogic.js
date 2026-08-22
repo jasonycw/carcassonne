@@ -99,6 +99,7 @@ export function createGameState(expansions, playerCount, tileData) {
     currentPlayerIndex: 0,
     step: 'draw',             // 'draw' | 'place' | 'meeple' | 'tower' | 'capture' | 'done'
     pendingCapture: null,     // { tileIndex, capturableMeeples: [...] }
+    featureScores: [],        // Recorded scoring events for breakdown
     lastModified: new Date(),
   };
 }
