@@ -439,9 +439,12 @@ export class LobbyView extends EventEmitter {
     }
 
     // ── Multiplayer: create PeerManager ──
-    this.roomCode = generateRoomCode();
+        this.roomCode = generateRoomCode();
+    // Render the configured lobby before network initialization completes. This
+    // keeps the host UI usable while PeerJS signaling connects or times out.
+    this.dom.lobbyPlayers.style.display = 'block';
+    this._updatePlayerList();
     this._setStatus('Creating room...');
-
     try {
       console.log('[LobbyView] Creating host peer manager, room:', this.roomCode, 'name:', name);
       this.peerManager = new HostPeerManager(this.roomCode, { expansions }, name, playerCount);
