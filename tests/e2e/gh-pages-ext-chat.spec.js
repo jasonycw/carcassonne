@@ -8,6 +8,8 @@
 import { test, expect } from '@playwright/test';
 
 const GH_PAGES_URL = 'https://jasonycw.github.io/carcassonne/';
+const isTransientGhPages503 = (message) =>
+  message === 'Failed to load resource: the server responded with a status of 503 ()';
 
 test.describe('GitHub Pages Extensions & Chat', () => {
   let errors = [];
@@ -17,7 +19,7 @@ test.describe('GitHub Pages Extensions & Chat', () => {
     errors = [];
     netErrors = [];
     page.on('console', (msg) => {
-      if (msg.type() === 'error') errors.push(msg.text());
+      if (msg.type() === 'error' && !isTransientGhPages503(msg.text())) errors.push(msg.text());
     });
     page.on('pageerror', (err) => errors.push(err.message));
     page.on('requestfailed', (req) => {
@@ -32,7 +34,7 @@ test.describe('GitHub Pages Extensions & Chat', () => {
     const hostCtx = await browser.newContext();
     const hostPage = await hostCtx.newPage();
     const hErrors = [], hNet = [];
-    hostPage.on('console', (m) => { if (m.type() === 'error') hErrors.push(m.text()); });
+    hostPage.on('console', (m) => { if (m.type() === 'error' && !isTransientGhPages503(m.text())) hErrors.push(m.text()); });
     hostPage.on('pageerror', (e) => hErrors.push(e.message));
     hostPage.on('requestfailed', (r) => hNet.push({ url: r.url(), err: r.failure()?.errorText }));
 
@@ -59,7 +61,7 @@ test.describe('GitHub Pages Extensions & Chat', () => {
     const clientCtx = await browser.newContext();
     const clientPage = await clientCtx.newPage();
     const cErrors = [], cNet = [];
-    clientPage.on('console', (m) => { if (m.type() === 'error') cErrors.push(m.text()); });
+    clientPage.on('console', (m) => { if (m.type() === 'error' && !isTransientGhPages503(m.text())) cErrors.push(m.text()); });
     clientPage.on('pageerror', (e) => cErrors.push(e.message));
     clientPage.on('requestfailed', (r) => cNet.push({ url: r.url(), err: r.failure()?.errorText }));
 

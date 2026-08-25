@@ -29,6 +29,8 @@ function isTransientPeerDisconnect(text) {
 }
 
 const GH_PAGES_URL = 'https://jasonycw.github.io/carcassonne/';
+const isTransientGhPages503 = (message) =>
+  message === 'Failed to load resource: the server responded with a status of 503 ()';
 
 /**
  * Handle the current game step: place tile, skip tower/capture, or click
@@ -129,7 +131,7 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
     const hostContext = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
     const hostPage = await hostContext.newPage();
     hostPage.on('console', (msg) => {
-      if (msg.type() === 'error' && !isTransientPeerDisconnect(msg.text())) hostErrors.push(msg.text());
+      if (msg.type() === 'error' && !isTransientPeerDisconnect(msg.text()) && !isTransientGhPages503(msg.text())) hostErrors.push(msg.text());
     });
     hostPage.on('pageerror', (err) => hostErrors.push(err.message));
 
@@ -140,7 +142,7 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
     const clientContext = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
     const clientPage = await clientContext.newPage();
     clientPage.on('console', (msg) => {
-      if (msg.type() === 'error' && !isTransientPeerDisconnect(msg.text())) clientErrors.push(msg.text());
+      if (msg.type() === 'error' && !isTransientPeerDisconnect(msg.text()) && !isTransientGhPages503(msg.text())) clientErrors.push(msg.text());
     });
     clientPage.on('pageerror', (err) => clientErrors.push(err.message));
 
