@@ -316,14 +316,19 @@ test('6. Tower Floor Placement Demo', async ({ page }, testInfo) => {
       const outline = page.locator('#game-svg image.tower-outline').first();
       if (await floorBtn.isEnabled().catch(() => false) && await outline.isVisible().catch(() => false)) {
         console.log('Tower demo: selecting Place Floor and placing a real tower floor');
+        const outlineTileIndex = await outline.evaluate((el) => el.__data__.tileIndex);
         await floorBtn.click();
-        await outline.evaluate(el => {
-          const d = el.__data__;
-          window.gameView._handleTowerPiecePlacement(d.tileIndex);
-        });
+        await outline.click();
         await page.waitForTimeout(1000);
+        const placedHeight = await page.evaluate((tileIndex) => {
+          return window.gameView.gamestate.placedTiles[tileIndex]?.tower?.height || 0;
+        }, outlineTileIndex);
+        expect(placedHeight, 'The clicked foundation must gain exactly one tower floor').toBe(1);
         const towerImage = page.locator('#game-svg image.tower').first();
-        await expect(towerImage, 'Tower floor must be rendered in the demo').toHaveCount(1);
+        const renderedForTile = await page.locator('#game-svg image.tower').evaluateAll((els, tileIndex) => {
+          return els.some((el) => el.__data__?.tileIndex === tileIndex);
+        }, outlineTileIndex);
+        expect(renderedForTile, 'The clicked foundation must render its tower floor').toBe(true);
         const towerBox = await towerImage.boundingBox();
         if (towerBox) {
           // Use the real board zoom gesture so the tower block is unmistakable in video.

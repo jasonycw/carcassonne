@@ -478,6 +478,7 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
           offset: d.tile.tower.offset,
           tileRotation: d.rotation,
           towerHeight: i,
+          tileIndex: gamestate.placedTiles.indexOf(d),
         });
       }
       return arr;
