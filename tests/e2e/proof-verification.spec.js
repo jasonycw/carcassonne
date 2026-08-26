@@ -282,6 +282,22 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
     audit.farmScoreEvents = await page.evaluate(() =>
       (window.gameView?.gamestate?.featureScores || []).filter(event => event.type === 'farm').length);
     expect(audit.farmScoreEvents, `Missing River farm scoring event in ${scenarioName}`).toBeGreaterThan(0);
+    const scoreColorAudit = await page.evaluate(() => {
+      const colorMap = { red: '#e74c3c', blue: '#3498db', green: '#2ecc71', yellow: '#f39c12', purple: '#9b59b6', gray: '#1abc9c' };
+      const players = window.gameView?.gamestate?.players || [];
+      return Array.from(document.querySelectorAll('#game-over-banner .score-breakdown-value'))
+        .filter(el => Number(el.dataset.score) !== 0)
+        .map(el => {
+          const score = Number(el.dataset.score);
+          const player = players[Number(el.dataset.playerIndex)];
+          const expected = score < 0 ? '#ff4444' : (colorMap[player?.color] || '#888');
+          return { category: el.dataset.categoryKey, score, expected, style: el.getAttribute('style') || '' };
+        });
+    });
+    expect(scoreColorAudit.length, `No colored final score values were rendered in ${scenarioName}`).toBeGreaterThan(0);
+    for (const entry of scoreColorAudit) {
+      expect(entry.style, `${entry.category} score color mismatch for ${entry.score}`).toContain(`color:${entry.expected} !important`);
+    }
     await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-farm-scoring.png`), fullPage: true });
   }
   if (hasTower) expect(audit.ransomCompleted, `Missing non-zero Tower ransom proof in ${scenarioName}`).toBe(true);

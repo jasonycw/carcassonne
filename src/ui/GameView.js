@@ -1480,7 +1480,7 @@ export class GameView {
         // Apply the player-specific color directly to the value. The explicit
         // span prevents inherited/legacy table styles from flattening every
         // player's category scores to the same green.
-        cellContent = `<span class="score-breakdown-value" style="color:${scoreColor} !important;">${cellContent}</span>`;
+        cellContent = `<span class="score-breakdown-value" data-player-index="${p.playerIndex}" data-category-key="${cat.key}" data-score="${data ? data.score : 0}" style="color:${scoreColor} !important;">${cellContent}</span>`;
         cells += `<td style="padding:3px 10px; text-align:center;
                    border-bottom:1px solid rgba(255,255,255,0.1);
                    color:${scoreColor} !important;
@@ -1491,7 +1491,7 @@ export class GameView {
       cells += `<td style="padding:3px 10px; text-align:center; font-weight:bold;
                  border-bottom:1px solid rgba(255,255,255,0.1); color:${colorHex};">${p.totalScore}</td>`;
 
-      return `<tr>${cells}</tr>`;
+      return `<tr data-player-index="${p.playerIndex}">${cells}</tr>`;
     }).join('');
 
     const headers = categories.map(c =>
