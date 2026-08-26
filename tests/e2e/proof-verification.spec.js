@@ -24,6 +24,9 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
     captureCompleted: false,
     towerClosed: false,
     ransomCompleted: false,
+    farmMeeplePlaced: false,
+    farmProofCaptured: false,
+    farmScoreEvents: 0,
     turnsPlayed: 0,
     midGameCaptured: false,
     midGameTurn: null,
@@ -176,13 +179,26 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
       
       // If we are in the 'confirmed' phase, we can place a meeple before sending the move.
       const isConfirmedPhase = await page.evaluate(() => window.gameView._confirmPhase === 'confirmed');
-      if (isConfirmedPhase && Math.random() < 0.8) {
-        const meepleOutline = page.locator('#game-svg image.meeple-outline').first();
+      if (isConfirmedPhase && (hasRiver || Math.random() < 0.8)) {
+        let meepleOutline = page.locator('#game-svg image.meeple-outline').first();
+        if (hasRiver && !audit.farmMeeplePlaced) {
+          const farmOutline = page.locator('#game-svg image.meeple-outline');
+          const farmIndex = await farmOutline.evaluateAll(elements => elements.findIndex(el => {
+            const d = el.__data__ || {};
+            return d.locationType === 'farm' || d.locationType === 'field' || d.placement?.locationType === 'farm';
+          })).catch(() => -1);
+          if (farmIndex >= 0) meepleOutline = farmOutline.nth(farmIndex);
+        }
         if (await meepleOutline.isVisible({ timeout: 1000 }).catch(() => false)) {
-          console.log('Clicking meeple outline to place scoring meeple');
+          const chosenFarm = hasRiver && !audit.farmMeeplePlaced && await meepleOutline.evaluate(el => {
+            const d = el.__data__ || {};
+            return d.locationType === 'farm' || d.locationType === 'field' || d.placement?.locationType === 'farm';
+          }).catch(() => false);
+          console.log(chosenFarm ? 'Placing deterministic River farm meeple for proof' : 'Clicking meeple outline to place scoring meeple');
           await meepleOutline.evaluate(el => {
             el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
           });
+          if (chosenFarm) audit.farmMeeplePlaced = true;
           await page.waitForTimeout(300);
         }
       }
@@ -194,6 +210,22 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
         if (btnText !== 'Place Tile') audit.turnsPlayed++;
       }
       await page.waitForTimeout(500);
+
+      if (hasRiver && audit.farmMeeplePlaced && !audit.farmProofCaptured) {
+        const farmState = await page.evaluate(() => {
+          const gs = window.gameView?.gamestate;
+          const farmMeeples = (gs?.placedTiles || []).flatMap((tile, tileIndex) =>
+            (tile.meeples || []).filter(m => m.placement?.locationType === 'farm')
+              .map(m => ({ tileIndex, x: tile.x, y: tile.y, featureIndex: m.placement.index })));
+          return { farmMeeples, placedTiles: gs?.placedTiles?.length || 0 };
+        });
+        if (farmState.farmMeeples.length > 0) {
+          audit.farmProofCaptured = true;
+          console.log(`Captured authentic River farm occupancy proof on ${farmState.farmMeeples.length} meeple(s)`);
+          await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-farm-occupancy.png`), fullPage: true });
+          await page.locator('#game-svg').screenshot({ path: testInfo.outputPath(`${scenarioName}-farm-occupancy-board.png`) });
+        }
+      }
     } else {
       // If no placement visible, check if we need to cycle rotations
       const activeTile = page.locator('#game-svg image.active-tile');
@@ -244,6 +276,14 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
   const towerHeaderCount = await page.locator('#game-over-banner th', { hasText: 'Towers' }).count();
   expect(towerHeaderCount, `Unexpected Towers column in ${scenarioName} final scoreboard`).toBe(hasTower ? 1 : 0);
   expect(audit.midGameCaptured, `Missing authentic mid-game screenshot in ${scenarioName}`).toBe(true);
+  if (hasRiver) {
+    expect(audit.farmMeeplePlaced, `Missing explicit River farm occupancy action in ${scenarioName}`).toBe(true);
+    expect(audit.farmProofCaptured, `Missing explicit River farm occupancy screenshot in ${scenarioName}`).toBe(true);
+    audit.farmScoreEvents = await page.evaluate(() =>
+      (window.gameView?.gamestate?.featureScores || []).filter(event => event.type === 'farm').length);
+    expect(audit.farmScoreEvents, `Missing River farm scoring event in ${scenarioName}`).toBeGreaterThan(0);
+    await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-farm-scoring.png`), fullPage: true });
+  }
   if (hasTower) expect(audit.ransomCompleted, `Missing non-zero Tower ransom proof in ${scenarioName}`).toBe(true);
   await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-game-over.png`), fullPage: true });
   fs.writeFileSync(testInfo.outputPath(`${scenarioName}-audit.json`), JSON.stringify(audit, null, 2));
