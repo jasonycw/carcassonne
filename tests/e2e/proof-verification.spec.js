@@ -211,15 +211,15 @@ async function playTurns(page, testInfo, expansions, scenarioName) {
       }
       await page.waitForTimeout(500);
 
-      if (hasRiver && audit.farmMeeplePlaced && !audit.farmProofCaptured) {
+      if (hasRiver && audit.farmMeeplePlaced && audit.turnsPlayed >= 30 && !audit.farmProofCaptured) {
         const farmState = await page.evaluate(() => {
           const gs = window.gameView?.gamestate;
           const farmMeeples = (gs?.placedTiles || []).flatMap((tile, tileIndex) =>
             (tile.meeples || []).filter(m => m.placement?.locationType === 'farm')
               .map(m => ({ tileIndex, x: tile.x, y: tile.y, featureIndex: m.placement.index })));
-          return { farmMeeples, placedTiles: gs?.placedTiles?.length || 0 };
+          return { farmMeeples, placedTiles: gs?.placedTiles?.length || 0, turnsPlayed: gs?.turnsPlayed || 0 };
         });
-        if (farmState.farmMeeples.length > 0) {
+        if (farmState.farmMeeples.length > 0 && farmState.placedTiles >= 20) {
           audit.farmProofCaptured = true;
           console.log(`Captured authentic River farm occupancy proof on ${farmState.farmMeeples.length} meeple(s)`);
           await page.screenshot({ path: testInfo.outputPath(`${scenarioName}-farm-occupancy.png`), fullPage: true });
