@@ -552,6 +552,21 @@ export function placeMeeple(gamestate, tileIndex, locationType, featureIndex, me
     return { success: false, message: 'Pig can only be placed on a farm' };
   }
 
+  // Re-check farm occupancy at commit time.  The UI's legal-placement list can
+  // be stale in multiplayer or after a merged feature changes, so relying on
+  // that list alone can place a second normal farmer on the same connected
+  // field.  Farm feature objects are shared by every tile in the merged field.
+  if (locationType === 'farm' && meepleType !== 'pig') {
+    const farmFeature = tile.features?.farms?.[featureIndex];
+    const occupied = farmFeature?.tilesWithMeeples?.some((entry) => {
+      const occupiedTile = gamestate.placedTiles[entry.placedTileIndex];
+      return Boolean(occupiedTile?.meeples?.[entry.meepleIndex]);
+    });
+    if (occupied) {
+      return { success: false, message: 'Connected farm already has a meeple' };
+    }
+  }
+
   if (meepleType === 'normal') {
     player.remainingMeeples -= 1;
   } else {

@@ -808,6 +808,26 @@ describe('GameLogic', () => {
       });
     });
 
+    it('rejects a second normal meeple on an occupied farm', () => {
+      const gs = makeInitializedState();
+      const farm = gs.placedTiles[0].features.farms[0];
+      farm.tilesWithMeeples.push({ placedTileIndex: 0, meepleIndex: 0 });
+      gs.placedTiles[0].meeples.push({
+        playerIndex: 1,
+        placement: { locationType: 'farm', index: 0 },
+        meepleType: 'normal',
+        scored: false,
+      });
+      const before = gs.players[0].remainingMeeples;
+
+      const result = placeMeeple(gs, 0, 'farm', 0, 'normal');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('Connected farm already has a meeple');
+      expect(gs.players[0].remainingMeeples).toBe(before);
+      expect(gs.placedTiles[0].meeples).toHaveLength(1);
+    });
+
     it('consumes a normal meeple from the player', () => {
       const gs = makeInitializedState();
       const before = gs.players[0].remainingMeeples;
