@@ -923,24 +923,28 @@ function mergeAdjacentFeatures(newTile, gamestate) {
     // Merge farms.
     for (let i = 0; i < (newTile.tile.farms || []).length; i++) {
       const rotatedDirs = getRotatedFeatureDirections(newTile.tile.farms[i].directions, newTile.rotation, true);
-      // Farm directions match: NNW↔SSW, NNE↔SSE, ENE↔WSW, ESE↔WNW
+      // Farm directions match across an edge as follows. Keep this explicit:
+      // chained character replacement corrupts directions such as ENE into WWW.
       const farmDirMap = {
         N: ['NNW', 'NNE'], S: ['SSW', 'SSE'],
         E: ['ENE', 'ESE'], W: ['WNW', 'WSW'],
       };
+      const oppositeFarmDirs = {
+        NNW: 'SSW', NNE: 'SSE',
+        SSW: 'NNW', SSE: 'NNE',
+        ENE: 'WNW', ESE: 'WSW',
+        WNW: 'ENE', WSW: 'ESE',
+      };
       const matchingFarmDirs = farmDirMap[dir] || [];
-      const hasMatch = matchingFarmDirs.some((fd) => rotatedDirs.includes(fd));
-      if (hasMatch) {
-        // For farm merging we check each matching sub-direction.
-        for (const fd of matchingFarmDirs) {
-          if (rotatedDirs.includes(fd)) {
-            const oppFarmDir = fd.replace(/N/g, 'X').replace(/S/g, 'N').replace(/X/g, 'S')
-                                 .replace(/E/g, 'X').replace(/W/g, 'E').replace(/X/g, 'W');
-            const adjFeatIdx = getConnectedFeatureIndex(adjTile, 'farm', oppFarmDir);
-            if (adjFeatIdx >= 0) {
-              mergeConnected('farm', 'farms', i, adjTile, adjFeatIdx);
-            }
-          }
+      for (const farmDir of matchingFarmDirs) {
+        if (!rotatedDirs.includes(farmDir)) continue;
+        const adjFeatIdx = getConnectedFeatureIndex(
+          adjTile,
+          'farm',
+          oppositeFarmDirs[farmDir],
+        );
+        if (adjFeatIdx >= 0) {
+          mergeConnected('farm', 'farms', i, adjTile, adjFeatIdx);
         }
       }
     }
