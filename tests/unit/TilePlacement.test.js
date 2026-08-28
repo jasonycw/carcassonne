@@ -1100,3 +1100,36 @@ describe('multi-neighbor farm occupancy', () => {
     });
   });
 });
+
+
+describe('farm option completeness after partial occupancy', () => {
+  it('keeps an unoccupied farm option while blocking a different connected occupied farm', () => {
+    const rrrrTile = tile('base-game/RRRR');
+    const sourceTile = {
+      x: 0, y: 0, rotation: 0, tile: rrrrTile,
+      northTileIndex: undefined, eastTileIndex: undefined,
+      southTileIndex: undefined, westTileIndex: undefined,
+      meeples: [{
+        playerIndex: 0,
+        placement: { locationType: 'farm', index: 3 },
+        meepleType: 'normal',
+        scored: false,
+      }],
+    };
+    const players = [{ active: true, remainingMeeples: 7 }];
+    const placements = calculateValidPlacements(rrrrTile, [sourceTile], players, []);
+    const candidate = placements.find((p) => p.x === 0 && p.y === 1);
+    expect(candidate).toBeDefined();
+    const rotation = candidate.rotations.find((r) => r.rotation === 0);
+    expect(rotation).toBeDefined();
+
+    // Active RRRR farm[0] NNW connects to source farm[3] SSW, which is occupied.
+    expect(rotation.meeples).not.toContainEqual({
+      meepleType: 'normal', locationType: 'farm', index: 0,
+    });
+    // Active RRRR farm[1] NNE connects to source farm[2] SSE, which is empty.
+    expect(rotation.meeples).toContainEqual({
+      meepleType: 'normal', locationType: 'farm', index: 1,
+    });
+  });
+});

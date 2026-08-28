@@ -843,12 +843,25 @@ function mergeAdjacentFeatures(newTile, gamestate) {
 
   // Helper: merge a single feature between two tiles.
   function mergeConnected(type, plural, newFeatureIndex, adjTile, adjFeatureIndex) {
-    const adjFeature = adjTile.features[plural][adjFeatureIndex];
+    const adjacentFeature = adjTile.features[plural][adjFeatureIndex];
     const newFeature = newTile.features[plural][newFeatureIndex];
-    if (adjFeature && newFeature) {
-      newTile.features[plural][newFeatureIndex] = mergeFeatures(adjFeature, newFeature);
-      // The merge result is the adjFeature, now shared by both tiles.
+    if (!adjacentFeature || !newFeature || adjacentFeature === newFeature) return;
+
+    // Keep the newly placed tile's feature as the canonical object.  A tile can
+    // join more than one existing component in one placement; replacing only
+    // newTile's reference leaves earlier neighbours pointing at stale objects,
+    // which makes farm occupancy appear both occupied and empty depending on
+    // which tile the next validation starts from.
+    mergeFeatures(newFeature, adjacentFeature);
+    for (const placed of gamestate.placedTiles) {
+      const featureList = placed.features?.[plural] || [];
+      for (let featureIdx = 0; featureIdx < featureList.length; featureIdx++) {
+        if (featureList[featureIdx] === adjacentFeature || featureList[featureIdx] === newFeature) {
+          featureList[featureIdx] = newFeature;
+        }
+      }
     }
+    newTile.features[plural][newFeatureIndex] = newFeature;
   }
 
   // Function to check if a direction connects two features.
