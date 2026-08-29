@@ -12,16 +12,23 @@ Play solo, hot-seat with friends on one device, or create a room and share the c
 
 ### Latest Full-Game Proof
 
-The original screenshot set above remains unchanged. The following assets add latest-build evidence for mid-game and completed-score states across the base game, River, Tower, combined River and Tower, and all-expansions scenarios, together with a full River gameplay recording.
+The screenshot set below is organized by scenario and proof purpose. Every referenced image is stored in the repository’s `screenshots/` directory and belongs to the latest validated proof refresh.
 
-| Scenario | Mid-game | Final score |
+| Scenario | Mid-game board | Final score |
 |---|---|---|
 | Base game | ![Latest base mid-game](screenshots/08-base-mid-game-latest.png) | ![Latest base final score](screenshots/07-base-game-over-latest.png) |
 | The River | ![Latest River mid-game](screenshots/10-river-mid-game-latest.png) | ![Latest River final score](screenshots/09-river-game-over-latest.png) |
 | The Tower | ![Latest Tower mid-game](screenshots/15-tower-mid-game-latest.png) | ![Latest Tower final score](screenshots/14-tower-game-over-latest.png) |
 | River + Tower | ![Latest River and Tower mid-game](screenshots/12-river-tower-mid-game-latest.png) | ![Latest River and Tower final score](screenshots/11-river-tower-game-over-latest.png) |
 | All expansions | ![Latest all-expansions mid-game](screenshots/06-all-expansions-mid-game.png) | ![Latest all-expansions final score](screenshots/05-all-expansions-game-over.png) |
-| Tower floor placement | ![Latest Tower floor placement](screenshots/13-tower-floor-placement-latest.png) | Full River recording: [screenshots/river-gameplay-latest.webm](screenshots/river-gameplay-latest.webm) |
+
+#### Tower floor placement
+
+![Latest Tower floor placement](screenshots/13-tower-floor-placement-latest.png)
+
+#### Full-game recording
+
+<video src="screenshots/river-gameplay-latest.webm"></video>
 
 ## Features
 
