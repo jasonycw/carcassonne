@@ -82,8 +82,12 @@ const LOBBY_HTML = `
         <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
           <input type="checkbox" value="traders-and-builders" /> Traders &amp; Builders
         </label>
-        <!-- Tower expansion removed: disabled in the original baseline commit
-             962f33ee and its logic was too complex to re-verify. -->
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+          <input type="checkbox" value="the-river" /> The River
+        </label>
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+          <input type="checkbox" value="the-tower" /> The Tower
+        </label>
       </div>
 
       <div style="display: flex; gap: 12px;">
@@ -435,9 +439,12 @@ export class LobbyView extends EventEmitter {
     }
 
     // ── Multiplayer: create PeerManager ──
-    this.roomCode = generateRoomCode();
+        this.roomCode = generateRoomCode();
+    // Render the configured lobby before network initialization completes. This
+    // keeps the host UI usable while PeerJS signaling connects or times out.
+    this.dom.lobbyPlayers.style.display = 'block';
+    this._updatePlayerList();
     this._setStatus('Creating room...');
-
     try {
       console.log('[LobbyView] Creating host peer manager, room:', this.roomCode, 'name:', name);
       this.peerManager = new HostPeerManager(this.roomCode, { expansions }, name, playerCount);
@@ -567,7 +574,24 @@ export class LobbyView extends EventEmitter {
       this._setStatus('Waiting for players...');
     } catch (err) {
       console.error('Failed to create room:', err);
-      this._setStatus('Error: ' + err.message);
+      // PeerJS is optional for local hot-seat play. If the signaling service is
+      // unavailable, release the failed manager and leave the configured local
+      // player slots ready so the host can still start a multiplayer game.
+      if (this.peerManager) {
+        this.peerManager.removeAllListeners();
+        this.peerManager.destroy();
+        this.peerManager = null;
+      }
+      this.dom.roomDisplay.style.display = 'none';
+      this.dom.lobbyPlayers.style.display = 'block';
+      this.slots.forEach((slot, index) => {
+        if (index > 0) {
+          slot.type = 'unfilled';
+          slot.name = `Player ${index + 1}`;
+        }
+      });
+      this._updatePlayerList();
+      this._setStatus('Online room unavailable; ready for local hot-seat play.');
     }
   }
 
@@ -779,12 +803,12 @@ export class LobbyView extends EventEmitter {
             points: p.points || 0,
             remainingMeeples: p.remainingMeeples != null ? p.remainingMeeples : 7,
             active: p.active || false,
-            hasLargeMeeple: clientExpansions.includes('inns-and-cathedrals'),
-            hasBuilderMeeple: clientExpansions.includes('traders-and-builders'),
-            hasPigMeeple: clientExpansions.includes('traders-and-builders'),
+            hasLargeMeeple: p.hasLargeMeeple != null ? p.hasLargeMeeple : clientExpansions.includes('inns-and-cathedrals'),
+            hasBuilderMeeple: p.hasBuilderMeeple != null ? p.hasBuilderMeeple : clientExpansions.includes('traders-and-builders'),
+            hasPigMeeple: p.hasPigMeeple != null ? p.hasPigMeeple : clientExpansions.includes('traders-and-builders'),
             goods: p.goods || {},
             towers: p.towers || 0,
-            capturedMeeples: [],
+            capturedMeeples: p.capturedMeeples || [],
             acknowledgedGameEnd: false,
           })),
           currentPlayerIndex: init.currentPlayerIndex != null ? init.currentPlayerIndex : 0,
@@ -795,6 +819,10 @@ export class LobbyView extends EventEmitter {
           expansions: clientExpansions,
           messages: init.messages || [],
           featureScores: init.featureScores || [],
+          riverPhase: Boolean(init.riverPhase),
+          riverTailIndex: init.riverTailIndex,
+          riverOpenDirection: init.riverOpenDirection,
+          pendingCapture: init.pendingCapture || null,
         };
         // Remove cancel button if present.
         if (cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
@@ -873,12 +901,12 @@ export class LobbyView extends EventEmitter {
             points: p.points || 0,
             remainingMeeples: p.remainingMeeples != null ? p.remainingMeeples : 7,
             active: p.active || false,
-            hasLargeMeeple: clientExpansions.includes('inns-and-cathedrals'),
-            hasBuilderMeeple: clientExpansions.includes('traders-and-builders'),
-            hasPigMeeple: clientExpansions.includes('traders-and-builders'),
+            hasLargeMeeple: p.hasLargeMeeple != null ? p.hasLargeMeeple : clientExpansions.includes('inns-and-cathedrals'),
+            hasBuilderMeeple: p.hasBuilderMeeple != null ? p.hasBuilderMeeple : clientExpansions.includes('traders-and-builders'),
+            hasPigMeeple: p.hasPigMeeple != null ? p.hasPigMeeple : clientExpansions.includes('traders-and-builders'),
             goods: p.goods || {},
             towers: p.towers || 0,
-            capturedMeeples: [],
+            capturedMeeples: p.capturedMeeples || [],
             acknowledgedGameEnd: false,
           })),
           currentPlayerIndex: init.currentPlayerIndex != null ? init.currentPlayerIndex : 0,
@@ -890,6 +918,10 @@ export class LobbyView extends EventEmitter {
           expansions: init.expansions || ['base-game'],
           messages: init.messages || [],
           featureScores: init.featureScores || [],
+          riverPhase: Boolean(init.riverPhase),
+          riverTailIndex: init.riverTailIndex,
+          riverOpenDirection: init.riverOpenDirection,
+          pendingCapture: init.pendingCapture || null,
         };
 
         this._transitionToGame({
@@ -1326,8 +1358,12 @@ export class LobbyView extends EventEmitter {
       return;
     }
 
-    // Multiplayer: must have PeerManager (host created it in _createGame).
-    if (!this.peerManager) return;
+    // If online signaling failed, the configured players can still play locally
+    // in hot-seat mode.
+    if (!this.peerManager) {
+      this._startLocalGame(this.slots);
+      return;
+    }
 
     const expansions = ['base-game'];
     this.dom.expansionChecks.forEach((cb) => {

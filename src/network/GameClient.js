@@ -96,9 +96,24 @@ export class GameClient extends EventEmitter {
     this.clientPeerManager.placeTowerPiece(tileIndex);
   }
 
+  /** Send a CLOSE_TOWER move to the host. */
+  closeTower(tileIndex, meepleType = 'normal') {
+    this.clientPeerManager.closeTower(tileIndex, meepleType);
+  }
+
   /** Send a CAPTURE_MEEPLE move to the host. */
   captureMeeple(tileIndex, meepleIndex) {
     this.clientPeerManager.captureMeeple(tileIndex, meepleIndex);
+  }
+
+  /** Send SKIP_CAPTURE to the host. */
+  skipCapture() {
+    this.clientPeerManager.skipCapture();
+  }
+
+  /** Send BUY_BACK_PRISONER to the host. */
+  buyBackPrisoner(capturerPlayerIndex, prisonerIndex) {
+    this.clientPeerManager.buyBackPrisoner(capturerPlayerIndex, prisonerIndex);
   }
 
   // ── State reconstruction ────────────────────────────────────────────
@@ -134,14 +149,20 @@ export class GameClient extends EventEmitter {
       hasPigMeeple: p.hasPigMeeple != null ? p.hasPigMeeple : (gs.expansions).includes('traders-and-builders'),
       goods: p.goods || {},
       towers: p.towers || 0,
-      capturedMeeples: [],
+      capturedMeeples: p.capturedMeeples || [],
       acknowledgedGameEnd: false,
     }));
     gs.currentPlayerIndex = sanitized.currentPlayerIndex;
     gs.step = sanitized.step;
+    gs.riverPhase = Boolean(sanitized.riverPhase);
+    gs.riverTailIndex = sanitized.riverTailIndex;
+    gs.riverOpenDirection = sanitized.riverOpenDirection;
+    gs.riverTiles = new Array(sanitized.riverTilesCount || 0).fill(null);
+    gs.pendingCapture = sanitized.pendingCapture || null;
     gs.finished = sanitized.finished;
     gs.messages = sanitized.messages || [];
     gs.featureScores = sanitized.featureScores || [];
+    gs.expansions = sanitized.expansions || gs.expansions;
 
     // Update unused tile count for display (actual tiles stay on host).
     const count = sanitized.unusedTilesCount != null ? sanitized.unusedTilesCount : 0;
@@ -160,9 +181,14 @@ export class GameClient extends EventEmitter {
           playerIndex: m.playerIndex,
           placement: m.placement,
           meepleType: m.meepleType,
+          originalMeepleType: m.originalMeepleType,
           scored: m.scored !== false,
         })),
-        tower: (pt.towerHeight != null || pt.completed != null) ? { height: pt.towerHeight, completed: pt.completed } : undefined,
+        tower: (pt.towerHeight != null || pt.towerCompleted != null) ? { 
+          height: pt.towerHeight, 
+          completed: pt.towerCompleted,
+          buyBackCount: pt.buyBackCount || 0
+        } : undefined,
         features: { cities: [], roads: [], farms: [], cloister: null },
         northTileIndex: undefined,
         southTileIndex: undefined,
@@ -189,6 +215,7 @@ export class GameClient extends EventEmitter {
       const tileDef = TILE_DATA.find((t) => t.id === sanitized.activeTile.tileId) || {};
       gs.activeTile = {
         tile: tileDef,
+        isRiver: Boolean(sanitized.activeTile.isRiver),
         validPlacements: sanitized.activeTile.validPlacements || [],
       };
     } else {

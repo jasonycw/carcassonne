@@ -17,7 +17,11 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:5173/carcassonne/',
     trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
+    screenshot: 'on',
+    video: {
+      mode: 'on',
+      size: { width: 1280, height: 720 }
+    },
   },
 
   // Start Vite dev server before tests.

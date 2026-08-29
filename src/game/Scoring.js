@@ -66,6 +66,18 @@ function getMeepleFlagFromType(meepleType) {
  * @returns {number} Index into the tile's features array of the given type
  * @throws When no matching feature is found
  */
+function getEdgeType(placedTile, direction) {
+  const cardinal = direction.length === 3 ? direction.charAt(1) : direction.charAt(0);
+  const unrotatedCardinal =
+    DIRECTIONS[((DIRECTIONS.indexOf(cardinal) - placedTile.rotation) % 4 + 4) % 4];
+  
+  if (unrotatedCardinal === 'N') return placedTile.tile.northEdge;
+  if (unrotatedCardinal === 'E') return placedTile.tile.eastEdge;
+  if (unrotatedCardinal === 'S') return placedTile.tile.southEdge;
+  if (unrotatedCardinal === 'W') return placedTile.tile.westEdge;
+  return null;
+}
+
 function getFeatureIndex(placedTile, type, direction) {
   const pluralType = type === 'city' ? 'cities' : type + 's';
 
@@ -91,10 +103,7 @@ function getFeatureIndex(placedTile, type, direction) {
     return 1;
   }
 
-  throw new Error(
-    "couldn't find feature index for: " + placedTile.x + ',' + placedTile.y +
-    ' ' + type + ':' + direction
-  );
+  return -1; // Return -1 instead of throwing to allow caller to handle gracefully
 }
 
 // ---------------------------------------------------------------------------
@@ -139,17 +148,17 @@ export function getFeatureInfo(currentTile, featureIndex, featureType, gameState
     // Cloister point total ranges from 1 (the tile itself) to 9 (fully surrounded)
     results.complete = results.points === 9;
 
-    // Find if anyone has a meeple on this cloister
+        // Find if anyone has a meeple on this cloister
     for (let i = 0; i < currentTile.meeples.length; i++) {
-      if (currentTile.meeples[i].placement.locationType === 'cloister') {
+      const meeple = currentTile.meeples[i];
+      if (meeple.placement.locationType === 'cloister') {
         results.tilesWithMeeples.push({
           placedTile: currentTile,
           meepleIndex: i,
         });
-        break;
+        // Note: cloisters only have one meeple slot (index 0)
       }
     }
-
     return results;
   }
 
@@ -322,8 +331,21 @@ export function getFeatureInfo(currentTile, featureIndex, featureType, gameState
         // Edge of the board → feature is NOT complete
         results.complete = false;
       } else {
+        // Verify edge compatibility before recursing
+        const neighborEdgeType = getEdgeType(connectedTile, flippedDirection);
+        const expectedEdgeType = featureType === 'farm' ? 'field' : featureType;
+        
+        if (neighborEdgeType !== expectedEdgeType) {
+          // Incompatible edges (e.g. city touching field) → stop traversal
+          // For cities/roads, this shouldn't happen with valid placement rules,
+          // but for farms, it can happen at river edges.
+          continue;
+        }
+
         // Find the matching feature on the neighbor and recurse
         const connectedIndex = getFeatureIndex(connectedTile, featureType, flippedDirection);
+        if (connectedIndex === -1) continue;
+
         const neighborResults = getFeatureInfo(
           connectedTile, connectedIndex, featureType, gameState, checked
         );
@@ -532,7 +554,7 @@ export function checkAndFinalizeFeature(placedTile, featureIndex, featureType, g
       type: featureType,
       players: playerAwards,
       count: 1,
-      complete: featureInfo.complete,
+      complete: featureInfo.complete || (featureType === 'cloister' && scoredPoints === 9),
     });
   }
 

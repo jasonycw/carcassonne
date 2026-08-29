@@ -98,6 +98,9 @@ function resolveColorName(hexOrName) {
 /** Build full meeple image path. */
 function meepleImagePath(colorIdent, meepleType, location) {
   const suffix = meepleImageSuffix(meepleType, location);
+  if (meepleType === 'tower') {
+    return img('/images/meeples/tower.png');
+  }
   const colorName = typeof colorIdent === 'number'
     ? resolveColorName('#3498db') // fallback for numeric indices
     : resolveColorName(colorIdent);

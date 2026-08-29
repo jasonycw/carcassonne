@@ -147,6 +147,16 @@ function getAdjacentTile(placedTiles, x, y, direction) {
 	return null;
 }
 
+function getTileAt(placedTiles, x, y) {
+	for (let i = 0; i < placedTiles.length; i++) {
+		const t = placedTiles[i];
+		if (t.x === x && t.y === y) {
+			return t;
+		}
+	}
+	return null;
+}
+
 /**
  * Find the index of a feature on a tile by matching a rotated direction.
  *
@@ -471,26 +481,56 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 		};
 	});
 
-	// -----------------------------------------------------------------------
-	// 4. Remove placements that conflict with any already-placed tile
-	// -----------------------------------------------------------------------
-	const invalidIndices = [];
-	for (let k = 0; k < placedTiles.length; k++) {
-		const ct = placedTiles[k];
-		const rt = rotatedTiles[k];
-		for (let j = 0; j < potentialPlacements.length; j++) {
-			const p = potentialPlacements[j];
-			const rp = rotatedPlacements[j];
-			if (
-				(ct.x === p.x && ct.y - 1 === p.y && rt.northEdge !== rp.southEdge) ||
-				(ct.x === p.x && ct.y + 1 === p.y && rt.southEdge !== rp.northEdge) ||
-				(ct.y === p.y && ct.x - 1 === p.x && rt.westEdge !== rp.eastEdge) ||
-				(ct.y === p.y && ct.x + 1 === p.x && rt.eastEdge !== rp.westEdge)
-			) {
-				invalidIndices.push(j);
+		// -----------------------------------------------------------------------
+		// 4. Remove placements that conflict with any already-placed tile
+		// -----------------------------------------------------------------------
+		const invalidIndices = [];
+		for (let k = 0; k < placedTiles.length; k++) {
+			const ct = placedTiles[k];
+			const rt = rotatedTiles[k];
+			for (let j = 0; j < potentialPlacements.length; j++) {
+				const p = potentialPlacements[j];
+				const rp = rotatedPlacements[j];
+				
+				// Strict edge checking across all 4 adjacent directions
+				const checks = [
+					{ dx: 0, dy: -1, edge1: rt.northEdge, edge2: rp.southEdge },
+					{ dx: 0, dy: 1, edge1: rt.southEdge, edge2: rp.northEdge },
+					{ dx: -1, dy: 0, edge1: rt.westEdge, edge2: rp.eastEdge },
+					{ dx: 1, dy: 0, edge1: rt.eastEdge, edge2: rp.westEdge }
+				];
+
+				for (let c = 0; c < checks.length; c++) {
+					const ch = checks[c];
+					const neighbor = getTileAt(placedTiles, p.x + ch.dx, p.y + ch.dy);
+					if (neighbor) {
+						// If there is a neighbor at that position, edges MUST match exactly
+						const nEdges = getRotatedEdges(neighbor.tile, neighbor.rotation);
+						// Determine shared edge type between p and neighbor
+						let edgeA = null;
+						let edgeB = null;
+						if (ch.dx === 0 && ch.dy === -1) { edgeA = rp.northEdge; edgeB = nEdges.southEdge; }
+						else if (ch.dx === 0 && ch.dy === 1) { edgeA = rp.southEdge; edgeB = nEdges.northEdge; }
+						else if (ch.dx === -1 && ch.dy === 0) { edgeA = rp.westEdge; edgeB = nEdges.eastEdge; }
+						else if (ch.dx === 1 && ch.dy === 0) { edgeA = rp.eastEdge; edgeB = nEdges.westEdge; }
+
+						if (edgeA !== edgeB) {
+							invalidIndices.push(j);
+							break;
+						}
+					}
+				}
+
+				if (
+					(ct.x === p.x && ct.y - 1 === p.y && rt.northEdge !== rp.southEdge) ||
+					(ct.x === p.x && ct.y + 1 === p.y && rt.southEdge !== rp.northEdge) ||
+					(ct.y === p.y && ct.x - 1 === p.x && rt.westEdge !== rp.eastEdge) ||
+					(ct.y === p.y && ct.x + 1 === p.x && rt.eastEdge !== rp.westEdge)
+				) {
+					invalidIndices.push(j);
+				}
 			}
 		}
-	}
 
 	const filteredPlacements = potentialPlacements.filter(function (_, idx) {
 		return invalidIndices.indexOf(idx) === -1;
@@ -588,180 +628,58 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 		// ----- 5c. Farms -----
 		for (let fi = 0; fi < activeTileData.farms.length; fi++) {
 			let farmValid = true;
+			let activePlayerHasFarmMeeple = false;
 
 			const rotatedFarmDirs = activeTileData.farms[fi].directions.map(function (dir) {
 				return FARM_DIRECTIONS[(FARM_DIRECTIONS.indexOf(dir) + currentPlacement.rotation * 2) % 8];
 			});
+			const edgeFarmDirections = {
+				N: ['NNW', 'NNE'],
+				E: ['ENE', 'ESE'],
+				S: ['SSW', 'SSE'],
+				W: ['WNW', 'WSW'],
+			};
+			const oppositeFarmDirections = {
+				NNW: 'SSW', NNE: 'SSE',
+				ENE: 'WNW', ESE: 'WSW',
+				SSW: 'NNW', SSE: 'NNE',
+				WNW: 'ENE', WSW: 'ESE',
+			};
 
-			// N → the new tile is south of the existing tile.
-			// The new tile's north edge farms connect to the existing tile's south edge.
-			//   NNW (new tile, north edge left)  ↔ SSW (existing tile, south edge left)
-			//   NNE (new tile, north edge right) ↔ SSE (existing tile, south edge right)
-			if (currentPlacement.directionToSource === 'N') {
-				if (rotatedFarmDirs.indexOf('NNW') !== -1) {
-					const adjSSWIndex = getFeatureIndex(adjacentTile, 'farm', 'SSW');
-					if (adjSSWIndex !== -1) {
-						const ffNNW = getFeatureMeeples(adjacentTile, adjSSWIndex, 'farm', placedTiles);
-						for (let mNNW = 0; mNNW < ffNNW.tilesWithMeeples.length; mNNW++) {
-							const mepNNW = ffNNW.tilesWithMeeples[mNNW];
-							const pNNW = mepNNW.placedTile.meeples[mepNNW.meepleIndex].playerIndex;
-							if (players[pNNW] && players[pNNW].active) {
-								currentPlacement.meeples.push({
-									meepleType: 'pig',
-									locationType: 'farm',
-									index: fi
-								});
-								break;
-							}
+			// A new tile may touch up to four existing tiles. Check every connected
+			// farm component, not just the tile that first generated this candidate.
+			for (const edge of CARDINAL_DIRECTIONS) {
+				const connectedDirections = edgeFarmDirections[edge];
+				const adjacentTile = getAdjacentTile(placedTiles, currentPlacement.x, currentPlacement.y, edge);
+				if (!adjacentTile) continue;
+				for (const farmDirection of connectedDirections) {
+					if (!rotatedFarmDirs.includes(farmDirection)) continue;
+					const adjacentFarmIndex = getFeatureIndex(
+						adjacentTile,
+						'farm',
+						oppositeFarmDirections[farmDirection],
+					);
+					if (adjacentFarmIndex === -1) continue;
+					const featureInfo = getFeatureMeeples(adjacentTile, adjacentFarmIndex, 'farm', placedTiles);
+					if (featureInfo.tilesWithMeeples.length === 0) continue;
+					farmValid = false;
+					for (const meepleInfo of featureInfo.tilesWithMeeples) {
+						const existingMeeple = meepleInfo.placedTile.meeples[meepleInfo.meepleIndex];
+						if (players[existingMeeple.playerIndex] && players[existingMeeple.playerIndex].active) {
+							activePlayerHasFarmMeeple = true;
+							break;
 						}
-						farmValid = farmValid && ffNNW.tilesWithMeeples.length === 0;
-					}
-				}
-				if (rotatedFarmDirs.indexOf('NNE') !== -1) {
-					const adjSSEIndex = getFeatureIndex(adjacentTile, 'farm', 'SSE');
-					if (adjSSEIndex !== -1) {
-						const ffNNE = getFeatureMeeples(adjacentTile, adjSSEIndex, 'farm', placedTiles);
-						for (let mNNE = 0; mNNE < ffNNE.tilesWithMeeples.length; mNNE++) {
-							const mepNNE = ffNNE.tilesWithMeeples[mNNE];
-							const pNNE = mepNNE.placedTile.meeples[mepNNE.meepleIndex].playerIndex;
-							if (players[pNNE] && players[pNNE].active) {
-								currentPlacement.meeples.push({
-									meepleType: 'pig',
-									locationType: 'farm',
-									index: fi
-								});
-								break;
-							}
-						}
-						farmValid = farmValid && ffNNE.tilesWithMeeples.length === 0;
-					}
-				}
-
-			} else if (currentPlacement.directionToSource === 'E') {
-				if (rotatedFarmDirs.indexOf('ENE') !== -1) {
-					const adjWNWIndex = getFeatureIndex(adjacentTile, 'farm', 'WNW');
-					if (adjWNWIndex !== -1) {
-						const ffENE = getFeatureMeeples(adjacentTile, adjWNWIndex, 'farm', placedTiles);
-						for (let mENE = 0; mENE < ffENE.tilesWithMeeples.length; mENE++) {
-							const mepENE = ffENE.tilesWithMeeples[mENE];
-							const pENE = mepENE.placedTile.meeples[mepENE.meepleIndex].playerIndex;
-							if (players[pENE] && players[pENE].active) {
-								currentPlacement.meeples.push({
-									meepleType: 'pig',
-									locationType: 'farm',
-									index: fi
-								});
-								break;
-							}
-						}
-						farmValid = farmValid && ffENE.tilesWithMeeples.length === 0;
-					}
-				}
-				if (rotatedFarmDirs.indexOf('ESE') !== -1) {
-					const adjWSWIndex = getFeatureIndex(adjacentTile, 'farm', 'WSW');
-					if (adjWSWIndex !== -1) {
-						const ffESE = getFeatureMeeples(adjacentTile, adjWSWIndex, 'farm', placedTiles);
-						for (let mESE = 0; mESE < ffESE.tilesWithMeeples.length; mESE++) {
-							const mepESE = ffESE.tilesWithMeeples[mESE];
-							const pESE = mepESE.placedTile.meeples[mepESE.meepleIndex].playerIndex;
-							if (players[pESE] && players[pESE].active) {
-								currentPlacement.meeples.push({
-									meepleType: 'pig',
-									locationType: 'farm',
-									index: fi
-								});
-								break;
-							}
-						}
-						farmValid = farmValid && ffESE.tilesWithMeeples.length === 0;
-					}
-				}
-
-			} else if (currentPlacement.directionToSource === 'S') {
-				// The new tile is north of the existing tile.
-				// The new tile's south edge farms connect to the existing tile's north edge.
-				//   SSW (new tile, south edge left)  ↔ NNW (existing tile, north edge left)
-				//   SSE (new tile, south edge right) ↔ NNE (existing tile, north edge right)
-				if (rotatedFarmDirs.indexOf('SSW') !== -1) {
-					const adjNNWIndex = getFeatureIndex(adjacentTile, 'farm', 'NNW');
-					if (adjNNWIndex !== -1) {
-						const ffSSW = getFeatureMeeples(adjacentTile, adjNNWIndex, 'farm', placedTiles);
-						for (let mSSW = 0; mSSW < ffSSW.tilesWithMeeples.length; mSSW++) {
-							const mepSSW = ffSSW.tilesWithMeeples[mSSW];
-							const pSSW = mepSSW.placedTile.meeples[mepSSW.meepleIndex].playerIndex;
-							if (players[pSSW] && players[pSSW].active) {
-								currentPlacement.meeples.push({
-									meepleType: 'pig',
-									locationType: 'farm',
-									index: fi
-								});
-								break;
-							}
-						}
-						farmValid = farmValid && ffSSW.tilesWithMeeples.length === 0;
-					}
-				}
-				if (rotatedFarmDirs.indexOf('SSE') !== -1) {
-					const adjNNEIndex = getFeatureIndex(adjacentTile, 'farm', 'NNE');
-					if (adjNNEIndex !== -1) {
-						const ffSSE = getFeatureMeeples(adjacentTile, adjNNEIndex, 'farm', placedTiles);
-						for (let mSSE = 0; mSSE < ffSSE.tilesWithMeeples.length; mSSE++) {
-							const mepSSE = ffSSE.tilesWithMeeples[mSSE];
-							const pSSE = mepSSE.placedTile.meeples[mepSSE.meepleIndex].playerIndex;
-							if (players[pSSE] && players[pSSE].active) {
-								currentPlacement.meeples.push({
-									meepleType: 'pig',
-									locationType: 'farm',
-									index: fi
-								});
-								break;
-							}
-						}
-						farmValid = farmValid && ffSSE.tilesWithMeeples.length === 0;
-					}
-				}
-
-			} else if (currentPlacement.directionToSource === 'W') {
-				if (rotatedFarmDirs.indexOf('WNW') !== -1) {
-					const adjENEIndex = getFeatureIndex(adjacentTile, 'farm', 'ENE');
-					if (adjENEIndex !== -1) {
-						const ffWNW = getFeatureMeeples(adjacentTile, adjENEIndex, 'farm', placedTiles);
-						for (let mWNW = 0; mWNW < ffWNW.tilesWithMeeples.length; mWNW++) {
-							const mepWNW = ffWNW.tilesWithMeeples[mWNW];
-							const pWNW = mepWNW.placedTile.meeples[mepWNW.meepleIndex].playerIndex;
-							if (players[pWNW] && players[pWNW].active) {
-								currentPlacement.meeples.push({
-									meepleType: 'pig',
-									locationType: 'farm',
-									index: fi
-								});
-								break;
-							}
-						}
-						farmValid = farmValid && ffWNW.tilesWithMeeples.length === 0;
-					}
-				}
-				if (rotatedFarmDirs.indexOf('WSW') !== -1) {
-					const adjESEIndex = getFeatureIndex(adjacentTile, 'farm', 'ESE');
-					if (adjESEIndex !== -1) {
-						const ffWSW = getFeatureMeeples(adjacentTile, adjESEIndex, 'farm', placedTiles);
-						for (let mWSW = 0; mWSW < ffWSW.tilesWithMeeples.length; mWSW++) {
-							const mepWSW = ffWSW.tilesWithMeeples[mWSW];
-							const pWSW = mepWSW.placedTile.meeples[mepWSW.meepleIndex].playerIndex;
-							if (players[pWSW] && players[pWSW].active) {
-								currentPlacement.meeples.push({
-									meepleType: 'pig',
-									locationType: 'farm',
-									index: fi
-								});
-								break;
-							}
-						}
-						farmValid = farmValid && ffWSW.tilesWithMeeples.length === 0;
 					}
 				}
 			}
 
+			if (activePlayerHasFarmMeeple) {
+				currentPlacement.meeples.push({
+					meepleType: 'pig',
+					locationType: 'farm',
+					index: fi
+				});
+			}
 			if (farmValid) {
 				currentPlacement.meeples.push({
 					meepleType: 'normal',
@@ -770,7 +688,6 @@ export default function calculateValidPlacements(activeTileData, placedTiles, pl
 				});
 			}
 		}
-
 		// ----- 5d. Cloister -----
 		if (activeTileData.cloister) {
 			currentPlacement.meeples.push({

@@ -24,7 +24,15 @@ import {
   updateRotationIndicator,
 } from '../rendering/ActiveTile.js';
 import { img } from '../utils/AssetPaths.js';
-import { placeTile, placeTowerPiece, captureMeeple, skipTowerStep, skipCapture } from '../game/GameLogic.js';
+import {
+  placeTile,
+  placeTowerPiece,
+  placeMeepleOnTower,
+  captureMeeple,
+  buyBackCapturedMeeple,
+  skipTowerStep,
+  skipCapture,
+} from '../game/GameLogic.js';
 import { getDetailedScores } from '../game/Scoring.js';
 import { GameHost } from '../network/GameHost.js';
 import { GameClient } from '../network/GameClient.js';
@@ -75,6 +83,10 @@ const GAME_HTML = `
     ">
 
       <div id="hud-meeple-types" style="display:flex; gap:4px; align-items:center;pointer-events:auto;"></div>
+      <div id="hud-tower-actions" style="display:none; gap:4px; align-items:center; pointer-events:auto;">
+        <button class="hud-btn" id="hud-tower-floor" style="padding: 8px 10px; border-radius: 8px; border: 1px solid #8bc34a; background: #334d20; color: #eaffd0; cursor: pointer;">Place Floor</button>
+        <button class="hud-btn" id="hud-tower-close" style="padding: 8px 10px; border-radius: 8px; border: 1px solid #ffca7a; background: #5a3e18; color: #fff0d0; cursor: pointer;">Close Tower</button>
+      </div>
       <button class="hud-btn" id="hud-confirm" style="
         padding: 8px 16px; border-radius: 8px; border: none;
         background: #66bb6a; color: #111; font-weight: bold; cursor: pointer; pointer-events: auto;
@@ -171,9 +183,11 @@ export class GameView {
     /** @type {{ playerName: string, roomCode: string, preferredIndex: number }|null} */
     this._reconnectInfo = null;
     this._reconnecting = false;
+    this._towerAction = 'floor';
   }
 
   mount(container) {
+    window.gameView = this;
     // Prevent double game-over alert from STATE_UPDATE + GAME_OVER messages.
     this._gameOverShown = false;
     container.innerHTML = GAME_HTML;
@@ -185,6 +199,9 @@ export class GameView {
       scoreboard: container.querySelector('#game-scoreboard'),
       hud: container.querySelector('#game-hud'),
       meepleTypes: container.querySelector('#hud-meeple-types'),
+      towerActions: container.querySelector('#hud-tower-actions'),
+      towerFloor: container.querySelector('#hud-tower-floor'),
+      towerClose: container.querySelector('#hud-tower-close'),
       confirm: container.querySelector('#hud-confirm'),
       reconnectOverlay: container.querySelector('#game-reconnect-overlay'),
       reconnectFailed: container.querySelector('#reconnect-failed'),
@@ -399,6 +416,14 @@ export class GameView {
     this.dom.confirm.addEventListener('click', () => {
       this._confirmPlacement();
     });
+    this.dom.towerFloor.addEventListener('click', () => {
+      this._towerAction = 'floor';
+      this._showStatusMessage('Select an open tower or foundation to place a floor.');
+    });
+    this.dom.towerClose.addEventListener('click', () => {
+      this._towerAction = 'close';
+      this._showStatusMessage('Select an open tower to close with your meeple.');
+    });
 
     this.dom.menuBtn.addEventListener('click', () => {
       // Toggle chat panel on click; settings accessible via keyboard shortcut.
@@ -516,6 +541,7 @@ export class GameView {
           <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
                background:${colorHex};vertical-align:middle;margin-right:4px;"></span>
           ${escapeHtml(p.user?.username || 'Player')}'s turn
+          ${this.gamestate.riverPhase ? '<span style="margin-left:8px;color:#80cbc4;">River phase</span>' : ''}
         `;
       } else {
         this.dom.turnIndicator.textContent = '';
@@ -546,6 +572,15 @@ export class GameView {
         this.gamestate.finished,
         this._connectedPlayers,
       );
+
+      // Bind buy-back clicks
+      this.dom.scoreboard.querySelectorAll('.prisoner-buyback').forEach(el => {
+        el.addEventListener('click', () => {
+          const capturerIdx = parseInt(el.dataset.capturer, 10);
+          const prisonerIdx = parseInt(el.dataset.index, 10);
+          this._handleBuyBackPrisoner(capturerIdx, prisonerIdx);
+        });
+      });
     }
   }
 
@@ -749,16 +784,24 @@ export class GameView {
     if (step === 'tower' && isActive) {
       this._confirmPhase = '';
       this._pendingPlacement = null;
+      const player = this.gamestate.players[this.playerIndex] || {};
       if (this.dom) {
         this.dom.hud.style.display = 'flex';
-        this.dom.meepleTypes.style.display = 'none';
+        // Show meeple selector for tower-closing choice if player has both or just large.
+        this.dom.meepleTypes.style.display = 'flex';
+        this.dom.towerActions.style.display = 'flex';
+        this.dom.towerFloor.disabled = (player.towers || 0) <= 0;
+        this.dom.towerClose.disabled = (player.remainingMeeples || 0) <= 0 && !player.hasLargeMeeple;
       }
+      this._updateMeepleTypeSelector(player);
       this._updateHUD('tower');
+      this._showStatusMessage('Tower expansion active: Select an action and click a foundation on the board.');
       return;
     }
 
     // Handle capture step: show capture HUD.
     if (step === 'capture' && isActive) {
+      if (this.dom) this.dom.towerActions.style.display = 'none';
       this._showCaptureUI();
       return;
     }
@@ -771,6 +814,7 @@ export class GameView {
       if (sm) sm.meeple = null;
       if (this.dom) {
         this.dom.hud.style.display = 'flex';
+        this.dom.towerActions.style.display = 'none';
         // Show meeple type selector only when it's the viewer's turn
         this.dom.meepleTypes.style.display = 'flex';
       }
@@ -1003,6 +1047,13 @@ export class GameView {
 
   /** Skip the capture step (decline to capture any meeple). */
   _handleSkipCapture() {
+    if (this.gameClient) {
+      // P2P client: tell host we're skipping the capture step.
+      this.gameClient.skipCapture();
+      if (this.dom) this.dom.hud.style.display = 'none';
+      return;
+    }
+
     const result = skipCapture(this.gamestate);
     if (result.success) {
       this._renderBoard();
@@ -1040,8 +1091,9 @@ export class GameView {
         btn.disabled = false;
         break;
       case 'tower':
-        // Tower step: offer to skip tower placement.
-        btn.textContent = 'Skip (Place Meeple)';
+        // Tower step: floor/close actions are selected with the adjacent
+        // controls; the primary button skips the optional Tower action.
+        btn.textContent = 'Skip Tower Action';
         btn.style.background = '#78909c';
         btn.style.color = '#fff';
         btn.disabled = false;
@@ -1069,15 +1121,25 @@ export class GameView {
    * Places a tower piece on the clicked tile.
    */
   _handleTowerPiecePlacement(tileIndex) {
+    const closing = this._towerAction === 'close';
+    const activePlayer = this.gamestate.players[this.gamestate.currentPlayerIndex];
+    // Allow using the selected meeple type from the HUD (normal or large) for closing.
+    let meepleType = meeplePlacementMode;
+    if (meepleType !== 'normal' && meepleType !== 'large') {
+      meepleType = (activePlayer.remainingMeeples > 0) ? 'normal' : 'large';
+    }
+
     if (this.gameClient) {
-      // P2P client: send tower placement to host.
-      this.gameClient.placeTowerPiece(tileIndex);
+      if (closing) this.gameClient.closeTower(tileIndex, meepleType);
+      else this.gameClient.placeTowerPiece(tileIndex);
       if (this.dom) this.dom.hud.style.display = 'none';
       return;
     }
 
     // Host/solo: validate locally.
-    const result = placeTowerPiece(this.gamestate, tileIndex);
+    const result = closing
+      ? placeMeepleOnTower(this.gamestate, tileIndex, meepleType)
+      : placeTowerPiece(this.gamestate, tileIndex);
 
     if (result.success) {
       this._renderBoard();
@@ -1142,6 +1204,25 @@ export class GameView {
       }
     } else {
       this._showStatusMessage(result.message || 'Cannot capture meeple');
+    }
+  }
+
+  /** Handle a prisoner buy-back action. */
+  _handleBuyBackPrisoner(capturerPlayerIndex, prisonerIndex) {
+    if (this.gameClient) {
+      this.gameClient.buyBackPrisoner(capturerPlayerIndex, prisonerIndex);
+      return;
+    }
+
+    const result = buyBackCapturedMeeple(this.gamestate, capturerPlayerIndex, prisonerIndex);
+    if (result.success) {
+      this._renderBoard();
+      this._updateTurnIndicator();
+      this._showActiveTileIfNeeded();
+      saveGame(this.gamestate);
+      if (this.gameHost) this.gameHost.broadcastState();
+    } else {
+      this._showStatusMessage(result.message || 'Cannot buy back prisoner');
     }
   }
 
@@ -1274,6 +1355,7 @@ export class GameView {
   _renderGameOverBanner() {
     const banner = this.dom && this.dom.container.querySelector('#game-over-banner');
     if (!banner) return;
+    banner.style.display = 'block';
 
     const winner = this.gamestate.players.reduce((best, p) =>
       p.points > best.points ? p : best,
@@ -1294,6 +1376,8 @@ export class GameView {
     // Compute per-category breakdown
     const detailed = getDetailedScores(this.gamestate);
     const hasGoods = detailed.players.some(p => p.categories.goods);
+    const hasTower = Array.isArray(this.gamestate.expansions)
+      && this.gamestate.expansions.includes('the-tower');
 
     banner.innerHTML = `
       <div style="
@@ -1314,7 +1398,7 @@ export class GameView {
           <span style="font-weight:bold;">${escapeHtml(winner.user?.username || 'Player')}</span>
           wins with <span style="font-weight:bold;">${winner.points}</span> points!
         </div>
-        ${this._renderScoreBreakdown(detailed, hasGoods)}
+        ${this._renderScoreBreakdown(detailed, hasGoods, hasTower)}
         <button id="game-over-lobby-btn" style="
           background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.5);
           color: #fff; padding: 8px 24px; border-radius: 8px;
@@ -1339,9 +1423,10 @@ export class GameView {
    * Render a per-category score breakdown table.
    * @param {Object} detailed - Result from getDetailedScores()
    * @param {boolean} hasGoods - Whether goods categories exist
+   * @param {boolean} hasTower - Whether The Tower expansion is enabled
    * @returns {string} HTML string for the breakdown table
    */
-  _renderScoreBreakdown(detailed, hasGoods) {
+  _renderScoreBreakdown(detailed, hasGoods, hasTower = false) {
     if (!detailed || !detailed.players) return '';
 
     // Category definitions in display order
@@ -1353,6 +1438,9 @@ export class GameView {
       { key: 'farm', label: 'Farms' },
       { key: 'cloister', label: 'Cloisters' },
     ];
+    if (hasTower) {
+      categories.push({ key: 'tower', label: 'Towers' });
+    }
     if (hasGoods) {
       categories.push({ key: 'goods', label: 'Goods' });
     }
@@ -1376,25 +1464,34 @@ export class GameView {
       for (const cat of categories) {
         const data = p.categories[cat.key];
         let cellContent = '-';
-        if (data && data.score > 0) {
+        if (data && data.score !== 0) {
           const countLabel = data.count > 1 ? ` (${data.count})` : '';
-          cellContent = `${data.score}${countLabel}`;
+          cellContent = `${data.score > 0 ? '+' : ''}${data.score}${countLabel}`;
         } else if (data && data.score === 0 && data.count > 0) {
           cellContent = `0 (${data.count})`;
         } else if (data && data.score === 0) {
           cellContent = '0';
         }
+        // Positive points use the player's color so each row remains identifiable;
+        // negative deductions (such as Tower ransoms) use red for clear loss semantics.
+        const scoreColor = data && data.score !== 0
+          ? (data.score > 0 ? colorHex : '#ff4444')
+          : 'rgba(255,255,255,0.4)';
+        // Apply the player-specific color directly to the value. The explicit
+        // span prevents inherited/legacy table styles from flattening every
+        // player's category scores to the same green.
+        cellContent = `<span class="score-breakdown-value" data-player-index="${p.playerIndex}" data-category-key="${cat.key}" data-score="${data ? data.score : 0}" style="color:${scoreColor} !important;">${cellContent}</span>`;
         cells += `<td style="padding:3px 10px; text-align:center;
                    border-bottom:1px solid rgba(255,255,255,0.1);
-                   color:${data && data.score > 0 ? colorHex : 'rgba(255,255,255,0.4)'};
-                   font-weight:${data && data.score > 0 ? 'bold' : 'normal'};">${cellContent}</td>`;
+                   color:${scoreColor} !important;
+                   font-weight:${data && data.score !== 0 ? 'bold' : 'normal'};">${cellContent}</td>`;
       }
 
       // Total column
       cells += `<td style="padding:3px 10px; text-align:center; font-weight:bold;
                  border-bottom:1px solid rgba(255,255,255,0.1); color:${colorHex};">${p.totalScore}</td>`;
 
-      return `<tr>${cells}</tr>`;
+      return `<tr data-player-index="${p.playerIndex}">${cells}</tr>`;
     }).join('');
 
     const headers = categories.map(c =>

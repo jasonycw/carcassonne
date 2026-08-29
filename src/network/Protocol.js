@@ -40,7 +40,10 @@ export const MessageType = {
   SKIP_MEEPLE:        'skip_meeple',
   SKIP_TURN:          'skip_turn',
   PLACE_TOWER:        'place_tower',        // { tileIndex }
+  CLOSE_TOWER:        'close_tower',        // { tileIndex, meepleType }
   CAPTURE_MEEPLE:     'capture_meeple',     // { tileIndex, meepleIndex }
+  SKIP_CAPTURE:       'skip_capture',
+  BUY_BACK_PRISONER:  'buy_back_prisoner',  // { capturerPlayerIndex, prisonerIndex }
 
   // ── Game state (host → client) ──────────────────────────────────────
   GAME_STATE_SYNC:    'game_state_sync',    // full state snapshot
@@ -154,6 +157,18 @@ export function placeTowerMove(tileIndex) {
   return createMessage(MessageType.PLACE_TOWER, { tileIndex });
 }
 
+export function closeTowerMove(tileIndex, meepleType = 'normal') {
+  return createMessage(MessageType.CLOSE_TOWER, { tileIndex, meepleType });
+}
+
 export function captureMeepleMove(tileIndex, meepleIndex) {
   return createMessage(MessageType.CAPTURE_MEEPLE, { tileIndex, meepleIndex });
+}
+
+export function skipCaptureMove() {
+  return createMessage(MessageType.SKIP_CAPTURE, {});
+}
+
+export function buyBackPrisonerMove(capturerPlayerIndex, prisonerIndex) {
+  return createMessage(MessageType.BUY_BACK_PRISONER, { capturerPlayerIndex, prisonerIndex });
 }

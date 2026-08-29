@@ -110,6 +110,9 @@ function meepleImageSuffix(meepleType, location) {
 /** Build the full image path for a meeple. */
 function meepleImagePath(colorName, meepleType, location) {
   const suffix = meepleImageSuffix(meepleType, location);
+  if (meepleType === 'tower') {
+    return img('/images/meeples/tower.png');
+  }
   return img(`/images/meeples/${colorName}_${suffix}.png`);
 }
 
@@ -130,6 +133,10 @@ function colorNameForPlayer(player) {
 function resolveMeepleOffset(placement, tile) {
   if (placement.locationType === 'cloister') {
     return { x: 0.5, y: 0.5 };
+  }
+  if (placement.locationType === 'tower') {
+    // Return the tower foundation offset if available, otherwise center.
+    return tile.tower?.offset || { x: 0.5, y: 0.5 };
   }
   const key = placement.locationType === 'city' ? 'cities' : placement.locationType + 's';
   const features = tile[key];
@@ -358,8 +365,7 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
     .attr('transform', (d) => {
       const x = svgWidth / 2 + d.x * TILE_SIZE;
       const y = svgHeight / 2 + d.y * TILE_SIZE;
-      // Rotate around the tile centre then translate.
-      return `rotate(${90 * d.rotation},${x + TILE_SIZE / 2},${y + TILE_SIZE / 2}) translate(${x},${y})`;
+      return `translate(${x},${y}) rotate(${90 * d.rotation},${TILE_SIZE / 2},${TILE_SIZE / 2})`;
     })
     .attr('href', (d) => img(d.tile.imageURL));
 
@@ -384,7 +390,7 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
     .attr('transform', (d) => {
       const x = svgWidth / 2 + d.x * TILE_SIZE;
       const y = svgHeight / 2 + d.y * TILE_SIZE;
-      return `rotate(${90 * d.rotation},${x + TILE_SIZE / 2},${y + TILE_SIZE / 2}) translate(${x},${y})`;
+      return `translate(${x},${y}) rotate(${90 * d.rotation},${TILE_SIZE / 2},${TILE_SIZE / 2})`;
     });
 
   // ── Meeples on placed tiles ───────────────────────────────────────────
@@ -465,13 +471,14 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
   // Already-placed tower floors.
   tileGroups.select('g.tower-pieces').selectAll('image.tower')
     .data((d) => {
-      if (!d.tower) return [];
+      if (!d.tower || !d.tile.tower || !d.tile.tower.offset) return [];
       const arr = [];
       for (let i = 0; i < d.tower.height; i++) {
         arr.push({
-          offset: d.tile.tower ? d.tile.tower.offset : { x: 0.5, y: 0.5 },
+          offset: d.tile.tower.offset,
           tileRotation: d.rotation,
           towerHeight: i,
+          tileIndex: gamestate.placedTiles.indexOf(d),
         });
       }
       return arr;
@@ -486,9 +493,12 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
       (exit) => exit.remove()
     )
     .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 6)
-    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6 - towerVerticalSize * d.towerHeight)
+    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6)
+    // The parent placed-tile group already applies the tile rotation. Applying
+    // another rotation here moves the floor away from its foundation, notably
+    // on rotated CRcr/CcR! tower tiles.
     .attr('transform', (d) =>
-      `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE})`);
+      `translate(0,${-towerVerticalSize * d.towerHeight})`);
 
   // Determine whether tower outlines are interactive (The Tower expansion step).
   const isTowerStep = step === 'tower';
@@ -496,12 +506,14 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
   // Tower outlines (unplaced, clickable). Visible only during tower step.
   tileGroups.selectAll('image.tower-outline')
     .data((d, i) => {
-      if (!d.tile.tower || d.tower.completed) return [];
+      if (!d.tile.tower || (d.tower && d.tower.completed)) return [];
+      // Rule: Towers have a maximum height of 5 floors.
+      if (d.tower && d.tower.height >= 5) return [];
       return [{
         offset: d.tile.tower.offset,
         tileRotation: d.rotation,
         tileIndex: i,
-        towerHeight: d.tower.height,
+        towerHeight: d.tower ? d.tower.height : 0,
       }];
     })
     .join(
@@ -518,13 +530,21 @@ export function draw(gamestate, playerId, callbacks = {}, step, pendingCapture) 
             callbacks.onTowerOutlineClick(d.tileIndex);
           }
         }),
-      (update) => update,
+      (update) => update
+        .attr('visibility', isTowerStep ? 'visible' : 'hidden')
+        .style('cursor', isTowerStep ? 'pointer' : 'default')
+        .on('click', function (event, d) {
+          if (!isTowerStep) return;
+          if (callbacks.onTowerOutlineClick) {
+            callbacks.onTowerOutlineClick(d.tileIndex);
+          }
+        }),
       (exit) => exit.remove()
     )
     .attr('x', (d) => d.offset.x * TILE_SIZE - TILE_SIZE / 6)
-    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6 - towerVerticalSize * d.towerHeight)
+    .attr('y', (d) => d.offset.y * TILE_SIZE - TILE_SIZE / 6)
     .attr('transform', (d) =>
-      `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE})`)
+      `rotate(${d.tileRotation * -90},${d.offset.x * TILE_SIZE},${d.offset.y * TILE_SIZE}) translate(0,${-towerVerticalSize * d.towerHeight})`)
     .attr('visibility', isTowerStep ? 'visible' : 'hidden')
     .style('cursor', isTowerStep ? 'pointer' : 'default');
 

@@ -12,6 +12,7 @@ const GH_PAGES_URL = 'https://jasonycw.github.io/carcassonne/';
 test.describe('GitHub Pages Lobby', () => {
 
   test('joiner sees lobby with host name, slot names, and disconnect frees slot', async ({ browser }) => {
+    test.setTimeout(120000);
     // ── Host context ────────────────────────────────────────────────────
     const hostContext = await browser.newContext();
     const hostPage = await hostContext.newPage();

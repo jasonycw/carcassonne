@@ -808,6 +808,74 @@ describe('GameLogic', () => {
       });
     });
 
+    it('rejects a second normal meeple on an occupied farm', () => {
+      const gs = makeInitializedState();
+      const farm = gs.placedTiles[0].features.farms[0];
+      farm.tilesWithMeeples.push({ placedTileIndex: 0, meepleIndex: 0 });
+      gs.placedTiles[0].meeples.push({
+        playerIndex: 1,
+        placement: { locationType: 'farm', index: 0 },
+        meepleType: 'normal',
+        scored: false,
+      });
+      const before = gs.players[0].remainingMeeples;
+
+      const result = placeMeeple(gs, 0, 'farm', 0, 'normal');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('Connected farm already has a meeple');
+      expect(gs.players[0].remainingMeeples).toBe(before);
+      expect(gs.placedTiles[0].meeples).toHaveLength(1);
+    });
+
+    it('canonicalizes an east-west connected farm before occupancy validation', () => {
+      const startTile = {
+        id: 'base-game/test-farm-start',
+        startingTile: true,
+        count: 1,
+        northEdge: 'field', eastEdge: 'field', southEdge: 'field', westEdge: 'field',
+        cities: [], roads: [],
+        farms: [{ directions: ['ENE'] }],
+      };
+      const joiningTile = {
+        id: 'base-game/test-farm-join',
+        count: 1,
+        northEdge: 'field', eastEdge: 'field', southEdge: 'field', westEdge: 'field',
+        cities: [], roads: [],
+        farms: [{ directions: ['WNW'] }],
+      };
+      const gs = makeState([startTile, joiningTile]);
+      initializeNewGame(gs, startTile);
+
+      vi.mocked(calculateValidPlacements).mockReturnValueOnce([{
+        x: 1, y: 0,
+        rotations: [{ rotation: 0, meeples: [] }],
+      }]);
+      gs.activeTile = {
+        tile: joiningTile,
+        validPlacements: [{ x: 1, y: 0, rotations: [{ rotation: 0, meeples: [] }] }],
+        isRiver: false,
+      };
+
+      const startFarm = gs.placedTiles[0].features.farms[0];
+      gs.placedTiles[0].meeples.push({
+        playerIndex: 1,
+        placement: { locationType: 'farm', index: 0 },
+        meepleType: 'normal',
+        scored: false,
+      });
+      startFarm.tilesWithMeeples.push({ placedTileIndex: 0, meepleIndex: 0 });
+
+      const placement = placeTile(gs, 1, 0, 0);
+      expect(placement.success).toBe(true);
+      expect(gs.placedTiles[0].features.farms[0]).toBe(gs.placedTiles[1].features.farms[0]);
+      expect(gs.placedTiles[1].features.farms[0].tilesWithMeeples).toHaveLength(1);
+
+      const result = placeMeeple(gs, 1, 'farm', 0, 'normal');
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('Connected farm already has a meeple');
+    });
+
     it('consumes a normal meeple from the player', () => {
       const gs = makeInitializedState();
       const before = gs.players[0].remainingMeeples;

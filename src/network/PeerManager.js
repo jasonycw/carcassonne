@@ -648,6 +648,10 @@ export class HostPeerManager extends PeerManager {
         hasLargeMeeple: p.hasLargeMeeple || false,
         hasBuilderMeeple: p.hasBuilderMeeple || false,
         hasPigMeeple: p.hasPigMeeple || false,
+        capturedMeeples: (p.capturedMeeples || []).map((prisoner) => ({
+          playerIndex: prisoner.playerIndex,
+          meepleType: prisoner.meepleType,
+        })),
       })),
       placedTiles: state.placedTiles.map((pt) => ({
         tileId: pt.tile.id,
@@ -659,15 +663,18 @@ export class HostPeerManager extends PeerManager {
           playerIndex: m.playerIndex,
           placement: m.placement,
           meepleType: m.meepleType,
+          originalMeepleType: m.originalMeepleType,
           scored: m.scored,
         })),
         towerHeight: pt.tower ? pt.tower.height : undefined,
-        completed: pt.tower ? pt.tower.completed : undefined,
+        towerCompleted: pt.tower ? pt.tower.completed : undefined,
+        buyBackCount: pt.tower ? pt.tower.buyBackCount : undefined,
       })),
       currentPlayerIndex: state.currentPlayerIndex,
       activeTile: state.activeTile
         ? {
             tileId: state.activeTile.tile.id,
+            isRiver: Boolean(state.activeTile.isRiver),
             validPlacements: state.activeTile.validPlacements
               ? state.activeTile.validPlacements.map((vp) => ({
                   x: vp.x,
@@ -685,6 +692,11 @@ export class HostPeerManager extends PeerManager {
           }
         : null,
       unusedTilesCount: (state.unusedTiles || []).length,
+      riverTilesCount: (state.riverTiles || []).length,
+      riverPhase: Boolean(state.riverPhase),
+      riverTailIndex: state.riverTailIndex,
+      riverOpenDirection: state.riverOpenDirection,
+      pendingCapture: state.pendingCapture || null,
       step: state.step,
       messages: state.messages,
     };
@@ -827,8 +839,23 @@ export class ClientPeerManager extends PeerManager {
     this.sendMove(createMessage(MessageType.PLACE_TOWER, { tileIndex }));
   }
 
+  /** Close an open tower with a normal or large meeple. */
+  closeTower(tileIndex, meepleType = 'normal') {
+    this.sendMove(createMessage(MessageType.CLOSE_TOWER, { tileIndex, meepleType }));
+  }
+
   /** Capture a meeple. */
   captureMeeple(tileIndex, meepleIndex) {
     this.sendMove(createMessage(MessageType.CAPTURE_MEEPLE, { tileIndex, meepleIndex }));
+  }
+
+  /** Skip the capture step. */
+  skipCapture() {
+    this.sendMove(createMessage(MessageType.SKIP_CAPTURE, {}));
+  }
+
+  /** Buy back a captured meeple. */
+  buyBackPrisoner(capturerPlayerIndex, prisonerIndex) {
+    this.sendMove(createMessage(MessageType.BUY_BACK_PRISONER, { capturerPlayerIndex, prisonerIndex }));
   }
 }

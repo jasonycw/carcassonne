@@ -24,7 +24,13 @@ let meeplePlacementCounter = 0;
 
 import { test, expect } from '@playwright/test';
 
+function isTransientPeerDisconnect(text) {
+  return /PeerJS.*Lost connection to server|Lost connection to server/i.test(text);
+}
+
 const GH_PAGES_URL = 'https://jasonycw.github.io/carcassonne/';
+const isTransientGhPages503 = (message) =>
+  message === 'Failed to load resource: the server responded with a status of 503 ()';
 
 /**
  * Handle the current game step: place tile, skip tower/capture, or click
@@ -124,7 +130,9 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
     // ── Host context ─────────────────────────────────────────────────────
     const hostContext = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
     const hostPage = await hostContext.newPage();
-    hostPage.on('console', (msg) => { if (msg.type() === 'error') hostErrors.push(msg.text()); });
+    hostPage.on('console', (msg) => {
+      if (msg.type() === 'error' && !isTransientPeerDisconnect(msg.text()) && !isTransientGhPages503(msg.text())) hostErrors.push(msg.text());
+    });
     hostPage.on('pageerror', (err) => hostErrors.push(err.message));
 
     await hostPage.goto(GH_PAGES_URL, { waitUntil: 'networkidle', timeout: 30000 });
@@ -133,7 +141,9 @@ test.describe('Screenshot Game (P2P on GitHub Pages)', () => {
     // ── Client context (Remote player 1) ─────────────────────────────────
     const clientContext = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
     const clientPage = await clientContext.newPage();
-    clientPage.on('console', (msg) => { if (msg.type() === 'error') clientErrors.push(msg.text()); });
+    clientPage.on('console', (msg) => {
+      if (msg.type() === 'error' && !isTransientPeerDisconnect(msg.text()) && !isTransientGhPages503(msg.text())) clientErrors.push(msg.text());
+    });
     clientPage.on('pageerror', (err) => clientErrors.push(err.message));
 
     // ── 1. Lobby (4 players with expansions) ─────────────────────────────
