@@ -10,21 +10,18 @@ Play solo, hot-seat with friends on one device, or create a room and share the c
 |-------|-------------|----------|-----------|
 | ![Lobby](screenshots/01-lobby.png) | ![Game Board](screenshots/02-game-started.png) | ![Mid-game](screenshots/03-mid-game.png) | ![Game Over](screenshots/04-game-over.png) |
 
-### Latest Full-Game Proof
+### Latest Expansion Proof
 
-The screenshot set below is organized by scenario and proof purpose. Every referenced image is stored in the repository’s `screenshots/` directory and belongs to the latest validated proof refresh.
+The proof images below are part of this screenshots section and are regenerated from the current build by the authoritative Playwright proof matrix. The original four screenshots above remain the stable project overview; the matrix below documents the complete game flow for each supported expansion combination without removing or replacing those original README assets.
 
-| Scenario | Mid-game board | Final score |
-|---|---|---|
-| Base game | ![Latest base mid-game](screenshots/08-base-mid-game-latest.png) | ![Latest base final score](screenshots/07-base-game-over-latest.png) |
-| The River | ![Latest River mid-game](screenshots/10-river-mid-game-latest.png) | ![Latest River final score](screenshots/09-river-game-over-latest.png) |
-| The Tower | ![Latest Tower mid-game](screenshots/15-tower-mid-game-latest.png) | ![Latest Tower final score](screenshots/14-tower-game-over-latest.png) |
-| River + Tower | ![Latest River and Tower mid-game](screenshots/12-river-tower-mid-game-latest.png) | ![Latest River and Tower final score](screenshots/11-river-tower-game-over-latest.png) |
-| All expansions | ![Latest all-expansions mid-game](screenshots/06-all-expansions-mid-game.png) | ![Latest all-expansions final score](screenshots/05-all-expansions-game-over.png) |
+| Scenario | Mid-game board | Action proof | Final score |
+|---|---|---|---|
+| Base game | ![Latest base mid-game](screenshots/08-base-mid-game-latest.png) | — | ![Latest base final score](screenshots/07-base-game-over-latest.png) |
+| The River | ![Latest River mid-game](screenshots/10-river-mid-game-latest.png) | — | ![Latest River final score](screenshots/09-river-game-over-latest.png) |
+| The Tower | ![Latest Tower mid-game](screenshots/15-tower-mid-game-latest.png) | ![Latest Tower floor placement](screenshots/13-tower-floor-placement-latest.png) | ![Latest Tower final score](screenshots/14-tower-game-over-latest.png) |
+| River + Tower | ![Latest River and Tower mid-game](screenshots/12-river-tower-mid-game-latest.png) | — | ![Latest River and Tower final score](screenshots/11-river-tower-game-over-latest.png) |
+| All expansions | ![Latest all-expansions mid-game](screenshots/06-all-expansions-mid-game.png) | — | ![Latest all-expansions final score](screenshots/05-all-expansions-game-over.png) |
 
-#### Tower floor placement
-
-![Latest Tower floor placement](screenshots/13-tower-floor-placement-latest.png)
 
 #### Full-game recording
 
