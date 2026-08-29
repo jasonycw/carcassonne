@@ -1535,13 +1535,16 @@ export const THE_RIVER_TILES = [
     westEdge: 'road',
     eastEdge: 'road',
     roads: [
-      { directions: ['W'], meepleOffset: { x: 1/4, y: 1/2 } },
-      { directions: ['E'], meepleOffset: { x: 3/4, y: 1/2 } }
+      // The printed road crosses the river on the bridge and is one continuous
+      // feature, so it must expose one meeple position, not separate W/E roads.
+      { directions: ['W', 'E'], meepleOffset: { x: 1/2, y: 1/2 } }
     ],
     cities: [],
     farms: [
-      { directions: ['NNE', 'ENE', 'ESE', 'SSE'], meepleOffset: { x: 3/4, y: 1/2 } },
-      { directions: ['NNW', 'WNW', 'WSW', 'SSW'], meepleOffset: { x: 1/4, y: 1/2 } }
+      { directions: ['NNW', 'WNW'], meepleOffset: { x: 1/4, y: 1/4 } },
+      { directions: ['NNE', 'ENE'], meepleOffset: { x: 3/4, y: 1/4 } },
+      { directions: ['ESE', 'SSE'], meepleOffset: { x: 3/4, y: 3/4 } },
+      { directions: ['SSW', 'WSW'], meepleOffset: { x: 1/4, y: 3/4 } }
     ],
     river: { directions: ['N', 'S'] },
     imageURL: '/images/tiles/the-river/RIrI.png',

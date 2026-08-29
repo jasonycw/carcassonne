@@ -14,6 +14,7 @@ const source = THE_RIVER_TILES.find((tile) => tile.river?.isSource);
 const lake = THE_RIVER_TILES.find((tile) => tile.river?.isLake);
 const straight = THE_RIVER_TILES.find((tile) => tile.id === 'the-river/II');
 const bend = THE_RIVER_TILES.find((tile) => tile.id === 'the-river/CIRI');
+const bridge = THE_RIVER_TILES.find((tile) => tile.id === 'the-river/RIrI');
 
 function placed(tile, x, y, rotation = 0, meeples = [], tower) {
   return { tile, x, y, rotation, meeples, tower };
@@ -36,6 +37,18 @@ describe('The River official rules', () => {
     expect(THE_RIVER_TILES.reduce((sum, tile) => sum + tile.count, 0)).toBe(12);
     expect(source.river.isSource).toBe(true);
     expect(lake.river.isLake).toBe(true);
+  });
+
+  it('models the River bridge as one road and four independent farms', () => {
+    expect(bridge.roads).toHaveLength(1);
+    expect(bridge.roads[0].directions).toEqual(['W', 'E']);
+    expect(bridge.farms).toHaveLength(4);
+    expect(bridge.farms.map((farm) => farm.directions)).toEqual([
+      ['NNW', 'WNW'],
+      ['NNE', 'ENE'],
+      ['ESE', 'SSE'],
+      ['SSW', 'WSW'],
+    ]);
   });
 
   it('extends only the current open end and matches the river edge', () => {
