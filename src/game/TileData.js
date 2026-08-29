@@ -1422,7 +1422,8 @@ export const THE_TOWER_TILES = [
       { directions: ['NNE', 'ENE'], meepleOffset: { x: 3/4, y: 1/4 } },
       { directions: ['SSW', 'WSW', 'ESE', 'SSE'], meepleOffset: { x: 1/2, y: 7/8 } }
     ],
-    tower: { offset: { x: 3/4, y: 3/4 } },
+    // RRR.png has a centered tower foundation.
+    tower: { offset: { x: 1/2, y: 1/2 } },
     imageURL: '/images/tiles/the-tower/RRR.png',
     expansion: 'the-tower',
     count: 1

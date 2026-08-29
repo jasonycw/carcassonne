@@ -85,4 +85,9 @@ describe('Tower Expansion Gameplay Loop', () => {
     skipTowerStep(state);
     expect(state.step).toBe('place');
   });
+
+  it('keeps the RRR foundation centered to match RRR.png', () => {
+    const rrr = ALL_TILES.find(t => t.id === 'the-tower/RRR');
+    expect(rrr.tower.offset).toEqual({ x: 1 / 2, y: 1 / 2 });
+  });
 });
